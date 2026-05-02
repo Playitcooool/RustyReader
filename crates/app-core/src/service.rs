@@ -2845,7 +2845,7 @@ fn build_session_prompt(
         "session.theme_map" => "# Theme Map\n\n## Themes\n- ...\n\n## Theme Clusters\n...",
         "session.compare" => "# Comparison\n\n## Comparison Matrix\n- ...\n\n## Method Notes\n...",
         "session.review_draft" => "# Review Draft\n\n## Evidence Map\n- ...\n\n## Narrative\n...",
-        "session.ask" => "...",
+        "session.ask" => "# Response\n\n...",
         _ => return Err(anyhow!("unsupported session task kind")),
     };
     let prompt_suffix = if kind == "session.ask" {
@@ -2964,7 +2964,7 @@ fn build_collection_prompt(
         "collection.theme_map" => "# Theme Map: {collection}\n\n## Themes\n- ...\n\n## Theme Clusters\n...",
         "collection.compare_methods" => "# Method Comparison: {collection}\n\n## Comparison Matrix\n- ...\n\n## Method Notes\n...",
         "collection.review_draft" => "# Review Draft: {collection}\n\n## Evidence Map\n- ...\n\n## Narrative\n...",
-        "collection.ask" => "# Collection Q&A: {collection}\n\n## Question\n...\n\n## Answer\n...\n\n## Scope\n...",
+        "collection.ask" => "# Response\n\n...",
         _ => return Err(anyhow!("unsupported collection task kind")),
     };
     let prompt_suffix = if kind == "collection.ask" {
