@@ -3453,8 +3453,7 @@ export default function App({ api }: { api: AppApi }) {
                 <article key={task.id} className="ai-thread-entry">
                   <div className="ai-message ai-message-user">
                     <div className="ai-message-meta">
-                      <strong>You</strong>
-                    </div>
+                                          </div>
                     <p>{task.input_prompt ?? taskLabel(task.kind)}</p>
                   </div>
                   <div className="ai-message ai-message-assistant">
@@ -3467,19 +3466,13 @@ export default function App({ api }: { api: AppApi }) {
                 <article className="ai-thread-entry">
                   <div className="ai-message ai-message-user">
                     <div className="ai-message-meta">
-                      <strong>You</strong>
-                    </div>
+                                          </div>
                     <p>{activeAiPending.inputPrompt ?? taskLabel(activeAiPending.kind)}</p>
                   </div>
                   <div className="ai-message ai-message-assistant">
                     {activeAiPending.error ? <p className="ai-error-text">{activeAiPending.error}</p> : null}
                     {activeAiPending.markdown ? <MarkdownMessage markdown={activeAiPending.markdown} /> : null}
-                    {activeAiPending.status === "streaming" && activeAiPending.markdown ? (
-                      <span className="meta-count" aria-label="AI response streaming">
-                        Streaming
-                      </span>
-                    ) : null}
-                    {activeAiPending.status === "streaming" && !activeAiPending.markdown ? (
+                                        {activeAiPending.status === "streaming" && !activeAiPending.markdown ? (
                       <div className="ai-loading-indicator" aria-label="AI response loading">
                         <span className="ai-loading-dot" />
                         <span className="ai-loading-dot" />
