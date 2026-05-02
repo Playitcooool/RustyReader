@@ -2845,7 +2845,7 @@ fn build_session_prompt(
         "session.theme_map" => "# Theme Map\n\n## Themes\n- ...\n\n## Theme Clusters\n...",
         "session.compare" => "# Comparison\n\n## Comparison Matrix\n- ...\n\n## Method Notes\n...",
         "session.review_draft" => "# Review Draft\n\n## Evidence Map\n- ...\n\n## Narrative\n...",
-        "session.ask" => "# Response\n\n...",
+        "session.ask" => "...",
         _ => return Err(anyhow!("unsupported session task kind")),
     };
     let prompt_suffix = if kind == "session.ask" {
@@ -2871,7 +2871,7 @@ fn build_single_session_prompt(
     let task_instructions = match kind {
         "session.summarize" => "# Summary: {title}\n\nCollection: {collection}\n\n## Key Points\n- ...\n\n## Evidence\n- ...",
         "session.explain_terms" => "# Terminology Notes: {title}\n\n## Key Terms\n- term: explanation\n\n## Reading Tip\n...",
-        "session.ask" => "# Response\n\n...",
+        "session.ask" => "...",
         "session.compare" => return Err(anyhow!("compare requires at least 2 unique papers")),
         "session.theme_map" => "# Theme Map: {title}\n\n## Themes\n- ...\n\n## Theme Clusters\n...",
         "session.review_draft" => "# Review Draft: {title}\n\n## Evidence Map\n- ...\n\n## Narrative\n...",
@@ -2902,7 +2902,7 @@ fn build_item_prompt(
         "item.summarize" => "# Summary: {title}\n\nCollection: {collection}\n\n## Key Points\n- ...\n\n## Evidence\n- ...",
         "item.translate" => "# Translation: {title}\n\n## Translated Passage\n...\n\n## Notes\n...",
         "item.explain_term" => "# Terminology Notes: {title}\n\n## Key Terms\n- term: explanation\n\n## Reading Tip\n...",
-        "item.ask" => "# Response\n\n...",
+        "item.ask" => "...",
         _ => return Err(anyhow!("unsupported item task kind")),
     };
     let prompt_text = prompt.unwrap_or("");
@@ -2964,7 +2964,7 @@ fn build_collection_prompt(
         "collection.theme_map" => "# Theme Map: {collection}\n\n## Themes\n- ...\n\n## Theme Clusters\n...",
         "collection.compare_methods" => "# Method Comparison: {collection}\n\n## Comparison Matrix\n- ...\n\n## Method Notes\n...",
         "collection.review_draft" => "# Review Draft: {collection}\n\n## Evidence Map\n- ...\n\n## Narrative\n...",
-        "collection.ask" => "# Response\n\n...",
+        "collection.ask" => "...",
         _ => return Err(anyhow!("unsupported collection task kind")),
     };
     let prompt_suffix = if kind == "collection.ask" {
