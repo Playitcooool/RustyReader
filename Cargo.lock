@@ -3087,6 +3087,7 @@ version = "0.1.0"
 dependencies = [
  "app-core",
  "image",
+ "lopdf 0.35.0",
  "pdf_oxide",
  "serde",
  "serde_json",

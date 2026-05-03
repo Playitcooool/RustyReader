@@ -25,4 +25,5 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 tokio = { version = "1", features = ["sync"] }
 
 [dev-dependencies]
+lopdf = "0.35"
 tempfile = "3"

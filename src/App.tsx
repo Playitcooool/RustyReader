@@ -1,19 +1,55 @@
-import type {
-  CSSProperties,
-  ComponentProps,
-  MouseEvent as ReactMouseEvent,
-  PointerEvent as ReactPointerEvent,
-  ReactNode,
-} from "react";
+import type { CSSProperties, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 
+import {
+  ArtifactIcon,
+  ChatHistoryIcon,
+  CloseCopilotIcon,
+  DeleteSessionIcon,
+  MarkdownMessage,
+  NewSessionIcon,
+  ResearchNotesIcon,
+  TaskHistoryIcon,
+} from "./components/app/AiPanel";
+import { DeleteConfirmDialog, type DeleteConfirmTarget } from "./components/app/DeleteConfirmDialog";
+import { FindHud } from "./components/app/FindHud";
+import { ActivePdfHighlightBar, PdfFocusHighlightBar } from "./components/app/PdfHighlightBars";
+import { SettingsDialog, type GeneralSettingsDraft } from "./components/app/SettingsDialog";
 import { NormalizedReader } from "./components/readers/NormalizedReader";
 import { PdfContinuousReader } from "./components/readers/PdfContinuousReader";
 import { PdfReader } from "./components/readers/PdfReader";
 import type { PdfHighlightColor, PdfTextSelection } from "./components/readers/pdfSelection";
 import { isTauriRuntime } from "./lib/api";
+import {
+  applyTagFilter,
+  attachmentFormatLabel,
+  childCollectionsFor,
+  clamp,
+  collectionDeleteSummary,
+  descendantIdsForCollection,
+  droppedPathsFromFileList,
+  expandSessionReferenceItemIds,
+  filenameStem,
+  filterItemsByAttachment,
+  formatItemMetadata,
+  isQuickActionKind,
+  isSupportedPath,
+  isTypingTarget,
+  itemCountForCollection,
+  matchesSearch,
+  noteHeading,
+  readStoredBoolean,
+  readStoredNumber,
+  readStoredString,
+  scopeMatches,
+  sessionActions,
+  sessionReferenceLabel,
+  sortItems,
+  taskLabel,
+  type AttachmentFilter,
+  type ItemSort,
+  type ReaderFitMode,
+} from "./lib/appView";
 import { getRuntimePolyfillDiagnostics } from "./lib/runtimePolyfills";
 import type {
   AIArtifact,
@@ -36,131 +72,10 @@ import type {
 
 type AiDockSection = "artifacts" | "history" | "notes";
 type WorkspaceMode = "workspace" | "pdf_focus";
-type ItemSort = "recent" | "title" | "year_desc";
-type AttachmentFilter = "all" | "ready" | "missing" | "citation_only";
-type ReaderFitMode = "fit_width" | "manual";
 
 const READER_MIN_ZOOM = 70;
 const READER_MAX_ZOOM = 180;
 const READER_ZOOM_STEP = 10;
-
-const sessionActions = [
-  { label: "Summarize", kind: "session.summarize" },
-  { label: "Explain Terms", kind: "session.explain_terms" },
-  { label: "Compare", kind: "session.compare" },
-];
-
-const taskLabel = (kind: string) =>
-  ({
-    "item.summarize": "Summarize",
-    "item.translate": "Translate",
-    "item.explain_term": "Explain",
-    "item.ask": "Ask",
-    "session.summarize": "Summarize",
-    "session.explain_terms": "Explain Terms",
-    "session.theme_map": "Theme Map",
-    "session.compare": "Compare",
-    "session.review_draft": "Review Draft",
-    "session.ask": "Ask",
-    "collection.bulk_summarize": "Bulk Summaries",
-    "collection.theme_map": "Theme Map",
-    "collection.compare_methods": "Compare Methods",
-    "collection.review_draft": "Review Draft",
-    "collection.ask": "Ask",
-  })[kind] ?? kind;
-
-const isQuickActionKind = (kind: string) =>
-  kind !== "item.ask" && kind !== "collection.ask" && kind !== "session.ask";
-
-const attachmentFormatLabel = (format: LibraryItem["attachment_format"] | ReaderView["attachment_format"]) =>
-  format.toUpperCase();
-
-const formatItemMetadata = (item: LibraryItem): string | null => {
-  const parts: string[] = [];
-
-  const authors = item.authors.trim();
-  if (authors.length > 0 && authors !== "Imported Author") {
-    parts.push(authors);
-  }
-
-  if (item.publication_year !== null) {
-    parts.push(String(item.publication_year));
-  }
-
-  const source = item.source.trim();
-  if (source.length > 0 && !source.startsWith("Imported ")) {
-    parts.push(source);
-  }
-
-  return parts.length > 0 ? parts.join(" · ") : null;
-};
-
-const sanitizeFilename = (value: string) =>
-  value
-    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-const filenameStem = (value: string, fallback: string) => {
-  const sanitized = sanitizeFilename(value);
-  return sanitized.length > 0 ? sanitized : fallback;
-};
-
-const supportedExtensions = [".pdf", ".docx", ".epub"];
-
-const isSupportedPath = (path: string) =>
-  supportedExtensions.some((extension) => path.toLowerCase().endsWith(extension));
-
-const droppedPathsFromFileList = (files: FileList | File[]) =>
-  Array.from(files)
-    .map((file) => {
-      const fileWithPath = file as File & { path?: string; webkitRelativePath?: string };
-      return fileWithPath.path || fileWithPath.webkitRelativePath || file.name;
-    })
-    .filter(isSupportedPath);
-
-const sortItems = (items: LibraryItem[], itemSort: ItemSort) => {
-  const copy = [...items];
-  copy.sort((left, right) => {
-    if (itemSort === "title") return left.title.localeCompare(right.title);
-    if (itemSort === "year_desc") return (right.publication_year ?? 0) - (left.publication_year ?? 0);
-    return right.id - left.id;
-  });
-  return copy;
-};
-
-const filterItemsByAttachment = (items: LibraryItem[], attachmentFilter: AttachmentFilter) => {
-  if (attachmentFilter === "all") return items;
-  return items.filter((item) => item.attachment_status === attachmentFilter);
-};
-
-const applyTagFilter = (items: LibraryItem[], tags: Tag[], selectedTagId: number | null) => {
-  if (selectedTagId === null) return items;
-  const selectedTagName = tags.find((tag) => tag.id === selectedTagId)?.name;
-  if (!selectedTagName) return items;
-  return items.filter((item) => item.tags.includes(selectedTagName));
-};
-
-const matchesSearch = (item: LibraryItem, query: string) => {
-  const normalized = query.trim().toLowerCase();
-  if (normalized.length === 0) return true;
-  return [
-    item.title,
-    item.authors,
-    item.source,
-    item.doi ?? "",
-    String(item.publication_year ?? ""),
-    item.tags.join(" "),
-  ]
-    .join(" ")
-    .toLowerCase()
-    .includes(normalized);
-};
-
-const scopeMatches = (left: number[] | null, right: number[]) =>
-  left !== null &&
-  left.length === right.length &&
-  left.every((itemId, index) => itemId === right[index]);
 
 type AiPendingMessage = {
   sessionId?: number;
@@ -189,29 +104,7 @@ type ResourceContextMenuState =
       targetId: number;
     }
   | null;
-type DeleteTargetState =
-  | {
-      kind: "collection";
-      targetId: number;
-      label: string;
-      parentCollectionId: number | null;
-      paperCount?: number;
-      nestedCollectionCount?: number;
-      deletedCollectionIds?: number[];
-      deletedItemIds?: number[];
-    }
-  | {
-      kind: "item";
-      targetId: number;
-      label: string;
-      parentCollectionId: number | null;
-    }
-  | {
-      kind: "ai_session";
-      targetId: number;
-      label: string;
-    }
-  | null;
+type DeleteTargetState = DeleteConfirmTarget | null;
 type AiReferencePickerResult =
   | {
       key: string;
@@ -229,14 +122,6 @@ type AiReferencePickerResult =
       meta: string | null;
       badges: string[];
     };
-
-type GeneralSettingsDraft = {
-  resourcesSidebarOpen: boolean;
-  defaultItemSort: ItemSort;
-  defaultAttachmentFilter: AttachmentFilter;
-  defaultReaderFitMode: ReaderFitMode;
-  defaultReaderZoom: number;
-};
 
 const initialAiDockState = (): AiDockState => ({
   artifacts: false,
@@ -263,193 +148,8 @@ const draftFromAiSettings = (settings: AISettings): UpdateAISettingsInput => ({
   anthropic_base_url: settings.anthropic_base_url,
 });
 
-const markdownComponents = {
-  a: (props: ComponentProps<"a">) => <a {...props} rel="noreferrer" target="_blank" />,
-  pre: (props: ComponentProps<"pre">) => <pre className="ai-markdown-pre" {...props} />,
-  code({
-    inline,
-    className,
-    children,
-    ...props
-  }: ComponentProps<"code"> & { inline?: boolean }) {
-    return (
-      <code className={className} {...props}>
-        {children}
-      </code>
-    );
-  },
-};
-
-function AiIcon({
-  children,
-  viewBox = "0 0 20 20",
-}: {
-  children: ReactNode;
-  viewBox?: string;
-}) {
-  return (
-    <svg aria-hidden="true" className="ai-icon" viewBox={viewBox}>
-      {children}
-    </svg>
-  );
-}
-
-const ChatHistoryIcon = () => (
-  <AiIcon>
-    <path
-      d="M4 5.5h7.5A2.5 2.5 0 0 1 14 8v2A2.5 2.5 0 0 1 11.5 12.5H8l-3 2v-2H4A2.5 2.5 0 0 1 1.5 10V8A2.5 2.5 0 0 1 4 5.5Z"
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="1.6"
-    />
-    <circle cx="15.25" cy="6.25" r="3.25" fill="none" stroke="currentColor" strokeWidth="1.6" />
-    <path
-      d="M15.25 4.75v1.7l1.15.7"
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="1.6"
-    />
-  </AiIcon>
-);
-
-const NewSessionIcon = () => (
-  <AiIcon>
-    <path
-      d="M10 4v12M4 10h12"
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeWidth="1.8"
-    />
-  </AiIcon>
-);
-
-const ArtifactIcon = () => (
-  <AiIcon>
-    <path
-      d="M6 2.5h5l3 3V16A1.5 1.5 0 0 1 12.5 17.5h-6A1.5 1.5 0 0 1 5 16V4A1.5 1.5 0 0 1 6.5 2.5Z"
-      fill="none"
-      stroke="currentColor"
-      strokeLinejoin="round"
-      strokeWidth="1.6"
-    />
-    <path
-      d="M11 2.5V6h3"
-      fill="none"
-      stroke="currentColor"
-      strokeLinejoin="round"
-      strokeWidth="1.6"
-    />
-    <path
-      d="M7.5 9.25h4.5M7.5 12h4.5"
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeWidth="1.6"
-    />
-  </AiIcon>
-);
-
-const TaskHistoryIcon = () => (
-  <AiIcon>
-    <rect x="3" y="3.5" width="14" height="13" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-    <path
-      d="M6.5 7.5h7M6.5 10.5h7M6.5 13.5h4"
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeWidth="1.6"
-    />
-  </AiIcon>
-);
-
-const ResearchNotesIcon = () => (
-  <AiIcon>
-    <path
-      d="M5 3.5h8A2 2 0 0 1 15 5.5v11l-4-2-4 2v-11A2 2 0 0 1 9 3.5Z"
-      fill="none"
-      stroke="currentColor"
-      strokeLinejoin="round"
-      strokeWidth="1.6"
-    />
-    <path
-      d="M8 7.5h5M8 10.25h4"
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeWidth="1.6"
-    />
-  </AiIcon>
-);
-
-const CloseCopilotIcon = () => (
-  <AiIcon>
-    <path
-      d="m5 5 10 10M15 5 5 15"
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeWidth="1.8"
-    />
-  </AiIcon>
-);
-
-const DeleteSessionIcon = () => (
-  <AiIcon>
-    <path d="M8 5.5h4" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
-    <path d="M9 5.5l.75-1.5h.5L11 5.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
-    <path d="M5.5 7.5h9" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
-    <path d="m7 7.5.75 8h4.5l.75-8" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.6" />
-    <path d="M9.25 10.25v3M10.75 10.25v3" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.4" />
-  </AiIcon>
-);
-
 const pickerResultLabel = (result: AiReferencePickerResult, badges: string[]) =>
   [result.label, result.meta, badges.length > 0 ? badges.join(", ") : null].filter(Boolean).join(" — ");
-
-function MarkdownMessage({ markdown }: { markdown: string }) {
-  return (
-    <div className="ai-markdown">
-      <ReactMarkdown components={markdownComponents} remarkPlugins={[remarkGfm]}>
-        {markdown}
-      </ReactMarkdown>
-    </div>
-  );
-}
-
-const noteHeading = (note: ResearchNote) =>
-  note.markdown
-    .split("\n")
-    .map((line) => line.trim())
-    .find((line) => line.startsWith("#"))
-    ?.replace(/^#+\s*/, "") ?? note.title;
-
-const descendantIdsForCollection = (collections: Collection[], collectionId: number) => {
-  const descendants = new Set<number>();
-  const stack = [collectionId];
-
-  while (stack.length > 0) {
-    const currentId = stack.pop();
-    if (currentId === undefined) continue;
-    for (const collection of collections) {
-      if (collection.parent_id === currentId && !descendants.has(collection.id)) {
-        descendants.add(collection.id);
-        stack.push(collection.id);
-      }
-    }
-  }
-
-  return descendants;
-};
-
-const childCollectionsFor = (collections: Collection[], parentId: number | null) =>
-  collections
-    .filter((collection) => collection.parent_id === parentId)
-    .sort((left, right) => left.name.localeCompare(right.name));
 
 const SIDEBAR_MIN_WIDTH = 220;
 const SIDEBAR_MAX_WIDTH = 460;
@@ -468,93 +168,6 @@ const ITEM_SORT_KEY = "paper-reader.item-sort";
 const ATTACHMENT_FILTER_KEY = "paper-reader.attachment-filter";
 const READER_FIT_MODE_KEY = "paper-reader.reader-fit-mode";
 const READER_ZOOM_KEY = "paper-reader.reader-zoom";
-
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(value, max));
-
-const readStoredNumber = (key: string, fallback: number) => {
-  if (typeof window === "undefined") return fallback;
-  const raw = window.localStorage.getItem(key);
-  const parsed = raw ? Number(raw) : NaN;
-  return Number.isFinite(parsed) ? parsed : fallback;
-};
-
-const readStoredBoolean = (key: string, fallback: boolean) => {
-  if (typeof window === "undefined") return fallback;
-  const raw = window.localStorage.getItem(key);
-  return raw === null ? fallback : raw === "true";
-};
-
-const readStoredString = <Value extends string>(key: string, fallback: Value, allowed: readonly Value[]) => {
-  if (typeof window === "undefined") return fallback;
-  const raw = window.localStorage.getItem(key);
-  return raw && allowed.includes(raw as Value) ? (raw as Value) : fallback;
-};
-
-const expandSessionReferenceItemIds = (
-  references: AISessionReference[],
-  collections: Collection[],
-  items: LibraryItem[],
-) => {
-  const seen = new Set<number>();
-  const output: number[] = [];
-  const collectionChildren = (parentId: number): number[] =>
-    childCollectionsFor(collections, parentId).flatMap((collection) => [collection.id, ...collectionChildren(collection.id)]);
-
-  for (const reference of references.filter((entry) => entry.kind === "item")) {
-    if (seen.has(reference.target_id)) continue;
-    if (!items.some((item) => item.id === reference.target_id)) continue;
-    seen.add(reference.target_id);
-    output.push(reference.target_id);
-  }
-
-  for (const reference of references.filter((entry) => entry.kind === "collection")) {
-    const collectionIds = [reference.target_id, ...collectionChildren(reference.target_id)];
-    for (const collectionId of collectionIds) {
-      const orderedItemIds = items
-        .filter((item) => item.collection_id === collectionId)
-        .sort((left, right) => right.id - left.id)
-        .map((item) => item.id);
-      for (const itemId of orderedItemIds) {
-        if (seen.has(itemId)) continue;
-        seen.add(itemId);
-        output.push(itemId);
-      }
-    }
-  }
-
-  return output;
-};
-
-const itemCountForCollection = (libraryItems: LibraryItem[], collectionId: number) =>
-  libraryItems.filter((item) => item.collection_id === collectionId).length;
-
-const collectionDeleteSummary = (collections: Collection[], libraryItems: LibraryItem[], collectionId: number) => {
-  const descendantIds = Array.from(descendantIdsForCollection(collections, collectionId));
-  const deletedCollectionIds = [collectionId, ...descendantIds];
-  const deletedCollectionIdSet = new Set(deletedCollectionIds);
-  const deletedItemIds = libraryItems
-    .filter((item) => deletedCollectionIdSet.has(item.collection_id))
-    .map((item) => item.id);
-
-  return {
-    deletedCollectionIds,
-    deletedItemIds,
-    nestedCollectionCount: descendantIds.length,
-    paperCount: deletedItemIds.length,
-  };
-};
-
-const sessionReferenceLabel = (
-  reference: AISessionReference,
-  libraryItems: LibraryItem[],
-  collections: Collection[],
-) =>
-  reference.kind === "item"
-    ? libraryItems.find((item) => item.id === reference.target_id)?.title ?? "Paper"
-    : collections.find((collection) => collection.id === reference.target_id)?.name ?? "Collection";
-
-const isTypingTarget = (target: EventTarget | null) =>
-  target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || (target instanceof HTMLElement && target.isContentEditable);
 
 export default function App({ api }: { api: AppApi }) {
   const getApi = useCallback(() => Promise.resolve(api), [api]);
@@ -3060,24 +2673,11 @@ export default function App({ api }: { api: AppApi }) {
                 />
 
                 {showPdfFocusHighlightBar ? (
-                  <div
-                    className="pdf-focus-highlight-bar"
-                    ref={pdfFocusHighlightBarRef}
-                    role="toolbar"
-                    aria-label="PDF highlight colors"
+                  <PdfFocusHighlightBar
+                    barRef={pdfFocusHighlightBarRef}
                     style={pdfFocusHighlightBarStyle}
-                  >
-                    {(["yellow", "red", "green", "blue", "purple"] as const).map((color) => (
-                      <button
-                        key={color}
-                        type="button"
-                        className="pdf-focus-highlight-swatch"
-                        data-color={color}
-                        aria-label={`Highlight ${color}`}
-                        onClick={() => void handleCreatePdfFocusHighlight(color)}
-                      />
-                    ))}
-                  </div>
+                    onCreateHighlight={(color) => void handleCreatePdfFocusHighlight(color)}
+                  />
                 ) : null}
               </>
             ) : (
@@ -3198,70 +2798,24 @@ export default function App({ api }: { api: AppApi }) {
         )}
 
         {isFindHudOpen ? (
-          <div className="find-hud" role="dialog" aria-label="Find in document">
-            <input
-              aria-label="Find in document"
-              className="find-hud-input"
-              placeholder="Find in document..."
-              ref={readerSearchInputRef}
-              value={readerSearchQuery}
-              onChange={(event) => setReaderSearchQuery(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  moveReaderSearchMatch(event.shiftKey ? -1 : 1, "enter");
-                }
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  closeFindHud();
-                }
-              }}
-            />
-            <span className="meta-count">
-              {readerSearchMatchCount > 0 && reportedActiveSearchMatchIndex >= 0
-                ? `${reportedActiveSearchMatchIndex + 1} / ${readerSearchMatchCount}`
-                : "0 / 0"}
-            </span>
-            <button
-              aria-label="Previous match"
-              className="ghost-button"
-              type="button"
-              onClick={() => moveReaderSearchMatch(-1, "button")}
-            >
-              Prev
-            </button>
-            <button
-              aria-label="Next match"
-              className="ghost-button"
-              type="button"
-              onClick={() => moveReaderSearchMatch(1, "button")}
-            >
-              Next
-            </button>
-            <button
-              aria-label="Close find"
-              className="ghost-button"
-              type="button"
-              onClick={closeFindHud}
-            >
-              Close
-            </button>
-          </div>
+          <FindHud
+            inputRef={readerSearchInputRef}
+            query={readerSearchQuery}
+            matchCount={readerSearchMatchCount}
+            activeMatchIndex={reportedActiveSearchMatchIndex}
+            onQueryChange={setReaderSearchQuery}
+            onMoveMatch={moveReaderSearchMatch}
+            onClose={closeFindHud}
+          />
         ) : null}
       </main>
 
       {showActivePdfHighlightBar ? (
-        <div
-          className="pdf-highlight-action-bar"
-          ref={highlightActionBarRef}
-          role="toolbar"
-          aria-label="PDF highlight actions"
+        <ActivePdfHighlightBar
+          barRef={highlightActionBarRef}
           style={activePdfHighlightBarStyle}
-        >
-          <button type="button" className="ghost-button" onClick={() => void handleRemoveActivePdfHighlight()}>
-            Remove Highlight
-          </button>
-        </div>
+          onRemoveHighlight={() => void handleRemoveActivePdfHighlight()}
+        />
       ) : null}
 
       {isAiPanelOpen ? (
@@ -3472,8 +3026,9 @@ export default function App({ api }: { api: AppApi }) {
                   <div className="ai-message ai-message-assistant">
                     {activeAiPending.error ? <p className="ai-error-text">{activeAiPending.error}</p> : null}
                     {activeAiPending.markdown ? <MarkdownMessage markdown={activeAiPending.markdown} /> : null}
-                                        {activeAiPending.status === "streaming" && !activeAiPending.markdown ? (
-                      <div className="ai-loading-indicator" aria-label="AI response loading">
+                    {activeAiPending.status === "streaming" ? (
+                      <div className="ai-loading-indicator" aria-label="AI response streaming">
+                        <span aria-label="AI response loading" className="sr-only" />
                         <span className="ai-loading-dot" />
                         <span className="ai-loading-dot" />
                         <span className="ai-loading-dot" />
@@ -3635,303 +3190,36 @@ export default function App({ api }: { api: AppApi }) {
       ) : null}
 
       {deleteTarget ? (
-        <div className="modal-scrim" role="presentation">
-          <section className="confirm-dialog" role="dialog" aria-label="Confirm delete">
-            <div>
-              <p className="eyebrow">Delete</p>
-              <h2>{deleteTarget.label}</h2>
-            </div>
-            <p>
-              {deleteTarget.kind === "item"
-                ? "This removes the paper from the library and clears any matching AI references."
-                : deleteTarget.kind === "ai_session"
-                  ? "This deletes the chat history, tasks, artifacts, references, and research notes for this session."
-                  : `This removes ${deleteTarget.paperCount ?? 0} paper${deleteTarget.paperCount === 1 ? "" : "s"} and ${deleteTarget.nestedCollectionCount ?? 0} nested collection${deleteTarget.nestedCollectionCount === 1 ? "" : "s"}, then clears matching AI references and related notes.`}
-            </p>
-          <div className="settings-dialog-actions">
-              <button className="ghost-button" type="button" onClick={() => setDeleteTarget(null)}>
-                Cancel
-              </button>
-              <button className="primary-button" type="button" onClick={() => void handleConfirmDelete()}>
-                Delete
-              </button>
-            </div>
-          </section>
-        </div>
+        <DeleteConfirmDialog
+          target={deleteTarget}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={() => void handleConfirmDelete()}
+        />
       ) : null}
 
       {isSettingsOpen ? (
-        <div className="modal-scrim" role="presentation">
-          <section className="settings-dialog" role="dialog" aria-label="Settings">
-            <div className="settings-dialog-hero">
-              <div className="settings-dialog-copy">
-                <p className="eyebrow">Settings</p>
-                <h2>General</h2>
-                <p className="settings-dialog-summary">
-                  Tune the library workspace and keep one AI provider ready without exposing more controls than needed.
-                </p>
-              </div>
-              <button className="ghost-button" type="button" onClick={closeSettingsDialog}>
-                Cancel
-              </button>
-            </div>
-
-            <div className="settings-sections">
-              <section className="settings-section-card" aria-labelledby="settings-general-heading">
-                <div className="settings-section-heading">
-                  <p className="eyebrow">Workspace</p>
-                  <h3 id="settings-general-heading">Defaults</h3>
-                </div>
-                <div className="settings-form-grid">
-                  <label className="settings-field">
-                    <span>Resources sidebar</span>
-                    <select
-                      aria-label="Resources sidebar default"
-                      className="settings-input"
-                      value={generalSettingsDraft.resourcesSidebarOpen ? "open" : "closed"}
-                      onChange={(event) =>
-                        setGeneralSettingsDraft((current) => ({
-                          ...current,
-                          resourcesSidebarOpen: event.target.value === "open",
-                        }))
-                      }
-                    >
-                      <option value="open">Open by default</option>
-                      <option value="closed">Closed by default</option>
-                    </select>
-                  </label>
-                  <label className="settings-field">
-                    <span>Default paper sort</span>
-                    <select
-                      aria-label="Default paper sort"
-                      className="settings-input"
-                      value={generalSettingsDraft.defaultItemSort}
-                      onChange={(event) =>
-                        setGeneralSettingsDraft((current) => ({
-                          ...current,
-                          defaultItemSort: event.target.value as ItemSort,
-                        }))
-                      }
-                    >
-                      <option value="recent">Recently added</option>
-                      <option value="title">Title</option>
-                      <option value="year_desc">Year</option>
-                    </select>
-                  </label>
-                  <label className="settings-field">
-                    <span>Default attachment filter</span>
-                    <select
-                      aria-label="Default attachment filter"
-                      className="settings-input"
-                      value={generalSettingsDraft.defaultAttachmentFilter}
-                      onChange={(event) =>
-                        setGeneralSettingsDraft((current) => ({
-                          ...current,
-                          defaultAttachmentFilter: event.target.value as AttachmentFilter,
-                        }))
-                      }
-                    >
-                      <option value="all">All attachments</option>
-                      <option value="ready">Ready</option>
-                      <option value="missing">Missing</option>
-                      <option value="citation_only">Citation only</option>
-                    </select>
-                  </label>
-                  <label className="settings-field">
-                    <span>PDF default fit mode</span>
-                    <select
-                      aria-label="PDF default fit mode"
-                      className="settings-input"
-                      value={generalSettingsDraft.defaultReaderFitMode}
-                      onChange={(event) =>
-                        setGeneralSettingsDraft((current) => ({
-                          ...current,
-                          defaultReaderFitMode: event.target.value as ReaderFitMode,
-                        }))
-                      }
-                    >
-                      <option value="fit_width">Fit width</option>
-                      <option value="manual">Manual zoom</option>
-                    </select>
-                  </label>
-                  <label className="settings-field settings-field-compact">
-                    <span>PDF default zoom</span>
-                    <input
-                      aria-label="PDF default zoom"
-                      className="settings-input"
-                      type="number"
-                      min={READER_MIN_ZOOM}
-                      max={READER_MAX_ZOOM}
-                      value={generalSettingsDraft.defaultReaderZoom}
-                      onChange={(event) =>
-                        setGeneralSettingsDraft((current) => ({
-                          ...current,
-                          defaultReaderZoom: clampReaderZoom(Number(event.target.value) || DEFAULT_READER_ZOOM),
-                        }))
-                      }
-                    />
-                  </label>
-                </div>
-                <div className="settings-provider-actions">
-                  <button
-                    className="ghost-button"
-                    type="button"
-                    onClick={() => {
-                      setSidebarWidth(DEFAULT_SIDEBAR_WIDTH);
-                      setAiPanelWidth(DEFAULT_AI_PANEL_WIDTH);
-                    }}
-                  >
-                    Reset layout widths
-                  </button>
-                </div>
-              </section>
-
-              <section className="settings-section-card" aria-labelledby="settings-ai-heading">
-                <div className="settings-section-heading">
-                  <p className="eyebrow">AI Providers</p>
-                  <h3 id="settings-ai-heading">Provider Setup</h3>
-                </div>
-                <div className="settings-provider-tabs" role="tablist" aria-label="Active AI provider">
-                  {(["openai", "anthropic"] as const).map((provider) => (
-                    <button
-                      key={provider}
-                      aria-selected={aiSettingsDraft.active_provider === provider}
-                      className={`reader-tab settings-provider-tab ${
-                        aiSettingsDraft.active_provider === provider ? "reader-tab-active" : ""
-                      }`}
-                      role="tab"
-                      type="button"
-                      onClick={() => setAiSettingsDraft((current) => ({ ...current, active_provider: provider }))}
-                    >
-                      {provider === "openai" ? "OpenAI" : "Anthropic"}
-                    </button>
-                  ))}
-                </div>
-
-                {aiSettingsDraft.active_provider === "openai" ? (
-                  <div className="settings-provider-panel">
-                    <div className="settings-provider-panel-header">
-                      <div>
-                        <p className="eyebrow">OpenAI</p>
-                        <p className="settings-provider-description">Default chat and reading tasks route through this profile.</p>
-                      </div>
-                      <span className="meta-count">{aiSettings?.has_openai_api_key ? "Saved key" : "No saved key"}</span>
-                    </div>
-                    <div className="settings-form-grid">
-                      <label className="settings-field">
-                        <span>Model</span>
-                        <input
-                          aria-label="OpenAI model"
-                          className="settings-input"
-                          value={aiSettingsDraft.openai_model}
-                          onChange={(event) =>
-                            setAiSettingsDraft((current) => ({ ...current, openai_model: event.target.value }))
-                          }
-                        />
-                      </label>
-                      <label className="settings-field">
-                        <span>Base URL</span>
-                        <input
-                          aria-label="OpenAI base URL"
-                          className="settings-input"
-                          placeholder="https://api.openai.com/v1"
-                          value={aiSettingsDraft.openai_base_url}
-                          onChange={(event) =>
-                            setAiSettingsDraft((current) => ({ ...current, openai_base_url: event.target.value }))
-                          }
-                        />
-                      </label>
-                      <label className="settings-field settings-field-full">
-                        <span>API key</span>
-                        <input
-                          aria-label="OpenAI API key"
-                          className="settings-input"
-                          type="password"
-                          value={openAiApiKeyDraft}
-                          placeholder={aiSettings?.has_openai_api_key ? "Replace saved key" : "Paste API key"}
-                          onChange={(event) => setOpenAiApiKeyDraft(event.target.value)}
-                        />
-                      </label>
-                    </div>
-                    <div className="settings-provider-actions settings-provider-actions-inline">
-                      <span className="settings-inline-note">The key stays in secure storage and never reappears in plain text.</span>
-                      <button className="ghost-button" type="button" onClick={() => void handleClearSavedKey("openai")}>
-                        Clear saved key
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="settings-provider-panel">
-                    <div className="settings-provider-panel-header">
-                      <div>
-                        <p className="eyebrow">Anthropic</p>
-                        <p className="settings-provider-description">Use this profile when Claude should handle the active reading workflow.</p>
-                      </div>
-                      <span className="meta-count">
-                        {aiSettings?.has_anthropic_api_key ? "Saved key" : "No saved key"}
-                      </span>
-                    </div>
-                    <div className="settings-form-grid">
-                      <label className="settings-field">
-                        <span>Model</span>
-                        <input
-                          aria-label="Anthropic model"
-                          className="settings-input"
-                          value={aiSettingsDraft.anthropic_model}
-                          onChange={(event) =>
-                            setAiSettingsDraft((current) => ({ ...current, anthropic_model: event.target.value }))
-                          }
-                        />
-                      </label>
-                      <label className="settings-field">
-                        <span>Base URL</span>
-                        <input
-                          aria-label="Anthropic base URL"
-                          className="settings-input"
-                          placeholder="https://api.anthropic.com/v1"
-                          value={aiSettingsDraft.anthropic_base_url}
-                          onChange={(event) =>
-                            setAiSettingsDraft((current) => ({ ...current, anthropic_base_url: event.target.value }))
-                          }
-                        />
-                      </label>
-                      <label className="settings-field settings-field-full">
-                        <span>API key</span>
-                        <input
-                          aria-label="Anthropic API key"
-                          className="settings-input"
-                          type="password"
-                          value={anthropicApiKeyDraft}
-                          placeholder={aiSettings?.has_anthropic_api_key ? "Replace saved key" : "Paste API key"}
-                          onChange={(event) => setAnthropicApiKeyDraft(event.target.value)}
-                        />
-                      </label>
-                    </div>
-                    <div className="settings-provider-actions settings-provider-actions-inline">
-                      <span className="settings-inline-note">The key stays in secure storage and never reappears in plain text.</span>
-                      <button
-                        className="ghost-button"
-                        type="button"
-                        onClick={() => void handleClearSavedKey("anthropic")}
-                      >
-                        Clear saved key
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </section>
-            </div>
-
-            <div className="settings-dialog-actions">
-              <button className="ghost-button" type="button" onClick={closeSettingsDialog}>
-                Cancel
-              </button>
-              <button className="primary-button" type="button" onClick={() => void handleSaveAiSettings()}>
-                Save
-              </button>
-            </div>
-          </section>
-        </div>
+        <SettingsDialog
+          generalSettingsDraft={generalSettingsDraft}
+          aiSettings={aiSettings}
+          aiSettingsDraft={aiSettingsDraft}
+          openAiApiKeyDraft={openAiApiKeyDraft}
+          anthropicApiKeyDraft={anthropicApiKeyDraft}
+          readerMinZoom={READER_MIN_ZOOM}
+          readerMaxZoom={READER_MAX_ZOOM}
+          defaultReaderZoom={DEFAULT_READER_ZOOM}
+          onGeneralSettingsDraftChange={setGeneralSettingsDraft}
+          onAiSettingsDraftChange={setAiSettingsDraft}
+          onOpenAiApiKeyDraftChange={setOpenAiApiKeyDraft}
+          onAnthropicApiKeyDraftChange={setAnthropicApiKeyDraft}
+          onClampReaderZoom={clampReaderZoom}
+          onResetLayoutWidths={() => {
+            setSidebarWidth(DEFAULT_SIDEBAR_WIDTH);
+            setAiPanelWidth(DEFAULT_AI_PANEL_WIDTH);
+          }}
+          onClearSavedKey={(provider) => void handleClearSavedKey(provider)}
+          onCancel={closeSettingsDialog}
+          onSave={() => void handleSaveAiSettings()}
+        />
       ) : null}
     </div>
   );
