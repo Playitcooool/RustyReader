@@ -15,7 +15,9 @@ mod ocr;
 mod pdf_engine;
 mod state;
 
-use ai_stream::{emit_ai_task_stream, split_markdown_chunks};
+use ai_stream::emit_ai_task_stream;
+#[cfg(test)]
+use ai_stream::split_markdown_chunks;
 use pdf_engine::PdfEngineCache;
 use state::{root_dir, service, service_for_root, AppState};
 use serde::Deserialize;

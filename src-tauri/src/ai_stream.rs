@@ -18,6 +18,7 @@ struct AITaskStreamEvent {
     error: Option<String>,
 }
 
+#[cfg(test)]
 pub fn split_markdown_chunks(markdown: &str) -> Vec<String> {
     const MAX_CHUNK_CHARS: usize = 220;
     let trimmed = markdown.trim();
