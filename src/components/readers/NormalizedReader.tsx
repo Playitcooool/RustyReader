@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 
 import { safeScrollIntoView } from "../../lib/dom";
+import type { ReaderTextSelection } from "../../hooks/useReaderState";
 
 type NormalizedReaderProps = {
   pageHtml: string;
@@ -8,6 +9,7 @@ type NormalizedReaderProps = {
   searchQuery?: string;
   activeSearchMatchIndex?: number;
   onSearchMatchesChange?: (state: { total: number; activeIndex: number }) => void;
+  onSelectionChange?: (selection: ReaderTextSelection | null) => void;
 };
 
 const highlightHtml = (html: string, query: string, activeIndex: number) => {
@@ -77,6 +79,7 @@ export function NormalizedReader({
   searchQuery = "",
   activeSearchMatchIndex = 0,
   onSearchMatchesChange,
+  onSelectionChange,
 }: NormalizedReaderProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const highlighted = useMemo(() => highlightHtml(pageHtml, searchQuery, activeSearchMatchIndex), [
@@ -101,6 +104,45 @@ export function NormalizedReader({
     );
     if (active) safeScrollIntoView(active, { block: "center" });
   }, [activeSearchMatchIndex, highlighted.total, searchQuery]);
+
+  useEffect(() => {
+    if (!onSelectionChange) return;
+    const handleSelectionChange = () => {
+      const container = containerRef.current;
+      const selection = window.getSelection();
+      if (!container || !selection || selection.rangeCount === 0 || selection.isCollapsed) {
+        onSelectionChange(null);
+        return;
+      }
+      const quote = selection.toString().trim();
+      if (!quote) {
+        onSelectionChange(null);
+        return;
+      }
+      const anchorNode = selection.anchorNode;
+      const focusNode = selection.focusNode;
+      if (!anchorNode || !focusNode || !container.contains(anchorNode) || !container.contains(focusNode)) {
+        onSelectionChange(null);
+        return;
+      }
+      const rect = selection.getRangeAt(0).getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) {
+        onSelectionChange(null);
+        return;
+      }
+      onSelectionChange({
+        quote,
+        rect: {
+          left: rect.left,
+          top: rect.top,
+          right: rect.right,
+          bottom: rect.bottom,
+        },
+      });
+    };
+    document.addEventListener("selectionchange", handleSelectionChange);
+    return () => document.removeEventListener("selectionchange", handleSelectionChange);
+  }, [onSelectionChange]);
 
   return (
     <div

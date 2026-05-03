@@ -1,6 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 
-import type { AIProvider, AISettings, UpdateAISettingsInput } from "../../lib/contracts";
+import type { AIProvider, AISettings, TranslationProvider, UpdateAISettingsInput } from "../../lib/contracts";
 import type { AttachmentFilter, ItemSort, ReaderFitMode } from "../../lib/appView";
 
 export type GeneralSettingsDraft = {
@@ -17,6 +17,7 @@ export function SettingsDialog({
   aiSettingsDraft,
   openAiApiKeyDraft,
   anthropicApiKeyDraft,
+  deeplApiKeyDraft,
   readerMinZoom,
   readerMaxZoom,
   defaultReaderZoom,
@@ -24,6 +25,7 @@ export function SettingsDialog({
   onAiSettingsDraftChange,
   onOpenAiApiKeyDraftChange,
   onAnthropicApiKeyDraftChange,
+  onDeeplApiKeyDraftChange,
   onClampReaderZoom,
   onResetLayoutWidths,
   onClearSavedKey,
@@ -35,6 +37,7 @@ export function SettingsDialog({
   aiSettingsDraft: UpdateAISettingsInput;
   openAiApiKeyDraft: string;
   anthropicApiKeyDraft: string;
+  deeplApiKeyDraft: string;
   readerMinZoom: number;
   readerMaxZoom: number;
   defaultReaderZoom: number;
@@ -42,9 +45,10 @@ export function SettingsDialog({
   onAiSettingsDraftChange: Dispatch<SetStateAction<UpdateAISettingsInput>>;
   onOpenAiApiKeyDraftChange: (value: string) => void;
   onAnthropicApiKeyDraftChange: (value: string) => void;
+  onDeeplApiKeyDraftChange: (value: string) => void;
   onClampReaderZoom: (value: number) => number;
   onResetLayoutWidths: () => void;
-  onClearSavedKey: (provider: AIProvider) => void;
+  onClearSavedKey: (provider: AIProvider | "deepl") => void;
   onCancel: () => void;
   onSave: () => void;
 }) {
@@ -163,6 +167,105 @@ export function SettingsDialog({
             <div className="settings-provider-actions">
               <button className="ghost-button" type="button" onClick={onResetLayoutWidths}>
                 Reset layout widths
+              </button>
+            </div>
+          </section>
+
+          <section className="settings-section-card" aria-labelledby="settings-translation-heading">
+            <div className="settings-section-heading">
+              <p className="eyebrow">Translation</p>
+              <h3 id="settings-translation-heading">Selection Translation</h3>
+            </div>
+            <div className="settings-form-grid">
+              <label className="settings-field">
+                <span>Provider</span>
+                <select
+                  aria-label="Translation provider"
+                  className="settings-input"
+                  value={aiSettingsDraft.translation_provider}
+                  onChange={(event) =>
+                    onAiSettingsDraftChange((current) => ({
+                      ...current,
+                      translation_provider: event.target.value as TranslationProvider,
+                    }))
+                  }
+                >
+                  <option value="openai">OpenAI</option>
+                  <option value="anthropic">Anthropic</option>
+                  <option value="deepl">DeepL</option>
+                </select>
+              </label>
+              <label className="settings-field">
+                <span>Target language</span>
+                <input
+                  aria-label="Translation target language"
+                  className="settings-input"
+                  value={aiSettingsDraft.translation_target_lang}
+                  onChange={(event) =>
+                    onAiSettingsDraftChange((current) => ({ ...current, translation_target_lang: event.target.value }))
+                  }
+                />
+              </label>
+              {aiSettingsDraft.translation_provider === "openai" ? (
+                <label className="settings-field">
+                  <span>Translation OpenAI model</span>
+                  <input
+                    aria-label="Translation OpenAI model"
+                    className="settings-input"
+                    placeholder={aiSettingsDraft.openai_model || "Fallback to OpenAI model"}
+                    value={aiSettingsDraft.translation_openai_model}
+                    onChange={(event) =>
+                      onAiSettingsDraftChange((current) => ({ ...current, translation_openai_model: event.target.value }))
+                    }
+                  />
+                </label>
+              ) : null}
+              {aiSettingsDraft.translation_provider === "anthropic" ? (
+                <label className="settings-field">
+                  <span>Translation Anthropic model</span>
+                  <input
+                    aria-label="Translation Anthropic model"
+                    className="settings-input"
+                    placeholder={aiSettingsDraft.anthropic_model || "Fallback to Anthropic model"}
+                    value={aiSettingsDraft.translation_anthropic_model}
+                    onChange={(event) =>
+                      onAiSettingsDraftChange((current) => ({ ...current, translation_anthropic_model: event.target.value }))
+                    }
+                  />
+                </label>
+              ) : null}
+              {aiSettingsDraft.translation_provider === "deepl" ? (
+                <>
+                  <label className="settings-field">
+                    <span>DeepL Base URL</span>
+                    <input
+                      aria-label="DeepL base URL"
+                      className="settings-input"
+                      placeholder="https://api-free.deepl.com"
+                      value={aiSettingsDraft.deepl_base_url}
+                      onChange={(event) =>
+                        onAiSettingsDraftChange((current) => ({ ...current, deepl_base_url: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label className="settings-field">
+                    <span>DeepL API key</span>
+                    <input
+                      aria-label="DeepL API key"
+                      className="settings-input"
+                      type="password"
+                      value={deeplApiKeyDraft}
+                      placeholder={aiSettings?.has_deepl_api_key ? "Replace saved key" : "Paste API key"}
+                      onChange={(event) => onDeeplApiKeyDraftChange(event.target.value)}
+                    />
+                  </label>
+                </>
+              ) : null}
+            </div>
+            <div className="settings-provider-actions settings-provider-actions-inline">
+              <span className="settings-inline-note">OpenAI and Anthropic reuse their saved provider keys; DeepL uses its own key.</span>
+              <button className="ghost-button" type="button" onClick={() => onClearSavedKey("deepl")}>
+                Clear DeepL key
               </button>
             </div>
           </section>

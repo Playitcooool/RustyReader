@@ -8,10 +8,10 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
-use tokio::sync::Semaphore;
 use tesseract_ocr_static::{
     Config as TesseractConfig, Image as TessImage, PageSegmentationMode, TextRecognizer,
 };
+use tokio::sync::Semaphore;
 
 use crate::state::AppState;
 

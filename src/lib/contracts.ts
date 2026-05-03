@@ -129,6 +129,7 @@ export type AISessionReference = {
 };
 
 export type AIProvider = "openai" | "anthropic";
+export type TranslationProvider = "openai" | "anthropic" | "deepl";
 
 export type AISettings = {
   active_provider: AIProvider;
@@ -138,6 +139,12 @@ export type AISettings = {
   anthropic_model: string;
   anthropic_base_url: string;
   has_anthropic_api_key: boolean;
+  translation_provider: TranslationProvider;
+  translation_openai_model: string;
+  translation_anthropic_model: string;
+  translation_target_lang: string;
+  deepl_base_url: string;
+  has_deepl_api_key: boolean;
 };
 
 export type UpdateAISettingsInput = {
@@ -150,6 +157,22 @@ export type UpdateAISettingsInput = {
   anthropic_base_url: string;
   anthropic_api_key?: string;
   clear_anthropic_api_key?: boolean;
+  translation_provider: TranslationProvider;
+  translation_openai_model: string;
+  translation_anthropic_model: string;
+  translation_target_lang: string;
+  deepl_base_url: string;
+  deepl_api_key?: string;
+  clear_deepl_api_key?: boolean;
+};
+
+export type TranslateSelectionInput = {
+  text: string;
+  target_lang?: string;
+};
+
+export type TranslateSelectionResult = {
+  translated_text: string;
 };
 
 export type ResearchNote = {
@@ -288,6 +311,7 @@ export type AppApi = {
   removeAnnotation: (input: { annotation_id: number }) => Promise<void>;
   getAiSettings: () => Promise<AISettings>;
   updateAiSettings: (input: UpdateAISettingsInput) => Promise<AISettings>;
+  translateSelection: (input: TranslateSelectionInput) => Promise<TranslateSelectionResult>;
   listAiSessions: () => Promise<AISession[]>;
   createAiSession: () => Promise<AISession>;
   deleteAiSession: (sessionId: number) => Promise<void>;

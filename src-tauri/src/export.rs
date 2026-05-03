@@ -59,16 +59,18 @@ pub(crate) async fn request_export_path(
     }
     if let Some(filters) = input.filters {
         for filter in filters {
-            let extensions = filter.extensions.iter().map(String::as_str).collect::<Vec<_>>();
+            let extensions = filter
+                .extensions
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>();
             dialog = dialog.add_filter(filter.name, &extensions);
         }
     }
     let Some(file_path) = dialog.blocking_save_file() else {
         return Ok(None);
     };
-    let path = file_path
-        .into_path()
-        .map_err(|error| error.to_string())?;
+    let path = file_path.into_path().map_err(|error| error.to_string())?;
     let token = format!(
         "export-{}",
         EXPORT_AUTHORIZATION_COUNTER.fetch_add(1, Ordering::Relaxed)

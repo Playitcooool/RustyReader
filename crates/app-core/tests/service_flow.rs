@@ -6,8 +6,8 @@ use std::{
 };
 
 use app_core::service::{
-    AiCompletionRequest, AiTransport, AIProvider, AISessionReferenceKind, ImportMode, LibraryService,
-    UpdateAISettingsInput,
+    AIProvider, AISessionReferenceKind, AiCompletionRequest, AiTransport, ImportMode,
+    LibraryService, TranslationProvider, UpdateAISettingsInput,
 };
 use flate2::{write::ZlibEncoder, Compression};
 use rusqlite::Connection;
@@ -90,10 +90,13 @@ fn write_compressed_pdf_fixture(
         .map(|id| format!("{id} 0 R"))
         .collect::<Vec<_>>()
         .join(" ");
-    objects.push(format!(
-        "2 0 obj\n<< /Type /Pages /Kids [{kids}] /Count {} >>\nendobj\n",
-        pages.len()
-    ).into_bytes());
+    objects.push(
+        format!(
+            "2 0 obj\n<< /Type /Pages /Kids [{kids}] /Count {} >>\nendobj\n",
+            pages.len()
+        )
+        .into_bytes(),
+    );
 
     for (index, _) in pages.iter().enumerate() {
         let page_id = page_ids[index];
@@ -108,7 +111,9 @@ fn write_compressed_pdf_fixture(
         let stream = match text {
             Some(text) => format!(
                 "BT\n/F1 12 Tf\n72 720 Td\n({}) Tj\nET\n",
-                text.replace('\\', "\\\\").replace('(', "\\(").replace(')', "\\)")
+                text.replace('\\', "\\\\")
+                    .replace('(', "\\(")
+                    .replace(')', "\\)")
             ),
             None => "q\nQ\n".to_string(),
         };
@@ -140,10 +145,7 @@ fn write_compressed_pdf_fixture(
     if let Some(year) = year {
         info_parts.push(format!("/CreationDate (D:{year}0101000000Z)"));
     }
-    objects.push(format!(
-        "{info_id} 0 obj\n<< {} >>\nendobj\n",
-        info_parts.join(" ")
-    ).into_bytes());
+    objects.push(format!("{info_id} 0 obj\n<< {} >>\nendobj\n", info_parts.join(" ")).into_bytes());
 
     let mut pdf = b"%PDF-1.4\n".to_vec();
     let mut offsets = Vec::new();
@@ -157,10 +159,13 @@ fn write_compressed_pdf_fixture(
     for offset in offsets {
         pdf.extend_from_slice(format!("{offset:010} 00000 n \n").as_bytes());
     }
-    pdf.extend_from_slice(format!(
+    pdf.extend_from_slice(
+        format!(
         "trailer\n<< /Size {} /Root 1 0 R /Info {info_id} 0 R >>\nstartxref\n{xref_offset}\n%%EOF",
         objects.len() + 1
-    ).as_bytes());
+    )
+        .as_bytes(),
+    );
 
     fs::write(path, pdf).unwrap();
 }
@@ -311,8 +316,13 @@ fn imports_pdf_with_partial_text_as_partial_and_indexes_reliable_excerpt() {
 
     let reader = service.get_reader_view(result.imported[0].id).unwrap();
     assert_eq!(reader.content_status, "partial");
-    assert!(reader.plain_text.contains("Only the first page has a reliable text layer."));
-    assert!(reader.content_notice.unwrap_or_default().contains("partial"));
+    assert!(reader
+        .plain_text
+        .contains("Only the first page has a reliable text layer."));
+    assert!(reader
+        .content_notice
+        .unwrap_or_default()
+        .contains("partial"));
 
     let search = service.search_items("reliable text layer").unwrap();
     assert_eq!(search.len(), 1);
@@ -437,19 +447,31 @@ fn imports_docx_and_epub_as_real_text_readers() {
     let items = service.list_items(Some(collection.id)).unwrap();
     assert_eq!(items.len(), 2);
 
-    let docx_item = items.iter().find(|item| item.attachment_format == "docx").unwrap();
+    let docx_item = items
+        .iter()
+        .find(|item| item.attachment_format == "docx")
+        .unwrap();
     let docx_reader = service.get_reader_view(docx_item.id).unwrap();
     assert_eq!(docx_reader.reader_kind, "normalized");
     assert_eq!(docx_reader.content_status, "ready");
     assert!(docx_reader.plain_text.contains("Graph neural networks"));
-    assert!(docx_reader.normalized_html.contains("<p>Graph neural networks unify message passing."));
+    assert!(docx_reader
+        .normalized_html
+        .contains("<p>Graph neural networks unify message passing."));
 
-    let epub_item = items.iter().find(|item| item.attachment_format == "epub").unwrap();
+    let epub_item = items
+        .iter()
+        .find(|item| item.attachment_format == "epub")
+        .unwrap();
     let epub_reader = service.get_reader_view(epub_item.id).unwrap();
     assert_eq!(epub_reader.reader_kind, "normalized");
-    assert!(epub_reader.plain_text.contains("Consensus protocols coordinate replicas."));
+    assert!(epub_reader
+        .plain_text
+        .contains("Consensus protocols coordinate replicas."));
     assert!(epub_reader.normalized_html.contains("Chapter 1"));
-    assert!(epub_reader.normalized_html.contains("Operator ergonomics matter during failures."));
+    assert!(epub_reader
+        .normalized_html
+        .contains("Operator ergonomics matter during failures."));
 }
 
 #[test]
@@ -461,7 +483,11 @@ fn duplicate_imports_report_duplicate_without_creating_new_items() {
     write_pdf_fixture(&pdf);
 
     let first = service
-        .import_files(collection.id, std::slice::from_ref(&pdf), ImportMode::ManagedCopy)
+        .import_files(
+            collection.id,
+            std::slice::from_ref(&pdf),
+            ImportMode::ManagedCopy,
+        )
         .unwrap();
     let second = service
         .import_files(collection.id, &[pdf], ImportMode::ManagedCopy)
@@ -483,17 +509,26 @@ fn linked_files_can_be_marked_missing_and_relinked() {
     write_epub_fixture(&original);
 
     let result = service
-        .import_files(collection.id, std::slice::from_ref(&original), ImportMode::LinkedFile)
+        .import_files(
+            collection.id,
+            std::slice::from_ref(&original),
+            ImportMode::LinkedFile,
+        )
         .unwrap();
     let attachment_id = result.imported[0].primary_attachment_id;
 
     fs::remove_file(&original).unwrap();
     service.refresh_attachment_statuses().unwrap();
-    assert_eq!(service.list_items(Some(collection.id)).unwrap()[0].attachment_status, "missing");
+    assert_eq!(
+        service.list_items(Some(collection.id)).unwrap()[0].attachment_status,
+        "missing"
+    );
 
     let replacement = fixture_path(root.path(), "replacement.epub");
     write_epub_fixture(&replacement);
-    service.relink_attachment(attachment_id, replacement).unwrap();
+    service
+        .relink_attachment(attachment_id, replacement)
+        .unwrap();
 
     let item = service.list_items(Some(collection.id)).unwrap().remove(0);
     assert_eq!(item.attachment_status, "ready");
@@ -513,7 +548,11 @@ fn reads_primary_pdf_attachment_bytes_for_managed_and_linked_files() {
         .import_files(collection.id, &[managed], ImportMode::ManagedCopy)
         .unwrap();
     let linked_result = service
-        .import_files(collection.id, std::slice::from_ref(&linked), ImportMode::LinkedFile)
+        .import_files(
+            collection.id,
+            std::slice::from_ref(&linked),
+            ImportMode::LinkedFile,
+        )
         .unwrap();
 
     let managed_bytes = service
@@ -538,7 +577,11 @@ fn read_primary_attachment_bytes_rejects_missing_non_pdf_and_unknown_attachments
     let missing_pdf = fixture_path(root.path(), "missing.pdf");
     write_pdf_fixture(&missing_pdf);
     let missing_result = service
-        .import_files(collection.id, std::slice::from_ref(&missing_pdf), ImportMode::LinkedFile)
+        .import_files(
+            collection.id,
+            std::slice::from_ref(&missing_pdf),
+            ImportMode::LinkedFile,
+        )
         .unwrap();
     fs::remove_file(&missing_pdf).unwrap();
 
@@ -580,10 +623,16 @@ fn removing_items_deletes_managed_copy_but_preserves_linked_source() {
         .import_files(collection.id, &[managed], ImportMode::ManagedCopy)
         .unwrap();
     let linked_result = service
-        .import_files(collection.id, std::slice::from_ref(&linked), ImportMode::LinkedFile)
+        .import_files(
+            collection.id,
+            std::slice::from_ref(&linked),
+            ImportMode::LinkedFile,
+        )
         .unwrap();
 
-    let managed_reader = service.get_reader_view(managed_result.imported[0].id).unwrap();
+    let managed_reader = service
+        .get_reader_view(managed_result.imported[0].id)
+        .unwrap();
     assert!(Path::new(managed_reader.primary_attachment_path.as_deref().unwrap()).exists());
 
     service.remove_item(managed_result.imported[0].id).unwrap();
@@ -613,7 +662,10 @@ fn removing_item_clears_matching_ai_session_references() {
 
     service.remove_item(item_id).unwrap();
 
-    assert!(service.list_ai_session_references(session.id).unwrap().is_empty());
+    assert!(service
+        .list_ai_session_references(session.id)
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
@@ -623,12 +675,19 @@ fn removing_collection_clears_matching_ai_session_references() {
     let collection = service.create_collection("Empty", None).unwrap();
     let session = service.create_ai_session().unwrap();
     service
-        .add_ai_session_reference(session.id, AISessionReferenceKind::Collection, collection.id)
+        .add_ai_session_reference(
+            session.id,
+            AISessionReferenceKind::Collection,
+            collection.id,
+        )
         .unwrap();
 
     service.remove_collection(collection.id).unwrap();
 
-    assert!(service.list_ai_session_references(session.id).unwrap().is_empty());
+    assert!(service
+        .list_ai_session_references(session.id)
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
@@ -636,7 +695,9 @@ fn removing_collection_recursively_clears_descendant_items_and_related_records()
     let root = tempdir().unwrap();
     let service = service_with_transport(root.path(), Arc::new(StubTransport::default()));
     let parent = service.create_collection("Machine Learning", None).unwrap();
-    let child = service.create_collection("Scaling Papers", Some(parent.id)).unwrap();
+    let child = service
+        .create_collection("Scaling Papers", Some(parent.id))
+        .unwrap();
     let sibling = service.create_collection("Systems", None).unwrap();
     let parent_pdf = fixture_path(root.path(), "parent.pdf");
     let child_pdf = fixture_path(root.path(), "child.pdf");
@@ -672,6 +733,13 @@ fn removing_collection_recursively_clears_descendant_items_and_related_records()
             anthropic_base_url: "".into(),
             anthropic_api_key: None,
             clear_anthropic_api_key: None,
+            translation_provider: TranslationProvider::OpenAI,
+            translation_openai_model: "gpt-4.1-mini-translator".into(),
+            translation_anthropic_model: "claude-3-haiku-translator".into(),
+            translation_target_lang: "ZH-HANS".into(),
+            deepl_base_url: "https://api-free.deepl.com".into(),
+            deepl_api_key: None,
+            clear_deepl_api_key: None,
         })
         .unwrap();
 
@@ -704,11 +772,22 @@ fn removing_collection_recursively_clears_descendant_items_and_related_records()
     let items = service.list_items(None).unwrap();
     assert_eq!(items.len(), 1);
     assert_eq!(items[0].id, sibling_item_id);
-    assert!(items.iter().all(|item| item.id != parent_item_id && item.id != child_item_id));
+    assert!(items
+        .iter()
+        .all(|item| item.id != parent_item_id && item.id != child_item_id));
 
-    assert!(service.list_ai_session_references(session.id).unwrap().is_empty());
-    assert!(service.list_task_runs(None, Some(child.id)).unwrap().is_empty());
-    assert!(service.get_latest_artifact(None, Some(child.id)).unwrap().is_none());
+    assert!(service
+        .list_ai_session_references(session.id)
+        .unwrap()
+        .is_empty());
+    assert!(service
+        .list_task_runs(None, Some(child.id))
+        .unwrap()
+        .is_empty());
+    assert!(service
+        .get_latest_artifact(None, Some(child.id))
+        .unwrap()
+        .is_none());
     assert!(service.list_notes(Some(child.id)).unwrap().is_empty());
     assert!(service
         .list_notes(None)
@@ -763,6 +842,13 @@ fn removing_item_prunes_cascaded_records_and_session_scope_item_ids() {
             anthropic_base_url: "".into(),
             anthropic_api_key: None,
             clear_anthropic_api_key: None,
+            translation_provider: TranslationProvider::OpenAI,
+            translation_openai_model: "gpt-4.1-mini-translator".into(),
+            translation_anthropic_model: "claude-3-haiku-translator".into(),
+            translation_target_lang: "ZH-HANS".into(),
+            deepl_base_url: "https://api-free.deepl.com".into(),
+            deepl_api_key: None,
+            clear_deepl_api_key: None,
         })
         .unwrap();
 
@@ -775,16 +861,32 @@ fn removing_item_prunes_cascaded_records_and_session_scope_item_ids() {
 
     let conn = Connection::open(root.path().join("library.db")).unwrap();
     let attachments: i64 = conn
-        .query_row("SELECT COUNT(*) FROM attachments WHERE item_id = ?1", [item_a], |row| row.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM attachments WHERE item_id = ?1",
+            [item_a],
+            |row| row.get(0),
+        )
         .unwrap();
     let extracted_content: i64 = conn
-        .query_row("SELECT COUNT(*) FROM extracted_content WHERE item_id = ?1", [item_a], |row| row.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM extracted_content WHERE item_id = ?1",
+            [item_a],
+            |row| row.get(0),
+        )
         .unwrap();
     let annotations: i64 = conn
-        .query_row("SELECT COUNT(*) FROM annotations WHERE item_id = ?1", [item_a], |row| row.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM annotations WHERE item_id = ?1",
+            [item_a],
+            |row| row.get(0),
+        )
         .unwrap();
     let item_tags: i64 = conn
-        .query_row("SELECT COUNT(*) FROM item_tags WHERE item_id = ?1", [item_a], |row| row.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM item_tags WHERE item_id = ?1",
+            [item_a],
+            |row| row.get(0),
+        )
         .unwrap();
     assert_eq!(attachments, 0);
     assert_eq!(extracted_content, 0);
@@ -794,7 +896,10 @@ fn removing_item_prunes_cascaded_records_and_session_scope_item_ids() {
     let session_tasks = service.list_ai_session_task_runs(session.id).unwrap();
     assert_eq!(session_tasks.len(), 1);
     assert_eq!(session_tasks[0].scope_item_ids, Some(vec![item_b]));
-    let artifact = service.get_ai_session_artifact(session.id).unwrap().expect("session artifact");
+    let artifact = service
+        .get_ai_session_artifact(session.id)
+        .unwrap()
+        .expect("session artifact");
     assert_eq!(artifact.scope_item_ids, Some(vec![item_b]));
 }
 
@@ -839,6 +944,13 @@ fn removing_collection_prunes_session_scope_item_ids_for_descendant_items() {
             anthropic_base_url: "".into(),
             anthropic_api_key: None,
             clear_anthropic_api_key: None,
+            translation_provider: TranslationProvider::OpenAI,
+            translation_openai_model: "".into(),
+            translation_anthropic_model: "".into(),
+            translation_target_lang: "ZH-HANS".into(),
+            deepl_base_url: "https://api-free.deepl.com".into(),
+            deepl_api_key: None,
+            clear_deepl_api_key: None,
         })
         .unwrap();
     service
@@ -854,7 +966,9 @@ fn removing_collection_prunes_session_scope_item_ids_for_descendant_items() {
             .is_none_or(|scope_item_ids| scope_item_ids == &vec![keep_item_id])
     }));
     let artifact = service.get_ai_session_artifact(session.id).unwrap();
-    assert!(artifact.as_ref().is_none_or(|entry| entry.scope_item_ids == Some(vec![keep_item_id])));
+    assert!(artifact
+        .as_ref()
+        .is_none_or(|entry| entry.scope_item_ids == Some(vec![keep_item_id])));
 }
 
 #[test]
@@ -884,6 +998,13 @@ fn deleting_ai_session_removes_related_records() {
             anthropic_base_url: "".into(),
             anthropic_api_key: None,
             clear_anthropic_api_key: None,
+            translation_provider: TranslationProvider::OpenAI,
+            translation_openai_model: "".into(),
+            translation_anthropic_model: "".into(),
+            translation_target_lang: "ZH-HANS".into(),
+            deepl_base_url: "https://api-free.deepl.com".into(),
+            deepl_api_key: None,
+            clear_deepl_api_key: None,
         })
         .unwrap();
 
@@ -903,17 +1024,37 @@ fn deleting_ai_session_removes_related_records() {
         .unwrap()
         .iter()
         .all(|entry| entry.id != session.id));
-    assert!(service.list_ai_session_references(session.id).unwrap().is_empty());
-    assert!(service.list_ai_session_task_runs(session.id).unwrap().is_empty());
-    assert!(service.get_ai_session_artifact(session.id).unwrap().is_none());
-    assert!(service.list_ai_session_notes(session.id).unwrap().is_empty());
+    assert!(service
+        .list_ai_session_references(session.id)
+        .unwrap()
+        .is_empty());
+    assert!(service
+        .list_ai_session_task_runs(session.id)
+        .unwrap()
+        .is_empty());
+    assert!(service
+        .get_ai_session_artifact(session.id)
+        .unwrap()
+        .is_none());
+    assert!(service
+        .list_ai_session_notes(session.id)
+        .unwrap()
+        .is_empty());
 
     let conn = Connection::open(root.path().join("library.db")).unwrap();
     let task_count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM ai_tasks WHERE id = ?1", [task.id], |row| row.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM ai_tasks WHERE id = ?1",
+            [task.id],
+            |row| row.get(0),
+        )
         .unwrap();
     let artifact_count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM ai_artifacts WHERE id = ?1", [artifact.id], |row| row.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM ai_artifacts WHERE id = ?1",
+            [artifact.id],
+            |row| row.get(0),
+        )
         .unwrap();
     assert_eq!(task_count, 0);
     assert_eq!(artifact_count, 0);
@@ -955,6 +1096,13 @@ fn item_ask_persists_input_prompt() {
             anthropic_base_url: "".into(),
             anthropic_api_key: None,
             clear_anthropic_api_key: None,
+            translation_provider: TranslationProvider::OpenAI,
+            translation_openai_model: "".into(),
+            translation_anthropic_model: "".into(),
+            translation_target_lang: "ZH-HANS".into(),
+            deepl_base_url: "https://api-free.deepl.com".into(),
+            deepl_api_key: None,
+            clear_deepl_api_key: None,
         })
         .unwrap();
 
@@ -962,11 +1110,17 @@ fn item_ask_persists_input_prompt() {
         .run_item_task(item_id, "item.ask", Some("What is the core claim?"))
         .unwrap();
 
-    assert_eq!(task.input_prompt.as_deref(), Some("What is the core claim?"));
+    assert_eq!(
+        task.input_prompt.as_deref(),
+        Some("What is the core claim?")
+    );
     assert!(task.output_markdown.contains("What is the core claim?"));
 
     let listed = service.list_task_runs(Some(item_id), None).unwrap();
-    assert_eq!(listed[0].input_prompt.as_deref(), Some("What is the core claim?"));
+    assert_eq!(
+        listed[0].input_prompt.as_deref(),
+        Some("What is the core claim?")
+    );
 }
 
 #[test]
@@ -982,7 +1136,11 @@ fn collection_ask_persists_input_prompt_and_scope() {
     let result = service
         .import_files(collection.id, &[pdf_a, pdf_b], ImportMode::ManagedCopy)
         .unwrap();
-    let scope_item_ids = result.imported.iter().map(|item| item.id).collect::<Vec<_>>();
+    let scope_item_ids = result
+        .imported
+        .iter()
+        .map(|item| item.id)
+        .collect::<Vec<_>>();
     service
         .update_ai_settings(UpdateAISettingsInput {
             active_provider: AIProvider::OpenAI,
@@ -994,6 +1152,13 @@ fn collection_ask_persists_input_prompt_and_scope() {
             anthropic_base_url: "".into(),
             anthropic_api_key: None,
             clear_anthropic_api_key: None,
+            translation_provider: TranslationProvider::OpenAI,
+            translation_openai_model: "".into(),
+            translation_anthropic_model: "".into(),
+            translation_target_lang: "ZH-HANS".into(),
+            deepl_base_url: "https://api-free.deepl.com".into(),
+            deepl_api_key: None,
+            clear_deepl_api_key: None,
         })
         .unwrap();
 
@@ -1006,12 +1171,24 @@ fn collection_ask_persists_input_prompt_and_scope() {
         )
         .unwrap();
 
-    assert_eq!(task.input_prompt.as_deref(), Some("How do these papers compare?"));
-    assert_eq!(task.scope_item_ids.as_deref(), Some(scope_item_ids.as_slice()));
+    assert_eq!(
+        task.input_prompt.as_deref(),
+        Some("How do these papers compare?")
+    );
+    assert_eq!(
+        task.scope_item_ids.as_deref(),
+        Some(scope_item_ids.as_slice())
+    );
 
     let listed = service.list_task_runs(None, Some(collection.id)).unwrap();
-    assert_eq!(listed[0].input_prompt.as_deref(), Some("How do these papers compare?"));
-    assert_eq!(listed[0].scope_item_ids.as_deref(), Some(scope_item_ids.as_slice()));
+    assert_eq!(
+        listed[0].input_prompt.as_deref(),
+        Some("How do these papers compare?")
+    );
+    assert_eq!(
+        listed[0].scope_item_ids.as_deref(),
+        Some(scope_item_ids.as_slice())
+    );
 }
 
 #[test]
@@ -1037,10 +1214,19 @@ fn legacy_ai_tasks_keep_null_input_prompt() {
             anthropic_base_url: "".into(),
             anthropic_api_key: None,
             clear_anthropic_api_key: None,
+            translation_provider: TranslationProvider::OpenAI,
+            translation_openai_model: "".into(),
+            translation_anthropic_model: "".into(),
+            translation_target_lang: "ZH-HANS".into(),
+            deepl_base_url: "https://api-free.deepl.com".into(),
+            deepl_api_key: None,
+            clear_deepl_api_key: None,
         })
         .unwrap();
 
-    let task = service.run_item_task(item_id, "item.summarize", None).unwrap();
+    let task = service
+        .run_item_task(item_id, "item.summarize", None)
+        .unwrap();
     assert_eq!(task.input_prompt, None);
 
     let listed = service.list_task_runs(Some(item_id), None).unwrap();
@@ -1063,6 +1249,13 @@ fn ai_settings_persist_without_returning_raw_keys() {
             anthropic_base_url: "".into(),
             anthropic_api_key: Some("anthropic-secret".into()),
             clear_anthropic_api_key: None,
+            translation_provider: TranslationProvider::OpenAI,
+            translation_openai_model: "gpt-4.1-mini-translator".into(),
+            translation_anthropic_model: "claude-3-haiku-translator".into(),
+            translation_target_lang: "ZH-HANS".into(),
+            deepl_base_url: "https://api-free.deepl.com".into(),
+            deepl_api_key: None,
+            clear_deepl_api_key: None,
         })
         .unwrap();
 
@@ -1075,17 +1268,83 @@ fn ai_settings_persist_without_returning_raw_keys() {
     assert!(loaded.has_openai_api_key);
     assert!(loaded.has_anthropic_api_key);
     assert_eq!(loaded.openai_model, "gpt-4.1-mini");
+    assert_eq!(loaded.translation_openai_model, "gpt-4.1-mini-translator");
+    assert_eq!(
+        loaded.translation_anthropic_model,
+        "claude-3-haiku-translator"
+    );
 
     let conn = Connection::open(root.path().join("library.db")).unwrap();
-    let stored_keys: (String, String) = conn
+    let stored_keys: (String, String, String, String) = conn
         .query_row(
-            "SELECT openai_api_key, anthropic_api_key FROM ai_settings WHERE id = 1",
+            "SELECT openai_api_key, anthropic_api_key, translation_openai_model, translation_anthropic_model FROM ai_settings WHERE id = 1",
             [],
-            |row| Ok((row.get(0)?, row.get(1)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         )
         .unwrap();
     assert_eq!(stored_keys.0, "openai-secret");
     assert_eq!(stored_keys.1, "anthropic-secret");
+    assert_eq!(stored_keys.2, "gpt-4.1-mini-translator");
+    assert_eq!(stored_keys.3, "claude-3-haiku-translator");
+}
+
+#[test]
+fn translate_selection_uses_translation_model_with_provider_fallbacks() {
+    let root = tempdir().unwrap();
+    let transport = Arc::new(StubTransport::default());
+    let service = service_with_transport(root.path(), transport.clone());
+
+    service
+        .update_ai_settings(UpdateAISettingsInput {
+            active_provider: AIProvider::OpenAI,
+            openai_model: "gpt-main".into(),
+            openai_base_url: "".into(),
+            openai_api_key: Some("openai-secret".into()),
+            clear_openai_api_key: None,
+            anthropic_model: "claude-main".into(),
+            anthropic_base_url: "".into(),
+            anthropic_api_key: Some("anthropic-secret".into()),
+            clear_anthropic_api_key: None,
+            translation_provider: TranslationProvider::OpenAI,
+            translation_openai_model: "gpt-translate".into(),
+            translation_anthropic_model: "".into(),
+            translation_target_lang: "ZH-HANS".into(),
+            deepl_base_url: "https://api-free.deepl.com".into(),
+            deepl_api_key: None,
+            clear_deepl_api_key: None,
+        })
+        .unwrap();
+
+    service.translate_selection("hello", None).unwrap();
+
+    service
+        .update_ai_settings(UpdateAISettingsInput {
+            active_provider: AIProvider::OpenAI,
+            openai_model: "gpt-main".into(),
+            openai_base_url: "".into(),
+            openai_api_key: None,
+            clear_openai_api_key: None,
+            anthropic_model: "claude-main".into(),
+            anthropic_base_url: "".into(),
+            anthropic_api_key: None,
+            clear_anthropic_api_key: None,
+            translation_provider: TranslationProvider::Anthropic,
+            translation_openai_model: "gpt-translate".into(),
+            translation_anthropic_model: "".into(),
+            translation_target_lang: "ZH-HANS".into(),
+            deepl_base_url: "https://api-free.deepl.com".into(),
+            deepl_api_key: None,
+            clear_deepl_api_key: None,
+        })
+        .unwrap();
+
+    service.translate_selection("hello", None).unwrap();
+
+    let requests = transport.requests.lock().unwrap();
+    assert_eq!(requests[0].provider, AIProvider::OpenAI);
+    assert_eq!(requests[0].model, "gpt-translate");
+    assert_eq!(requests[1].provider, AIProvider::Anthropic);
+    assert_eq!(requests[1].model, "claude-main");
 }
 
 #[test]
@@ -1101,10 +1360,18 @@ fn missing_active_provider_configuration_fails_without_persisting_tasks() {
         .unwrap();
     let item_id = result.imported[0].id;
 
-    let error = service.run_item_task(item_id, "item.summarize", None).unwrap_err();
+    let error = service
+        .run_item_task(item_id, "item.summarize", None)
+        .unwrap_err();
     assert!(error.to_string().contains("OpenAI is missing"));
-    assert!(service.list_task_runs(Some(item_id), None).unwrap().is_empty());
-    assert!(service.get_latest_artifact(Some(item_id), None).unwrap().is_none());
+    assert!(service
+        .list_task_runs(Some(item_id), None)
+        .unwrap()
+        .is_empty());
+    assert!(service
+        .get_latest_artifact(Some(item_id), None)
+        .unwrap()
+        .is_none());
 }
 
 #[test]
@@ -1122,7 +1389,11 @@ fn provider_backed_item_and_collection_tasks_route_and_persist() {
         .import_files(collection.id, &[pdf_a, pdf_b], ImportMode::ManagedCopy)
         .unwrap();
     let item_id = result.imported[0].id;
-    let scope_item_ids = result.imported.iter().map(|item| item.id).collect::<Vec<_>>();
+    let scope_item_ids = result
+        .imported
+        .iter()
+        .map(|item| item.id)
+        .collect::<Vec<_>>();
 
     service
         .update_ai_settings(UpdateAISettingsInput {
@@ -1135,10 +1406,19 @@ fn provider_backed_item_and_collection_tasks_route_and_persist() {
             anthropic_base_url: "".into(),
             anthropic_api_key: None,
             clear_anthropic_api_key: None,
+            translation_provider: TranslationProvider::OpenAI,
+            translation_openai_model: "".into(),
+            translation_anthropic_model: "".into(),
+            translation_target_lang: "ZH-HANS".into(),
+            deepl_base_url: "https://api-free.deepl.com".into(),
+            deepl_api_key: None,
+            clear_deepl_api_key: None,
         })
         .unwrap();
 
-    let item_task = service.run_item_task(item_id, "item.summarize", None).unwrap();
+    let item_task = service
+        .run_item_task(item_id, "item.summarize", None)
+        .unwrap();
     assert!(item_task.output_markdown.contains("OpenAI Path"));
 
     service
@@ -1152,6 +1432,13 @@ fn provider_backed_item_and_collection_tasks_route_and_persist() {
             anthropic_base_url: "".into(),
             anthropic_api_key: Some("anthropic-secret".into()),
             clear_anthropic_api_key: None,
+            translation_provider: TranslationProvider::OpenAI,
+            translation_openai_model: "".into(),
+            translation_anthropic_model: "".into(),
+            translation_target_lang: "ZH-HANS".into(),
+            deepl_base_url: "https://api-free.deepl.com".into(),
+            deepl_api_key: None,
+            clear_deepl_api_key: None,
         })
         .unwrap();
 
@@ -1170,4 +1457,50 @@ fn provider_backed_item_and_collection_tasks_route_and_persist() {
         .unwrap()
         .expect("artifact");
     assert!(artifact.markdown.contains("Anthropic Path"));
+}
+
+#[test]
+fn translate_selection_uses_clean_prompt_without_persisting_tasks() {
+    let root = tempdir().unwrap();
+    let transport = Arc::new(StubTransport::default());
+    let service = service_with_transport(root.path(), transport.clone());
+
+    service
+        .update_ai_settings(UpdateAISettingsInput {
+            active_provider: AIProvider::OpenAI,
+            openai_model: "gpt-4.1-mini".into(),
+            openai_base_url: "".into(),
+            openai_api_key: Some("openai-secret".into()),
+            clear_openai_api_key: None,
+            anthropic_model: "".into(),
+            anthropic_base_url: "".into(),
+            anthropic_api_key: None,
+            clear_anthropic_api_key: None,
+            translation_provider: TranslationProvider::OpenAI,
+            translation_openai_model: "".into(),
+            translation_anthropic_model: "".into(),
+            translation_target_lang: "ZH-HANS".into(),
+            deepl_base_url: "https://api-free.deepl.com".into(),
+            deepl_api_key: None,
+            clear_deepl_api_key: None,
+        })
+        .unwrap();
+
+    let result = service
+        .translate_selection("Preserve\nline breaks.", None)
+        .unwrap();
+    assert!(result.translated_text.contains("OpenAI Path"));
+
+    let requests = transport.requests.lock().unwrap();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].provider, AIProvider::OpenAI);
+    assert!(requests[0]
+        .prompt
+        .contains("Output only the translated text"));
+    assert!(requests[0].prompt.contains("Do not use markdown"));
+    assert!(requests[0].prompt.contains("Preserve\nline breaks."));
+    drop(requests);
+
+    assert!(service.list_task_runs(None, None).unwrap().is_empty());
+    assert!(service.get_latest_artifact(None, None).unwrap().is_none());
 }

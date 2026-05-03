@@ -278,7 +278,11 @@ pub(crate) async fn pdf_engine_get_page_bundle(
         .lock()
         .map_err(|_| "pdf cache poisoned".to_string())?
         .bundle_by_key
-        .get(&(input.primary_attachment_id, input.page_index0, bucketed_width))
+        .get(&(
+            input.primary_attachment_id,
+            input.page_index0,
+            bucketed_width,
+        ))
         .cloned()
     {
         return Ok(cached);
@@ -360,7 +364,11 @@ pub(crate) async fn pdf_engine_get_page_bundle(
         );
         remember_page_bundle(
             &mut cache,
-            (input.primary_attachment_id, input.page_index0, bucketed_width),
+            (
+                input.primary_attachment_id,
+                input.page_index0,
+                bucketed_width,
+            ),
             bundle.clone(),
         );
         Ok(bundle)
@@ -381,7 +389,10 @@ mod tests {
         width_pt: f32,
         height_pt: f32,
     ) -> lopdf::ObjectId {
-        let content = Stream::new(Dictionary::new(), b"BT /F1 12 Tf 72 720 Td (Test) Tj ET".to_vec());
+        let content = Stream::new(
+            Dictionary::new(),
+            b"BT /F1 12 Tf 72 720 Td (Test) Tj ET".to_vec(),
+        );
         let content_id = doc.add_object(content);
         doc.add_object(lopdf::dictionary! {
             "Type" => "Page",

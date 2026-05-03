@@ -53,6 +53,7 @@ type MockState = {
   aiSettings: AISettings & {
     openai_api_key: string;
     anthropic_api_key: string;
+    deepl_api_key: string;
   };
   nextId: number;
   importFileResults?: ImportBatchResult | null;
@@ -216,6 +217,13 @@ const initialState = (): MockState => ({
     anthropic_base_url: "",
     has_anthropic_api_key: false,
     anthropic_api_key: "",
+    translation_provider: "openai",
+    translation_openai_model: "",
+    translation_anthropic_model: "",
+    translation_target_lang: "ZH-HANS",
+    deepl_base_url: "https://api-free.deepl.com",
+    has_deepl_api_key: false,
+    deepl_api_key: "",
   },
   nextId: 1000,
   importFileResults: null,
@@ -468,6 +476,12 @@ const publicAiSettings = (): AISettings => ({
   anthropic_model: state.aiSettings.anthropic_model,
   anthropic_base_url: state.aiSettings.anthropic_base_url,
   has_anthropic_api_key: Boolean(state.aiSettings.anthropic_api_key),
+  translation_provider: state.aiSettings.translation_provider,
+  translation_openai_model: state.aiSettings.translation_openai_model,
+  translation_anthropic_model: state.aiSettings.translation_anthropic_model,
+  translation_target_lang: state.aiSettings.translation_target_lang,
+  deepl_base_url: state.aiSettings.deepl_base_url,
+  has_deepl_api_key: Boolean(state.aiSettings.deepl_api_key),
 });
 
 const collectionTaskOutput = (collectionId: number, kind: string, scopeItemIds: number[]) => {
@@ -1038,15 +1052,28 @@ export const fakeApi: AppApi = {
     state.aiSettings.openai_base_url = input.openai_base_url;
     state.aiSettings.anthropic_model = input.anthropic_model;
     state.aiSettings.anthropic_base_url = input.anthropic_base_url;
+    state.aiSettings.translation_provider = input.translation_provider;
+    state.aiSettings.translation_openai_model = input.translation_openai_model;
+    state.aiSettings.translation_anthropic_model = input.translation_anthropic_model;
+    state.aiSettings.translation_target_lang = input.translation_target_lang;
+    state.aiSettings.deepl_base_url = input.deepl_base_url;
     if (input.clear_openai_api_key) state.aiSettings.openai_api_key = "";
     else if (input.openai_api_key && input.openai_api_key.trim()) state.aiSettings.openai_api_key = input.openai_api_key;
     if (input.clear_anthropic_api_key) state.aiSettings.anthropic_api_key = "";
     else if (input.anthropic_api_key && input.anthropic_api_key.trim()) {
       state.aiSettings.anthropic_api_key = input.anthropic_api_key;
     }
+    if (input.clear_deepl_api_key) state.aiSettings.deepl_api_key = "";
+    else if (input.deepl_api_key && input.deepl_api_key.trim()) state.aiSettings.deepl_api_key = input.deepl_api_key;
     state.aiSettings.has_openai_api_key = Boolean(state.aiSettings.openai_api_key);
     state.aiSettings.has_anthropic_api_key = Boolean(state.aiSettings.anthropic_api_key);
+    state.aiSettings.has_deepl_api_key = Boolean(state.aiSettings.deepl_api_key);
     return publicAiSettings();
+  },
+
+  async translateSelection(input) {
+    if (input.text.includes("fail translation")) throw new Error("Mock translation failed.");
+    return { translated_text: `译文：${input.text}` };
   },
 
   async listAiSessions() {

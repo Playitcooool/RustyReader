@@ -1,11 +1,11 @@
 use app_core::service::{
-    AIArtifact, AISettings, AISession, AISessionReference, AISessionReferenceKind, AITask,
+    AIArtifact, AISession, AISessionReference, AISessionReferenceKind, AISettings, AITask,
     Annotation, ImportBatchResult, ImportMode, LibraryItem, ResearchNote, Tag,
-    UpdateAISettingsInput,
+    TranslateSelectionResult, TranslationProvider, UpdateAISettingsInput,
 };
 use serde::Deserialize;
-use tauri::State;
 use std::path::PathBuf;
+use tauri::State;
 
 use crate::state::{service, AppState};
 
@@ -94,6 +94,19 @@ pub(crate) struct UpdateAiSettingsPayload {
     anthropic_base_url: String,
     anthropic_api_key: Option<String>,
     clear_anthropic_api_key: Option<bool>,
+    translation_provider: String,
+    translation_openai_model: String,
+    translation_anthropic_model: String,
+    translation_target_lang: String,
+    deepl_base_url: String,
+    deepl_api_key: Option<String>,
+    clear_deepl_api_key: Option<bool>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct TranslateSelectionInput {
+    text: String,
+    target_lang: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -144,20 +157,14 @@ pub(crate) fn list_tags(
 }
 
 #[tauri::command]
-pub(crate) fn create_tag(
-    state: State<'_, AppState>,
-    input: CreateTagInput,
-) -> Result<Tag, String> {
+pub(crate) fn create_tag(state: State<'_, AppState>, input: CreateTagInput) -> Result<Tag, String> {
     service(&state)?
         .create_tag(&input.name)
         .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
-pub(crate) fn assign_tag(
-    state: State<'_, AppState>,
-    input: AssignTagInput,
-) -> Result<(), String> {
+pub(crate) fn assign_tag(state: State<'_, AppState>, input: AssignTagInput) -> Result<(), String> {
     service(&state)?
         .assign_tag(input.item_id, input.tag_id)
         .map_err(|error| error.to_string())
@@ -258,10 +265,7 @@ pub(crate) fn remove_item(
 }
 
 #[tauri::command]
-pub(crate) fn move_item(
-    state: State<'_, AppState>,
-    input: MoveItemInput,
-) -> Result<(), String> {
+pub(crate) fn move_item(state: State<'_, AppState>, input: MoveItemInput) -> Result<(), String> {
     service(&state)?
         .move_item(input.item_id, input.collection_id)
         .map_err(|error| error.to_string())
@@ -294,7 +298,29 @@ pub(crate) fn update_ai_settings(
             anthropic_base_url: input.anthropic_base_url,
             anthropic_api_key: input.anthropic_api_key,
             clear_anthropic_api_key: input.clear_anthropic_api_key,
+            translation_provider: match input.translation_provider.as_str() {
+                "openai" => TranslationProvider::OpenAI,
+                "anthropic" => TranslationProvider::Anthropic,
+                "deepl" => TranslationProvider::DeepL,
+                _ => return Err("unsupported translation provider".into()),
+            },
+            translation_openai_model: input.translation_openai_model,
+            translation_anthropic_model: input.translation_anthropic_model,
+            translation_target_lang: input.translation_target_lang,
+            deepl_base_url: input.deepl_base_url,
+            deepl_api_key: input.deepl_api_key,
+            clear_deepl_api_key: input.clear_deepl_api_key,
         })
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) fn translate_selection(
+    state: State<'_, AppState>,
+    input: TranslateSelectionInput,
+) -> Result<TranslateSelectionResult, String> {
+    service(&state)?
+        .translate_selection(&input.text, input.target_lang.as_deref())
         .map_err(|error| error.to_string())
 }
 
@@ -313,10 +339,7 @@ pub(crate) fn create_ai_session(state: State<'_, AppState>) -> Result<AISession,
 }
 
 #[tauri::command]
-pub(crate) fn delete_ai_session(
-    state: State<'_, AppState>,
-    session_id: i64,
-) -> Result<(), String> {
+pub(crate) fn delete_ai_session(state: State<'_, AppState>, session_id: i64) -> Result<(), String> {
     service(&state)?
         .delete_ai_session(session_id)
         .map_err(|error| error.to_string())

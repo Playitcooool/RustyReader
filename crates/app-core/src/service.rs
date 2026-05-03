@@ -2,8 +2,8 @@ use std::{
     collections::HashSet,
     fs,
     io::{BufRead, BufReader, Cursor, Read, Seek},
-    path::{Path, PathBuf},
     panic,
+    path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
 };
@@ -11,8 +11,8 @@ use std::{
 use anyhow::{anyhow, Context, Result};
 use html_escape::encode_safe;
 use lopdf::{Dictionary, Document as PdfDocument, Object};
-use reqwest::blocking::Client;
 use regex::Regex;
+use reqwest::blocking::Client;
 use roxmltree::Document;
 use rusqlite::{params, params_from_iter, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -153,6 +153,24 @@ pub enum AIProvider {
     Anthropic,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum TranslationProvider {
+    OpenAI,
+    Anthropic,
+    DeepL,
+}
+
+impl TranslationProvider {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::OpenAI => "openai",
+            Self::Anthropic => "anthropic",
+            Self::DeepL => "deepl",
+        }
+    }
+}
+
 impl AIProvider {
     fn as_str(self) -> &'static str {
         match self {
@@ -178,6 +196,12 @@ pub struct AISettings {
     pub anthropic_model: String,
     pub anthropic_base_url: String,
     pub has_anthropic_api_key: bool,
+    pub translation_provider: TranslationProvider,
+    pub translation_openai_model: String,
+    pub translation_anthropic_model: String,
+    pub translation_target_lang: String,
+    pub deepl_base_url: String,
+    pub has_deepl_api_key: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -191,6 +215,18 @@ pub struct UpdateAISettingsInput {
     pub anthropic_base_url: String,
     pub anthropic_api_key: Option<String>,
     pub clear_anthropic_api_key: Option<bool>,
+    pub translation_provider: TranslationProvider,
+    pub translation_openai_model: String,
+    pub translation_anthropic_model: String,
+    pub translation_target_lang: String,
+    pub deepl_base_url: String,
+    pub deepl_api_key: Option<String>,
+    pub clear_deepl_api_key: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TranslateSelectionResult {
+    pub translated_text: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -274,6 +310,12 @@ struct StoredAISettings {
     anthropic_model: String,
     anthropic_base_url: String,
     anthropic_api_key: String,
+    translation_provider: TranslationProvider,
+    translation_openai_model: String,
+    translation_anthropic_model: String,
+    translation_target_lang: String,
+    deepl_base_url: String,
+    deepl_api_key: String,
 }
 
 struct InferredMetadata {
@@ -282,6 +324,42 @@ struct InferredMetadata {
     publication_year: Option<i64>,
     source: String,
     doi: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum ProviderRequestPurpose {
+    Default,
+    Translation,
+}
+
+impl ProviderRequestPurpose {
+    fn openai_model(self, settings: &StoredAISettings) -> &str {
+        match self {
+            Self::Default => settings.openai_model.trim(),
+            Self::Translation => {
+                let model = settings.translation_openai_model.trim();
+                if model.is_empty() {
+                    settings.openai_model.trim()
+                } else {
+                    model
+                }
+            }
+        }
+    }
+
+    fn anthropic_model(self, settings: &StoredAISettings) -> &str {
+        match self {
+            Self::Default => settings.anthropic_model.trim(),
+            Self::Translation => {
+                let model = settings.translation_anthropic_model.trim();
+                if model.is_empty() {
+                    settings.anthropic_model.trim()
+                } else {
+                    model
+                }
+            }
+        }
+    }
 }
 
 struct ExtractedDocument {
@@ -305,6 +383,7 @@ const ITEM_TASK_TEXT_LIMIT: usize = 18_000;
 const COLLECTION_ITEM_TEXT_LIMIT: usize = 4_000;
 const COLLECTION_TOTAL_TEXT_LIMIT: usize = 40_000;
 const DEFAULT_AI_SESSION_TITLE: &str = "New Chat";
+const DEEPL_TEXT_LIMIT_BYTES: usize = 128 * 1024;
 
 impl Default for HttpAiTransport {
     fn default() -> Self {
@@ -495,10 +574,7 @@ impl LibraryService {
         Self::new_with_dependencies(root, ai_transport)
     }
 
-    fn new_with_dependencies(
-        root: &Path,
-        ai_transport: Arc<dyn AiTransport>,
-    ) -> Result<Self> {
+    fn new_with_dependencies(root: &Path, ai_transport: Arc<dyn AiTransport>) -> Result<Self> {
         fs::create_dir_all(root)?;
         let files_dir = root.join("library-files");
         fs::create_dir_all(&files_dir)?;
@@ -570,8 +646,22 @@ impl LibraryService {
             &item_ids,
         )?;
         delete_by_column_in_clause(&tx, "research_notes", "collection_id", &collection_ids)?;
-        delete_by_either_column_in_clause(&tx, "ai_artifacts", "item_id", &item_ids, "collection_id", &collection_ids)?;
-        delete_by_either_column_in_clause(&tx, "ai_tasks", "item_id", &item_ids, "collection_id", &collection_ids)?;
+        delete_by_either_column_in_clause(
+            &tx,
+            "ai_artifacts",
+            "item_id",
+            &item_ids,
+            "collection_id",
+            &collection_ids,
+        )?;
+        delete_by_either_column_in_clause(
+            &tx,
+            "ai_tasks",
+            "item_id",
+            &item_ids,
+            "collection_id",
+            &collection_ids,
+        )?;
         delete_by_column_in_clause(&tx, "search_index", "item_id", &item_ids)?;
         prune_scope_item_ids_for_removed_items(&tx, &item_ids)?;
         delete_by_column_in_clause(&tx, "items", "id", &item_ids)?;
@@ -835,7 +925,10 @@ impl LibraryService {
 
             let storage_path = match mode {
                 ImportMode::ManagedCopy => {
-                    let ext = path.extension().and_then(|value| value.to_str()).unwrap_or("bin");
+                    let ext = path
+                        .extension()
+                        .and_then(|value| value.to_str())
+                        .unwrap_or("bin");
                     let target = self.files_dir.join(format!("{fingerprint}.{ext}"));
                     fs::write(&target, &source_bytes)?;
                     target
@@ -941,11 +1034,9 @@ impl LibraryService {
                 .map(|chunk| {
                     let mut chars = chunk.chars();
                     match chars.next() {
-                        Some(first) => format!(
-                            "{}{}",
-                            first.to_uppercase(),
-                            chars.as_str().to_lowercase()
-                        ),
+                        Some(first) => {
+                            format!("{}{}", first.to_uppercase(), chars.as_str().to_lowercase())
+                        }
                         None => String::new(),
                     }
                 })
@@ -1084,8 +1175,11 @@ impl LibraryService {
         }
 
         let tx = conn.transaction()?;
-        let affected_session_ids =
-            session_reference_session_ids_for_target(&tx, AISessionReferenceKind::Item.as_str(), item_id)?;
+        let affected_session_ids = session_reference_session_ids_for_target(
+            &tx,
+            AISessionReferenceKind::Item.as_str(),
+            item_id,
+        )?;
         tx.execute("DELETE FROM ai_artifacts WHERE item_id = ?1", [item_id])?;
         tx.execute("DELETE FROM ai_tasks WHERE item_id = ?1", [item_id])?;
         tx.execute(
@@ -1237,7 +1331,10 @@ impl LibraryService {
             openai_base_url: input.openai_base_url.trim().to_string(),
             openai_api_key: if input.clear_openai_api_key.unwrap_or(false) {
                 String::new()
-            } else if let Some(key) = input.openai_api_key.filter(|value| !value.trim().is_empty()) {
+            } else if let Some(key) = input
+                .openai_api_key
+                .filter(|value| !value.trim().is_empty())
+            {
                 key
             } else {
                 current.openai_api_key
@@ -1246,14 +1343,78 @@ impl LibraryService {
             anthropic_base_url: input.anthropic_base_url.trim().to_string(),
             anthropic_api_key: if input.clear_anthropic_api_key.unwrap_or(false) {
                 String::new()
-            } else if let Some(key) = input.anthropic_api_key.filter(|value| !value.trim().is_empty()) {
+            } else if let Some(key) = input
+                .anthropic_api_key
+                .filter(|value| !value.trim().is_empty())
+            {
                 key
             } else {
                 current.anthropic_api_key
             },
+            translation_provider: input.translation_provider,
+            translation_openai_model: input.translation_openai_model.trim().to_string(),
+            translation_anthropic_model: input.translation_anthropic_model.trim().to_string(),
+            translation_target_lang: input.translation_target_lang.trim().to_string(),
+            deepl_base_url: input.deepl_base_url.trim().to_string(),
+            deepl_api_key: if input.clear_deepl_api_key.unwrap_or(false) {
+                String::new()
+            } else if let Some(key) = input.deepl_api_key.filter(|value| !value.trim().is_empty()) {
+                key
+            } else {
+                current.deepl_api_key
+            },
         };
         self.save_ai_settings(&conn, &next)?;
         Ok(to_public_ai_settings(&next))
+    }
+
+    pub fn translate_selection(
+        &self,
+        text: &str,
+        target_lang: Option<&str>,
+    ) -> Result<TranslateSelectionResult> {
+        let selection = text.trim();
+        if selection.is_empty() {
+            return Err(anyhow!("Select text before translating."));
+        }
+        if selection.len() > DEEPL_TEXT_LIMIT_BYTES {
+            return Err(anyhow!(
+                "Selection is too long to translate. Keep it under 128 KiB."
+            ));
+        }
+        let conn = self.connect()?;
+        let settings = self.load_ai_settings(&conn)?;
+        let target = target_lang
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| {
+                let stored = settings.translation_target_lang.trim();
+                if stored.is_empty() {
+                    "ZH-HANS"
+                } else {
+                    stored
+                }
+            });
+        let translated_text = match settings.translation_provider {
+            TranslationProvider::OpenAI | TranslationProvider::Anthropic => {
+                let provider = match settings.translation_provider {
+                    TranslationProvider::OpenAI => AIProvider::OpenAI,
+                    TranslationProvider::Anthropic => AIProvider::Anthropic,
+                    TranslationProvider::DeepL => unreachable!(),
+                };
+                let request = self.build_specific_provider_request(
+                    &settings,
+                    provider,
+                    translation_prompt(selection, target),
+                    ProviderRequestPurpose::Translation,
+                )?;
+                self.ai_transport.complete(request)?
+            }
+            TranslationProvider::DeepL => {
+                self.translate_with_deepl(&settings, selection, target)?
+            }
+        };
+        Ok(TranslateSelectionResult { translated_text })
     }
 
     pub fn get_reader_view(&self, item_id: i64) -> Result<ReaderView> {
@@ -1309,7 +1470,13 @@ impl LibraryService {
                 WHERE i.id = ?1
                 ",
                 [item_id],
-                |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?, row.get::<_, i64>(2)?)),
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, Option<String>>(1)?,
+                        row.get::<_, i64>(2)?,
+                    ))
+                },
             )
             .optional()?;
         let Some((item_title, attachment_path, extractor_version)) = row else {
@@ -1442,7 +1609,9 @@ impl LibraryService {
         };
 
         if is_primary != 1 {
-            return Err(anyhow!("requested attachment is not the primary attachment"));
+            return Err(anyhow!(
+                "requested attachment is not the primary attachment"
+            ));
         }
 
         if infer_attachment_format(&path) != "pdf" {
@@ -1462,9 +1631,24 @@ impl LibraryService {
         settings: &StoredAISettings,
         prompt: String,
     ) -> Result<AiCompletionRequest> {
-        match settings.active_provider {
+        self.build_specific_provider_request(
+            settings,
+            settings.active_provider,
+            prompt,
+            ProviderRequestPurpose::Default,
+        )
+    }
+
+    fn build_specific_provider_request(
+        &self,
+        settings: &StoredAISettings,
+        provider: AIProvider,
+        prompt: String,
+        purpose: ProviderRequestPurpose,
+    ) -> Result<AiCompletionRequest> {
+        match provider {
             AIProvider::OpenAI => {
-                let model = settings.openai_model.trim();
+                let model = purpose.openai_model(settings);
                 let api_key = settings.openai_api_key.trim();
                 if model.is_empty() || api_key.is_empty() {
                     return Err(anyhow!(
@@ -1480,7 +1664,7 @@ impl LibraryService {
                 })
             }
             AIProvider::Anthropic => {
-                let model = settings.anthropic_model.trim();
+                let model = purpose.anthropic_model(settings);
                 let api_key = settings.anthropic_api_key.trim();
                 if model.is_empty() || api_key.is_empty() {
                     return Err(anyhow!(
@@ -1490,12 +1674,59 @@ impl LibraryService {
                 Ok(AiCompletionRequest {
                     provider: AIProvider::Anthropic,
                     model: model.to_string(),
-                    base_url: defaulted_base_url(AIProvider::Anthropic, &settings.anthropic_base_url),
+                    base_url: defaulted_base_url(
+                        AIProvider::Anthropic,
+                        &settings.anthropic_base_url,
+                    ),
                     api_key: api_key.to_string(),
                     prompt,
                 })
             }
         }
+    }
+
+    fn translate_with_deepl(
+        &self,
+        settings: &StoredAISettings,
+        text: &str,
+        target_lang: &str,
+    ) -> Result<String> {
+        let api_key = settings.deepl_api_key.trim();
+        if api_key.is_empty() {
+            return Err(anyhow!(
+                "DeepL is missing a saved API key. Open Settings and complete the translation provider configuration."
+            ));
+        }
+        let base_url = if settings.deepl_base_url.trim().is_empty() {
+            "https://api-free.deepl.com"
+        } else {
+            settings.deepl_base_url.trim()
+        };
+        let url = format!("{}/v2/translate", normalize_base_url(base_url));
+        let client = Client::builder().timeout(Duration::from_secs(60)).build()?;
+        let response: serde_json::Value = client
+            .post(url)
+            .header("Authorization", format!("DeepL-Auth-Key {api_key}"))
+            .json(&serde_json::json!({
+                "text": [text],
+                "target_lang": target_lang,
+            }))
+            .send()?
+            .error_for_status()?
+            .json()?;
+        let translated = response
+            .get("translations")
+            .and_then(|value| value.as_array())
+            .and_then(|items| items.first())
+            .and_then(|item| item.get("text"))
+            .and_then(|value| value.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        if translated.is_empty() {
+            return Err(anyhow!("DeepL response did not include translated text"));
+        }
+        Ok(translated)
     }
 
     pub fn run_item_task_with_stream(
@@ -1530,15 +1761,11 @@ impl LibraryService {
         )?;
         let prompt_text = prompt.map(str::trim).filter(|value| !value.is_empty());
         let excerpt = truncate_chars(&excerpt, ITEM_TASK_TEXT_LIMIT);
-        let prompt_body = build_item_prompt(
-            kind,
-            &title,
-            &collection_name,
-            &excerpt,
-            prompt_text,
-        )?;
+        let prompt_body = build_item_prompt(kind, &title, &collection_name, &excerpt, prompt_text)?;
         let request = self.build_provider_request(&settings, prompt_body)?;
-        let output = self.ai_transport.stream_completion(request, &mut on_delta)?;
+        let output = self
+            .ai_transport
+            .stream_completion(request, &mut on_delta)?;
 
         let tx = conn.transaction()?;
         tx.execute(
@@ -1577,7 +1804,12 @@ impl LibraryService {
 
     pub fn create_note_from_artifact(&self, artifact_id: i64) -> Result<ResearchNote> {
         let conn = self.connect()?;
-        let (collection_id, session_id, collection_name, markdown): (Option<i64>, Option<i64>, String, String) = conn.query_row(
+        let (collection_id, session_id, collection_name, markdown): (
+            Option<i64>,
+            Option<i64>,
+            String,
+            String,
+        ) = conn.query_row(
             "
             SELECT a.collection_id, a.session_id, COALESCE(c.name, 'Research Session'), a.markdown
             FROM ai_artifacts a
@@ -1631,7 +1863,9 @@ impl LibraryService {
             prompt_text,
         )?;
         let request = self.build_provider_request(&settings, prompt_body)?;
-        let markdown = self.ai_transport.stream_completion(request, &mut on_delta)?;
+        let markdown = self
+            .ai_transport
+            .stream_completion(request, &mut on_delta)?;
 
         let tx = conn.transaction()?;
         let scope_json = serde_json::to_string(scope_item_ids)?;
@@ -1668,7 +1902,13 @@ impl LibraryService {
         scope_item_ids: &[i64],
         prompt: Option<&str>,
     ) -> Result<AITask> {
-        self.run_collection_task_with_stream(collection_id, kind, scope_item_ids, prompt, |_| Ok(()))
+        self.run_collection_task_with_stream(
+            collection_id,
+            kind,
+            scope_item_ids,
+            prompt,
+            |_| Ok(()),
+        )
     }
 
     pub fn run_collection_review_draft(&self, collection_id: i64) -> Result<AITask> {
@@ -1746,12 +1986,18 @@ impl LibraryService {
         target_id: i64,
     ) -> Result<AISessionReference> {
         let conn = self.connect()?;
-        conn.query_row("SELECT id FROM ai_sessions WHERE id = ?1", [session_id], |row| row.get::<_, i64>(0))
-            .context("session does not exist")?;
+        conn.query_row(
+            "SELECT id FROM ai_sessions WHERE id = ?1",
+            [session_id],
+            |row| row.get::<_, i64>(0),
+        )
+        .context("session does not exist")?;
         match kind {
             AISessionReferenceKind::Item => {
-                conn.query_row("SELECT id FROM items WHERE id = ?1", [target_id], |row| row.get::<_, i64>(0))
-                    .context("item does not exist")?;
+                conn.query_row("SELECT id FROM items WHERE id = ?1", [target_id], |row| {
+                    row.get::<_, i64>(0)
+                })
+                .context("item does not exist")?;
             }
             AISessionReferenceKind::Collection => {
                 conn.query_row(
@@ -1808,7 +2054,10 @@ impl LibraryService {
         let Some(session_id) = session_id else {
             return Ok(());
         };
-        conn.execute("DELETE FROM ai_session_references WHERE id = ?1", [reference_id])?;
+        conn.execute(
+            "DELETE FROM ai_session_references WHERE id = ?1",
+            [reference_id],
+        )?;
         conn.execute(
             "
             WITH ranked AS (
@@ -1846,11 +2095,15 @@ impl LibraryService {
         let prompt_text = prompt.map(str::trim).filter(|value| !value.is_empty());
         let prompt_body = build_session_prompt(&conn, kind, &expanded, prompt_text)?;
         let request = self.build_provider_request(&settings, prompt_body)?;
-        let markdown = self.ai_transport.stream_completion(request, &mut on_delta)?;
+        let markdown = self
+            .ai_transport
+            .stream_completion(request, &mut on_delta)?;
         let display_title = derive_session_title(kind, prompt_text);
-        let session_title = conn.query_row("SELECT title FROM ai_sessions WHERE id = ?1", [session_id], |row| {
-            row.get::<_, String>(0)
-        })?;
+        let session_title = conn.query_row(
+            "SELECT title FROM ai_sessions WHERE id = ?1",
+            [session_id],
+            |row| row.get::<_, String>(0),
+        )?;
         let primary_collection_id = expanded.primary_collection_id;
         let scope_json = serde_json::to_string(&expanded.item_ids)?;
 
@@ -1983,7 +2236,15 @@ impl LibraryService {
             WHERE i.id = ?1
             ",
             [item_id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
         )?;
         let citation = match format {
             "bibtex" => format!(
@@ -2065,7 +2326,9 @@ impl LibraryService {
             (Some(item_id), Some(collection_id)) => statement
                 .query_row(params![item_id, collection_id], map_ai_artifact)
                 .optional()?,
-            (Some(item_id), None) => statement.query_row(params![item_id], map_ai_artifact).optional()?,
+            (Some(item_id), None) => statement
+                .query_row(params![item_id], map_ai_artifact)
+                .optional()?,
             (None, Some(collection_id)) => statement
                 .query_row(params![collection_id], map_ai_artifact)
                 .optional()?,
@@ -2298,10 +2561,43 @@ impl LibraryService {
         ensure_column(&conn, "ai_artifacts", "scope_item_ids", "TEXT NULL")?;
         ensure_column(&conn, "ai_artifacts", "session_id", "INTEGER NULL")?;
         ensure_column(&conn, "research_notes", "session_id", "INTEGER NULL")?;
-        conn.execute(
-            "INSERT OR IGNORE INTO ai_settings(id) VALUES (1)",
-            [],
+        ensure_column(
+            &conn,
+            "ai_settings",
+            "translation_provider",
+            "TEXT NOT NULL DEFAULT 'openai'",
         )?;
+        ensure_column(
+            &conn,
+            "ai_settings",
+            "translation_openai_model",
+            "TEXT NOT NULL DEFAULT ''",
+        )?;
+        ensure_column(
+            &conn,
+            "ai_settings",
+            "translation_anthropic_model",
+            "TEXT NOT NULL DEFAULT ''",
+        )?;
+        ensure_column(
+            &conn,
+            "ai_settings",
+            "translation_target_lang",
+            "TEXT NOT NULL DEFAULT 'ZH-HANS'",
+        )?;
+        ensure_column(
+            &conn,
+            "ai_settings",
+            "deepl_base_url",
+            "TEXT NOT NULL DEFAULT 'https://api-free.deepl.com'",
+        )?;
+        ensure_column(
+            &conn,
+            "ai_settings",
+            "deepl_api_key",
+            "TEXT NOT NULL DEFAULT ''",
+        )?;
+        conn.execute("INSERT OR IGNORE INTO ai_settings(id) VALUES (1)", [])?;
         Ok(())
     }
 }
@@ -2315,12 +2611,18 @@ fn to_public_ai_settings(settings: &StoredAISettings) -> AISettings {
         anthropic_model: settings.anthropic_model.clone(),
         anthropic_base_url: settings.anthropic_base_url.clone(),
         has_anthropic_api_key: !settings.anthropic_api_key.trim().is_empty(),
+        translation_provider: settings.translation_provider,
+        translation_openai_model: settings.translation_openai_model.clone(),
+        translation_anthropic_model: settings.translation_anthropic_model.clone(),
+        translation_target_lang: settings.translation_target_lang.clone(),
+        deepl_base_url: settings.deepl_base_url.clone(),
+        has_deepl_api_key: !settings.deepl_api_key.trim().is_empty(),
     }
 }
 
 fn load_ai_settings_row(conn: &Connection) -> Result<StoredAISettings> {
     conn.query_row(
-        "SELECT active_provider, openai_model, openai_base_url, openai_api_key, anthropic_model, anthropic_base_url, anthropic_api_key FROM ai_settings WHERE id = 1",
+        "SELECT active_provider, openai_model, openai_base_url, openai_api_key, anthropic_model, anthropic_base_url, anthropic_api_key, translation_provider, translation_openai_model, translation_anthropic_model, translation_target_lang, deepl_base_url, deepl_api_key FROM ai_settings WHERE id = 1",
         [],
         |row| {
             let active_provider: String = row.get(0)?;
@@ -2341,6 +2643,18 @@ fn load_ai_settings_row(conn: &Connection) -> Result<StoredAISettings> {
                 anthropic_model: row.get(4)?,
                 anthropic_base_url: row.get(5)?,
                 anthropic_api_key: row.get(6)?,
+                translation_provider: parse_translation_provider(row.get::<_, String>(7)?.as_str()).map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        7,
+                        rusqlite::types::Type::Text,
+                        Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, error.to_string())),
+                    )
+                })?,
+                translation_openai_model: row.get(8)?,
+                translation_anthropic_model: row.get(9)?,
+                translation_target_lang: row.get(10)?,
+                deepl_base_url: row.get(11)?,
+                deepl_api_key: row.get(12)?,
             })
         },
     )
@@ -2356,7 +2670,13 @@ fn save_ai_settings_row(conn: &Connection, settings: &StoredAISettings) -> Resul
              openai_api_key = ?4,
              anthropic_model = ?5,
              anthropic_base_url = ?6,
-             anthropic_api_key = ?7
+             anthropic_api_key = ?7,
+             translation_provider = ?8,
+             translation_openai_model = ?9,
+             translation_anthropic_model = ?10,
+             translation_target_lang = ?11,
+             deepl_base_url = ?12,
+             deepl_api_key = ?13
          WHERE id = 1",
         params![
             settings.active_provider.as_str(),
@@ -2365,10 +2685,31 @@ fn save_ai_settings_row(conn: &Connection, settings: &StoredAISettings) -> Resul
             settings.openai_api_key,
             settings.anthropic_model,
             settings.anthropic_base_url,
-            settings.anthropic_api_key
+            settings.anthropic_api_key,
+            settings.translation_provider.as_str(),
+            settings.translation_openai_model,
+            settings.translation_anthropic_model,
+            settings.translation_target_lang,
+            settings.deepl_base_url,
+            settings.deepl_api_key
         ],
     )?;
     Ok(())
+}
+
+fn parse_translation_provider(value: &str) -> Result<TranslationProvider> {
+    match value {
+        "openai" => Ok(TranslationProvider::OpenAI),
+        "anthropic" => Ok(TranslationProvider::Anthropic),
+        "deepl" => Ok(TranslationProvider::DeepL),
+        _ => Err(anyhow!("unsupported translation provider: {value}")),
+    }
+}
+
+fn translation_prompt(text: &str, target_lang: &str) -> String {
+    format!(
+        "Translate the following selection to {target_lang}. Output only the translated text. Do not use markdown, explanations, quotation marks, labels, prefixes, or suffixes. Preserve the original line breaks.\n\n{text}"
+    )
 }
 
 fn parse_ai_provider(value: &str) -> Result<AIProvider> {
@@ -2403,7 +2744,10 @@ struct SessionPromptExpansion {
     primary_collection_id: Option<i64>,
 }
 
-fn list_session_references_conn(conn: &Connection, session_id: i64) -> Result<Vec<AISessionReference>> {
+fn list_session_references_conn(
+    conn: &Connection,
+    session_id: i64,
+) -> Result<Vec<AISessionReference>> {
     let mut statement = conn.prepare(
         "SELECT id, session_id, kind, target_id, sort_index
          FROM ai_session_references
@@ -2458,9 +2802,11 @@ fn placeholders(count: usize) -> String {
 
 fn collection_subtree_ids_conn(conn: &Connection, root_id: i64) -> Result<Vec<i64>> {
     let exists = conn
-        .query_row("SELECT id FROM collections WHERE id = ?1", [root_id], |row| {
-            row.get::<_, i64>(0)
-        })
+        .query_row(
+            "SELECT id FROM collections WHERE id = ?1",
+            [root_id],
+            |row| row.get::<_, i64>(0),
+        )
         .optional()?;
     if exists.is_none() {
         return Ok(Vec::new());
@@ -2470,8 +2816,8 @@ fn collection_subtree_ids_conn(conn: &Connection, root_id: i64) -> Result<Vec<i6
     let mut stack = vec![root_id];
     while let Some(collection_id) = stack.pop() {
         ids.push(collection_id);
-        let mut statement =
-            conn.prepare("SELECT id FROM collections WHERE parent_id = ?1 ORDER BY name ASC, id ASC")?;
+        let mut statement = conn
+            .prepare("SELECT id FROM collections WHERE parent_id = ?1 ORDER BY name ASC, id ASC")?;
         let rows = statement.query_map([collection_id], |row| row.get::<_, i64>(0))?;
         let children = rows.collect::<rusqlite::Result<Vec<_>>>()?;
         for child_id in children.into_iter().rev() {
@@ -2498,7 +2844,10 @@ fn item_ids_for_collection_ids_conn(conn: &Connection, collection_ids: &[i64]) -
         .map_err(Into::into)
 }
 
-fn managed_attachment_paths_for_item_ids_conn(conn: &Connection, item_ids: &[i64]) -> Result<Vec<String>> {
+fn managed_attachment_paths_for_item_ids_conn(
+    conn: &Connection,
+    item_ids: &[i64],
+) -> Result<Vec<String>> {
     if item_ids.is_empty() {
         return Ok(Vec::new());
     }
@@ -2509,7 +2858,9 @@ fn managed_attachment_paths_for_item_ids_conn(conn: &Connection, item_ids: &[i64
     let mut params = vec![ImportMode::ManagedCopy.as_str().to_string()];
     params.extend(item_ids.iter().map(ToString::to_string));
     let mut statement = conn.prepare(&sql)?;
-    let rows = statement.query_map(params_from_iter(params.iter()), |row| row.get::<_, String>(0))?;
+    let rows = statement.query_map(params_from_iter(params.iter()), |row| {
+        row.get::<_, String>(0)
+    })?;
     rows.collect::<rusqlite::Result<Vec<_>>>()
         .map_err(Into::into)
 }
@@ -2589,11 +2940,17 @@ fn delete_by_either_column_in_clause(
     let mut clauses = Vec::new();
     let mut values = Vec::new();
     if !left_ids.is_empty() {
-        clauses.push(format!("{left_column} IN ({})", placeholders(left_ids.len())));
+        clauses.push(format!(
+            "{left_column} IN ({})",
+            placeholders(left_ids.len())
+        ));
         values.extend(left_ids.iter().copied());
     }
     if !right_ids.is_empty() {
-        clauses.push(format!("{right_column} IN ({})", placeholders(right_ids.len())));
+        clauses.push(format!(
+            "{right_column} IN ({})",
+            placeholders(right_ids.len())
+        ));
         values.extend(right_ids.iter().copied());
     }
 
@@ -2602,7 +2959,10 @@ fn delete_by_either_column_in_clause(
     Ok(())
 }
 
-fn prune_scope_item_ids_for_removed_items(conn: &Connection, removed_item_ids: &[i64]) -> Result<()> {
+fn prune_scope_item_ids_for_removed_items(
+    conn: &Connection,
+    removed_item_ids: &[i64],
+) -> Result<()> {
     if removed_item_ids.is_empty() {
         return Ok(());
     }
@@ -2647,7 +3007,10 @@ fn prune_scope_item_ids_column(
     Ok(())
 }
 
-fn child_collections_for_conn(conn: &Connection, parent_id: Option<i64>) -> Result<Vec<Collection>> {
+fn child_collections_for_conn(
+    conn: &Connection,
+    parent_id: Option<i64>,
+) -> Result<Vec<Collection>> {
     let query = if parent_id.is_some() {
         "SELECT id, name, parent_id FROM collections WHERE parent_id = ?1 ORDER BY name ASC"
     } else {
@@ -2663,7 +3026,11 @@ fn child_collections_for_conn(conn: &Connection, parent_id: Option<i64>) -> Resu
         .map_err(Into::into)
 }
 
-fn collect_collection_tree_ids(conn: &Connection, collection_id: i64, out: &mut Vec<i64>) -> Result<()> {
+fn collect_collection_tree_ids(
+    conn: &Connection,
+    collection_id: i64,
+    out: &mut Vec<i64>,
+) -> Result<()> {
     out.push(collection_id);
     for child in child_collections_for_conn(conn, Some(collection_id))? {
         collect_collection_tree_ids(conn, child.id, out)?;
@@ -2671,13 +3038,19 @@ fn collect_collection_tree_ids(conn: &Connection, collection_id: i64, out: &mut 
     Ok(())
 }
 
-fn expand_session_references(conn: &Connection, references: &[AISessionReference]) -> Result<SessionPromptExpansion> {
+fn expand_session_references(
+    conn: &Connection,
+    references: &[AISessionReference],
+) -> Result<SessionPromptExpansion> {
     let mut item_ids = Vec::new();
     let mut seen = std::collections::HashSet::new();
     let mut has_collection_reference = false;
     let mut primary_collection_id = None;
 
-    for reference in references.iter().filter(|reference| reference.kind == AISessionReferenceKind::Item) {
+    for reference in references
+        .iter()
+        .filter(|reference| reference.kind == AISessionReferenceKind::Item)
+    {
         let row = conn
             .query_row(
                 "SELECT id, collection_id FROM items WHERE id = ?1",
@@ -2834,14 +3207,18 @@ fn build_session_prompt(
             continue;
         }
         remaining = remaining.saturating_sub(clipped.chars().count());
-        sections.push(format!("## {title}\nCollection: {collection_name}\n\n{clipped}"));
+        sections.push(format!(
+            "## {title}\nCollection: {collection_name}\n\n{clipped}"
+        ));
     }
     if sections.is_empty() {
         return Err(anyhow!("session has no readable items"));
     }
     let task_instructions = match kind {
         "session.summarize" => "# Summary Set\n\n## Paper Capsules\n- ...\n\n## Synthesis\n...",
-        "session.explain_terms" => "# Terminology Notes\n\n## Terms\n- term: explanation\n\n## Cross-Paper Usage\n...",
+        "session.explain_terms" => {
+            "# Terminology Notes\n\n## Terms\n- term: explanation\n\n## Cross-Paper Usage\n..."
+        }
         "session.theme_map" => "# Theme Map\n\n## Themes\n- ...\n\n## Theme Clusters\n...",
         "session.compare" => "# Comparison\n\n## Comparison Matrix\n- ...\n\n## Method Notes\n...",
         "session.review_draft" => "# Review Draft\n\n## Evidence Map\n- ...\n\n## Narrative\n...",
@@ -2849,7 +3226,10 @@ fn build_session_prompt(
         _ => return Err(anyhow!("unsupported session task kind")),
     };
     let prompt_suffix = if kind == "session.ask" {
-        format!("\nUser question:\n{}", prompt.unwrap_or("No question provided."))
+        format!(
+            "\nUser question:\n{}",
+            prompt.unwrap_or("No question provided.")
+        )
     } else {
         String::new()
     };
@@ -2944,7 +3324,9 @@ fn build_collection_prompt(
             )
             .optional()?;
         let Some((title, plain_text)) = row else {
-            return Err(anyhow!("scope contains items outside the target collection"));
+            return Err(anyhow!(
+                "scope contains items outside the target collection"
+            ));
         };
         if remaining == 0 {
             break;
@@ -2968,7 +3350,10 @@ fn build_collection_prompt(
         _ => return Err(anyhow!("unsupported collection task kind")),
     };
     let prompt_suffix = if kind == "collection.ask" {
-        format!("\nUser question:\n{}", prompt.unwrap_or("No question provided."))
+        format!(
+            "\nUser question:\n{}",
+            prompt.unwrap_or("No question provided.")
+        )
     } else {
         String::new()
     };
@@ -2984,19 +3369,22 @@ fn extract_openai_content(value: &serde_json::Value) -> Option<String> {
     if let Some(text) = value.as_str() {
         return Some(text.to_string());
     }
-    value.as_array().map(|parts| {
-        parts
-            .iter()
-            .filter_map(|part| {
-                if part.get("type").and_then(|t| t.as_str()) == Some("text") {
-                    part.get("text").and_then(|t| t.as_str())
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("\n\n")
-    }).filter(|text| !text.trim().is_empty())
+    value
+        .as_array()
+        .map(|parts| {
+            parts
+                .iter()
+                .filter_map(|part| {
+                    if part.get("type").and_then(|t| t.as_str()) == Some("text") {
+                        part.get("text").and_then(|t| t.as_str())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n\n")
+        })
+        .filter(|text| !text.trim().is_empty())
 }
 
 fn map_library_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<LibraryItem> {
@@ -3046,11 +3434,7 @@ fn map_research_note(row: &rusqlite::Row<'_>) -> rusqlite::Result<ResearchNote> 
 fn map_ai_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<AITask> {
     let raw_scope: Option<String> = row.get(4)?;
     let scope_item_ids = parse_scope_item_ids(raw_scope).map_err(|error| {
-        rusqlite::Error::FromSqlConversionFailure(
-            4,
-            rusqlite::types::Type::Text,
-            Box::new(error),
-        )
+        rusqlite::Error::FromSqlConversionFailure(4, rusqlite::types::Type::Text, Box::new(error))
     })?;
     Ok(AITask {
         id: row.get(0)?,
@@ -3068,11 +3452,7 @@ fn map_ai_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<AITask> {
 fn map_ai_artifact(row: &rusqlite::Row<'_>) -> rusqlite::Result<AIArtifact> {
     let raw_scope: Option<String> = row.get(5)?;
     let scope_item_ids = parse_scope_item_ids(raw_scope).map_err(|error| {
-        rusqlite::Error::FromSqlConversionFailure(
-            5,
-            rusqlite::types::Type::Text,
-            Box::new(error),
-        )
+        rusqlite::Error::FromSqlConversionFailure(5, rusqlite::types::Type::Text, Box::new(error))
     })?;
     Ok(AIArtifact {
         id: row.get(0)?,
@@ -3101,7 +3481,10 @@ fn map_ai_session_reference(row: &rusqlite::Row<'_>) -> rusqlite::Result<AISessi
         rusqlite::Error::FromSqlConversionFailure(
             2,
             rusqlite::types::Type::Text,
-            Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, error.to_string())),
+            Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                error.to_string(),
+            )),
         )
     })?;
     Ok(AISessionReference {
@@ -3337,10 +3720,20 @@ fn read_zip_entry<R: Read + Seek>(archive: &mut ZipArchive<R>, path: &str) -> Re
 fn extract_docx_paragraphs(xml: &str) -> Result<Vec<String>> {
     let document = Document::parse(xml)?;
     let mut paragraphs = Vec::new();
-    for paragraph in document.descendants().filter(|node| node.has_tag_name(("http://schemas.openxmlformats.org/wordprocessingml/2006/main", "p"))) {
+    for paragraph in document.descendants().filter(|node| {
+        node.has_tag_name((
+            "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+            "p",
+        ))
+    }) {
         let text = paragraph
             .descendants()
-            .filter(|node| node.has_tag_name(("http://schemas.openxmlformats.org/wordprocessingml/2006/main", "t")))
+            .filter(|node| {
+                node.has_tag_name((
+                    "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+                    "t",
+                ))
+            })
             .filter_map(|node| node.text())
             .collect::<Vec<_>>()
             .join("");
@@ -3419,14 +3812,20 @@ fn extract_epub_sections<R: Read + Seek>(
         .filter(|value| !value.is_empty());
 
     let mut manifest = std::collections::HashMap::new();
-    for item in document.descendants().filter(|node| node.tag_name().name() == "item") {
+    for item in document
+        .descendants()
+        .filter(|node| node.tag_name().name() == "item")
+    {
         if let (Some(id), Some(href)) = (item.attribute("id"), item.attribute("href")) {
             manifest.insert(id.to_string(), resolve_relative_path(rootfile, href));
         }
     }
 
     let mut sections = Vec::new();
-    for itemref in document.descendants().filter(|node| node.tag_name().name() == "itemref") {
+    for itemref in document
+        .descendants()
+        .filter(|node| node.tag_name().name() == "itemref")
+    {
         let Some(idref) = itemref.attribute("idref") else {
             continue;
         };
@@ -3447,7 +3846,10 @@ fn extract_xhtml_sections(xml: &str) -> Result<Vec<String>> {
     let document = Document::parse(xml)?;
     let mut sections = Vec::new();
     for node in document.descendants().filter(|node| {
-        matches!(node.tag_name().name(), "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "p" | "li")
+        matches!(
+            node.tag_name().name(),
+            "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "p" | "li"
+        )
     }) {
         let text = normalize_whitespace(node.text().unwrap_or_default());
         if !text.is_empty() {
@@ -3465,10 +3867,7 @@ fn pdf_page_fragments(page_text: &[String]) -> Vec<String> {
         .collect()
 }
 
-fn classify_pdf_content(
-    page_fragments: &[String],
-    page_count: usize,
-) -> (String, Option<String>) {
+fn classify_pdf_content(page_fragments: &[String], page_count: usize) -> (String, Option<String>) {
     if page_fragments.is_empty() {
         return (
             "unavailable".into(),

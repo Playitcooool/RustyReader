@@ -564,6 +564,8 @@ export function useAiSessionState({
     setAiSessions((current) => [session, ...current]);
     setActiveAiSessionId(session.id);
     setIsAiSessionHistoryOpen(false);
+    setAiDockOpen(initialAiDockState());
+    setIsReferencePickerOpen(false);
     if (activePaper) {
       await runtimeApi.addAiSessionReference({ session_id: session.id, kind: "item", target_id: activePaper.id });
     }
@@ -588,16 +590,47 @@ export function useAiSessionState({
     if (activeAiSessionId) await refreshActiveAiSession(activeAiSessionId);
   }, [activeAiSessionId, getApi, refreshActiveAiSession]);
 
+  const replaceSessionReferencesWithCurrentPaper = useCallback(async (sessionId: number) => {
+    if (!activePaper) return;
+    const runtimeApi = await getApi();
+    const references = await runtimeApi.listAiSessionReferences(sessionId);
+    const hasCurrentPaper = references.some((reference) => reference.kind === "item" && reference.target_id === activePaper.id);
+    const staleReferences = references.filter(
+      (reference) => reference.kind === "collection" || reference.target_id !== activePaper.id,
+    );
+    await Promise.all(staleReferences.map((reference) => runtimeApi.removeAiSessionReference(reference.id)));
+    if (!hasCurrentPaper) {
+      await runtimeApi.addAiSessionReference({ session_id: sessionId, kind: "item", target_id: activePaper.id });
+    }
+    await refreshActiveAiSession(sessionId);
+  }, [activePaper, getApi, refreshActiveAiSession]);
+
+  const resetAiPanelOverlays = useCallback(() => {
+    setIsAiSessionHistoryOpen(false);
+    setAiDockOpen(initialAiDockState());
+    setIsReferencePickerOpen(false);
+  }, []);
+
+  const closeAiPanel = useCallback(() => {
+    resetAiPanelOverlays();
+    setIsAiPanelOpen(false);
+  }, [resetAiPanelOverlays]);
+
   const ensureSessionReady = useCallback(async () => {
+    resetAiPanelOverlays();
     setIsAiPanelOpen(true);
-    if (activeAiSessionId) return activeAiSessionId;
+    if (activeAiSessionId) {
+      await replaceSessionReferencesWithCurrentPaper(activeAiSessionId);
+      return activeAiSessionId;
+    }
     const runtimeApi = await getApi();
     const existing = await runtimeApi.listAiSessions();
     const session = existing[0] ?? (await runtimeApi.createAiSession());
     setAiSessions(existing[0] ? existing : [session]);
     setActiveAiSessionId(session.id);
+    await replaceSessionReferencesWithCurrentPaper(session.id);
     return session.id;
-  }, [activeAiSessionId, getApi]);
+  }, [activeAiSessionId, getApi, replaceSessionReferencesWithCurrentPaper, resetAiPanelOverlays]);
 
   const cleanupAfterItemDelete = useCallback((deletedItemId: number) => {
     setAiSessionReferences((current) => current.filter((reference) => !(reference.kind === "item" && reference.target_id === deletedItemId)));
@@ -681,6 +714,7 @@ export function useAiSessionState({
     cleanupAfterCollectionDelete,
     cleanupAfterItemDelete,
     closeAiReferencePicker,
+    closeAiPanel,
     ensureSessionReady,
     selectedCollectionId,
   };

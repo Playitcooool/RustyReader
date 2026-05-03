@@ -471,6 +471,37 @@ describe("App reading workspace", () => {
     expect(screen.getByRole("button", { name: /Remove Transformer Scaling Laws/i })).toBeInTheDocument();
   });
 
+  it("replaces AI panel context with the current paper when opening", async () => {
+    const user = userEvent.setup();
+    render(<App api={fakeApi} />);
+
+    await user.click(await screen.findByRole("treeitem", { name: /Graph Neural Survey/i }));
+    await user.click(screen.getByRole("button", { name: "Open AI panel" }));
+
+    expect(await screen.findByText("Graph Neural Survey", { selector: ".ai-reference-chip-label" })).toBeInTheDocument();
+    expect(screen.queryByText("Transformer Scaling Laws", { selector: ".ai-reference-chip-label" })).not.toBeInTheDocument();
+  });
+
+  it("hides AI history and dock overlays when the AI panel is closed and reopened", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<App api={fakeApi} />);
+
+    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(screen.getByRole("button", { name: "Open AI panel" }));
+    await user.click(screen.getByRole("button", { name: "Chat History" }));
+    await user.click(screen.getByRole("button", { name: "Task History" }));
+    expect(container.querySelector(".ai-session-history-panel")?.getAttribute("aria-hidden")).toBe("false");
+    expect(screen.getByLabelText("Task History panel")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Close Copilot" }));
+    await user.click(screen.getByRole("button", { name: "Open AI panel" }));
+
+    await waitFor(() => {
+      expect(container.querySelector(".ai-session-history-panel")?.getAttribute("aria-hidden")).toBe("true");
+    });
+    expect(screen.queryByLabelText("Task History panel")).not.toBeInTheDocument();
+  });
+
   it("removes a highlight from the floating highlight action bar", async () => {
     const user = userEvent.setup();
     const removeAnnotationSpy = vi.spyOn(fakeApi, "removeAnnotation");
@@ -508,6 +539,16 @@ describe("App reading workspace", () => {
     expect(getAiSettingsSpy).toHaveBeenCalled();
     expect(screen.getByRole("heading", { name: "General" })).toBeInTheDocument();
     expect(screen.getByText("AI Providers")).toBeInTheDocument();
+    expect(screen.getByLabelText("Translation OpenAI model")).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Translation provider"), "anthropic");
+    expect(screen.getByLabelText("Translation Anthropic model")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Translation OpenAI model")).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Translation provider"), "deepl");
+    expect(screen.queryByLabelText("Translation OpenAI model")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Translation Anthropic model")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("DeepL API key")).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Translation provider"), "openai");
+    await user.type(screen.getByLabelText("Translation OpenAI model"), "gpt-4.1-mini-translator");
 
     await user.selectOptions(screen.getByLabelText("Default paper sort"), "title");
     await user.selectOptions(screen.getByLabelText("Default attachment filter"), "citation_only");
@@ -525,6 +566,8 @@ describe("App reading workspace", () => {
           active_provider: "openai",
           openai_model: "gpt-4.1",
           openai_api_key: "new-openai-key",
+          translation_openai_model: "gpt-4.1-mini-translator",
+          translation_anthropic_model: "",
         }),
       );
     });

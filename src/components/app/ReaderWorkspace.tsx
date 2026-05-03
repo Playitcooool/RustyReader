@@ -5,9 +5,9 @@ import { PdfContinuousReader } from "../readers/PdfContinuousReader";
 import { PdfReader } from "../readers/PdfReader";
 import { attachmentFormatLabel, formatItemMetadata, type ReaderFitMode } from "../../lib/appView";
 import type { LibraryItem, ReaderView, Annotation } from "../../lib/contracts";
-import type { ActivePdfHighlight, WorkspaceMode } from "../../hooks/useReaderState";
+import type { ActivePdfHighlight, ReaderTextSelection, TranslationPopover, WorkspaceMode } from "../../hooks/useReaderState";
 import type { PdfHighlightColor, PdfTextSelection } from "../readers/pdfSelection";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 type Props = {
   activePaper: LibraryItem | null;
@@ -36,9 +36,11 @@ type Props = {
   onReaderPageSubmit: () => void;
   onReaderSearchMatchesChange: (state: { total: number; activeIndex: number }) => void;
   onPdfZoomChange: (value: number) => void;
+  onRequestSelectionTranslation: () => void | Promise<void>;
   onShowLibrary: () => void;
   onStepNormalizedZoom: (direction: 1 | -1) => void;
-  onSelectionChange: (selection: PdfTextSelection | null) => void;
+  onSelectionChange: (selection: ReaderTextSelection | null) => void;
+  onCloseTranslationPopover: () => void;
   openFindHud: () => void;
   openPapers: LibraryItem[];
   pdfFocusHighlightBarRef: React.RefObject<HTMLDivElement>;
@@ -56,6 +58,10 @@ type Props = {
   reportedActiveSearchMatchIndex: number;
   setPdfPageCount: (pageCount: number) => void;
   textToolsEnabled: boolean;
+  translationError: string | null;
+  translationLoading: boolean;
+  translationPopover: TranslationPopover | null;
+  translationSelection: ReaderTextSelection | null;
   workspaceMode: WorkspaceMode;
 };
 
@@ -87,9 +93,11 @@ export function ReaderWorkspace(props: Props) {
     onReaderPageSubmit,
     onReaderSearchMatchesChange,
     onPdfZoomChange,
+    onRequestSelectionTranslation,
     onShowLibrary,
     onStepNormalizedZoom,
     onSelectionChange,
+    onCloseTranslationPopover,
     openFindHud,
     openPapers,
     pdfFocusHighlightBarRef,
@@ -107,8 +115,13 @@ export function ReaderWorkspace(props: Props) {
     reportedActiveSearchMatchIndex,
     setPdfPageCount,
     textToolsEnabled,
+    translationError,
+    translationLoading,
+    translationPopover,
+    translationSelection,
     workspaceMode,
   } = props;
+  const [readerContextMenu, setReaderContextMenu] = useState<{ x: number; y: number } | null>(null);
 
   const showPdfFocusHighlightBar = Boolean(workspaceMode === "pdf_focus" && activePaper?.attachment_format === "pdf" && pdfSelection);
   const pdfFocusHighlightBarStyle = useMemo(() => {
@@ -126,9 +139,34 @@ export function ReaderWorkspace(props: Props) {
     top = clamp(top, PADDING_PX, window.innerHeight - BAR_HEIGHT_PX - PADDING_PX);
     return { left: `${left}px`, top: `${top}px` } as const;
   }, [pdfSelection, showPdfFocusHighlightBar]);
+  const selectionForActions = translationSelection ?? (pdfSelection ? { quote: pdfSelection.quote, rect: pdfSelection.rect } : null);
+  const translationPopoverStyle = useMemo(() => {
+    if (!translationPopover) return {};
+    const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+    const WIDTH_PX = 320;
+    const HEIGHT_PX = 180;
+    const GAP_PX = 10;
+    const PADDING_PX = 12;
+    const rect = translationPopover.rect;
+    let left = rect.right + GAP_PX;
+    let top = rect.top - GAP_PX;
+    if (left + WIDTH_PX + PADDING_PX > window.innerWidth) left = rect.left - WIDTH_PX - GAP_PX;
+    if (top + HEIGHT_PX + PADDING_PX > window.innerHeight) top = rect.bottom - HEIGHT_PX;
+    left = clamp(left, PADDING_PX, window.innerWidth - WIDTH_PX - PADDING_PX);
+    top = clamp(top, PADDING_PX, window.innerHeight - HEIGHT_PX - PADDING_PX);
+    return { left: `${left}px`, top: `${top}px` } as const;
+  }, [translationPopover]);
 
   return (
-    <main className={`reader-shell ${workspaceMode === "pdf_focus" ? "reader-shell-focus" : "reader-shell-workspace"}`}>
+    <main
+      className={`reader-shell ${workspaceMode === "pdf_focus" ? "reader-shell-focus" : "reader-shell-workspace"}`}
+      onClick={() => setReaderContextMenu(null)}
+      onContextMenu={(event) => {
+        if (!selectionForActions?.quote.trim()) return;
+        event.preventDefault();
+        setReaderContextMenu({ x: event.clientX, y: event.clientY });
+      }}
+    >
       <div className={`reader-tabs ${workspaceMode === "pdf_focus" ? "reader-tabs-focus" : ""}`} role="tablist" aria-label="Open papers">
         {workspaceMode === "pdf_focus" && activePaper?.attachment_format === "pdf" ? (
           <button aria-label="Back to library" className="reader-back-button" title="Back to library" type="button" onClick={onExitFocus}>
@@ -250,7 +288,7 @@ export function ReaderWorkspace(props: Props) {
             readerView.reader_kind === "pdf" ? (
               <PdfReader fitMode={readerFitMode} getPdfDocumentInfo={getPdfDocumentInfo as never} getPdfPageBundle={getPdfPageBundle as never} page={0} view={readerView} zoom={readerZoom} onHighlightActivate={onActivePdfHighlight} onPageCountChange={setPdfPageCount} />
             ) : (
-              <NormalizedReader pageHtml={currentReaderHtml} searchQuery={readerSearchQuery} activeSearchMatchIndex={readerSearchMatchIndex} onSearchMatchesChange={onReaderSearchMatchesChange} zoom={readerZoom} />
+              <NormalizedReader pageHtml={currentReaderHtml} searchQuery={readerSearchQuery} activeSearchMatchIndex={readerSearchMatchIndex} onSearchMatchesChange={onReaderSearchMatchesChange} onSelectionChange={onSelectionChange} zoom={readerZoom} />
             )
           ) : (
             <div className="citation-card">
@@ -273,6 +311,34 @@ export function ReaderWorkspace(props: Props) {
       )}
 
       {isFindHudOpen ? <FindHud inputRef={readerSearchInputRef} query={readerSearchQuery} matchCount={readerSearchMatchCount} activeMatchIndex={reportedActiveSearchMatchIndex} onQueryChange={onFindQueryChange} onMoveMatch={onMoveMatch} onClose={onCloseFindHud} /> : null}
+      {readerContextMenu && selectionForActions ? (
+        <div aria-label="Reader selection actions" className="floating-menu reader-selection-menu" role="menu" style={{ left: readerContextMenu.x, top: readerContextMenu.y }}>
+          <button
+            className="nav-item"
+            role="menuitem"
+            type="button"
+            onClick={() => {
+              setReaderContextMenu(null);
+              void onRequestSelectionTranslation();
+            }}
+          >
+            Translate
+          </button>
+        </div>
+      ) : null}
+      {translationPopover ? (
+        <div className="translation-popover" role="dialog" aria-label="Translation" style={translationPopoverStyle}>
+          <div className="translation-popover-header">
+            <span>Translate</span>
+            <button aria-label="Close translation" className="icon-button" type="button" onClick={onCloseTranslationPopover}>
+              x
+            </button>
+          </div>
+          {translationLoading ? <p className="translation-popover-status">Translating...</p> : null}
+          {translationError ? <p className="translation-popover-error">{translationError}</p> : null}
+          {!translationLoading && !translationError ? <p className="translation-popover-text">{translationPopover.translatedText}</p> : null}
+        </div>
+      ) : null}
     </main>
   );
 }

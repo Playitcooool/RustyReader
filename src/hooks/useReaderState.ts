@@ -9,6 +9,14 @@ export type ActivePdfHighlight = {
   annotationId: number;
   rect: { left: number; top: number; right: number; bottom: number };
 };
+export type ReaderTextSelection = {
+  quote: string;
+  rect: { left: number; top: number; right: number; bottom: number };
+};
+export type TranslationPopover = {
+  rect: ReaderTextSelection["rect"];
+  translatedText: string;
+};
 
 const DEFAULT_READER_FIT_MODE: ReaderFitMode = "fit_width";
 const DEFAULT_READER_ZOOM = 100;
@@ -57,6 +65,10 @@ export function useReaderState({
   const [reportedActiveSearchMatchIndex, setReportedActiveSearchMatchIndex] = useState(-1);
   const [pdfPageCounts, setPdfPageCounts] = useState<Record<number, number>>({});
   const [pdfSelection, setPdfSelection] = useState<PdfTextSelection | null>(null);
+  const [translationSelection, setTranslationSelection] = useState<ReaderTextSelection | null>(null);
+  const [translationPopover, setTranslationPopover] = useState<TranslationPopover | null>(null);
+  const [translationLoading, setTranslationLoading] = useState(false);
+  const [translationError, setTranslationError] = useState<string | null>(null);
   const [activePdfHighlight, setActivePdfHighlight] = useState<ActivePdfHighlight | null>(null);
 
   const openPapers = useMemo(
@@ -108,6 +120,9 @@ export function useReaderState({
         setReaderSearchMatchCount(0);
         setReportedActiveSearchMatchIndex(-1);
         setPdfSelection(null);
+        setTranslationSelection(null);
+        setTranslationPopover(null);
+        setTranslationError(null);
         void (async () => {
           const annotationsResult = await runtimeApi.listAnnotations(itemId);
           if (!cancelled && readerLoadRequestIdRef.current === requestId) setAnnotations(annotationsResult);
@@ -203,11 +218,48 @@ export function useReaderState({
 
   const dismissPdfSelection = useCallback(() => {
     setPdfSelection(null);
+    setTranslationSelection(null);
+    setTranslationPopover(null);
+    setTranslationError(null);
     try {
       window.getSelection?.()?.removeAllRanges?.();
     } catch {
       // Ignore.
     }
+  }, []);
+
+  const setReaderSelection = useCallback((selection: ReaderTextSelection | null) => {
+    setTranslationSelection(selection);
+    if (selection) {
+      setTranslationPopover(null);
+      setTranslationError(null);
+    } else {
+      setTranslationPopover(null);
+      setTranslationError(null);
+    }
+  }, []);
+
+  const requestSelectionTranslation = useCallback(async () => {
+    const selection = translationSelection ?? (pdfSelection ? { quote: pdfSelection.quote, rect: pdfSelection.rect } : null);
+    if (!selection?.quote.trim()) return;
+    setTranslationLoading(true);
+    setTranslationError(null);
+    setTranslationPopover({ rect: selection.rect, translatedText: "" });
+    try {
+      const result = await (await getApi()).translateSelection({ text: selection.quote });
+      setTranslationPopover({ rect: selection.rect, translatedText: result.translated_text });
+    } catch (error) {
+      setTranslationError(error instanceof Error ? error.message : "Translation failed.");
+      setTranslationPopover({ rect: selection.rect, translatedText: "" });
+    } finally {
+      setTranslationLoading(false);
+    }
+  }, [getApi, pdfSelection, translationSelection]);
+
+  const closeTranslationPopover = useCallback(() => {
+    setTranslationPopover(null);
+    setTranslationError(null);
+    setTranslationLoading(false);
   }, []);
 
   const dismissActivePdfHighlight = useCallback(() => {
@@ -259,6 +311,9 @@ export function useReaderState({
       setReaderView(null);
       setAnnotations([]);
       setPdfSelection(null);
+      setTranslationSelection(null);
+      setTranslationPopover(null);
+      setTranslationError(null);
       setActivePdfHighlight(null);
     }
   }, [activePaperId, setActivePaperId, setIsSidebarVisible]);
@@ -273,6 +328,9 @@ export function useReaderState({
       setReaderView(null);
       setAnnotations([]);
       setPdfSelection(null);
+      setTranslationSelection(null);
+      setTranslationPopover(null);
+      setTranslationError(null);
       setActivePdfHighlight(null);
     }
   }, [activePaperId, setActivePaperId, setIsSidebarVisible]);
@@ -289,6 +347,7 @@ export function useReaderState({
     currentReaderHtml,
     dismissActivePdfHighlight,
     dismissPdfSelection,
+    closeTranslationPopover,
     getPdfDocumentInfo,
     getPdfPageBundle,
     getPdfPageText,
@@ -319,6 +378,7 @@ export function useReaderState({
     readerZoom,
     readerFitMode,
     reportedActiveSearchMatchIndex,
+    requestSelectionTranslation,
     clampReaderZoom,
     handleReaderPageSubmit,
     setAnnotations,
@@ -326,6 +386,7 @@ export function useReaderState({
     setOpenPaperIds,
     setPdfPageCounts,
     setPdfSelection,
+    setReaderSelection,
     setReaderFitMode,
     setReaderPage,
     setReaderPageInput,
@@ -341,6 +402,10 @@ export function useReaderState({
     stepNormalizedZoom,
     stepPdfZoom,
     textToolsEnabled,
+    translationError,
+    translationLoading,
+    translationPopover,
+    translationSelection,
     workspaceMode,
     activateItem,
     cleanupAfterCollectionDelete,

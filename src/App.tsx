@@ -39,7 +39,15 @@ const emptyAiSettingsDraft = (): UpdateAISettingsInput => ({
   openai_base_url: "",
   anthropic_model: "",
   anthropic_base_url: "",
+  translation_provider: "openai",
+  translation_openai_model: "",
+  translation_anthropic_model: "",
+  translation_target_lang: "ZH-HANS",
+  deepl_base_url: "https://api-free.deepl.com",
 });
+
+const isPdfTextSelection = (selection: unknown): selection is import("./components/readers/pdfSelection").PdfTextSelection =>
+  Boolean(selection && typeof selection === "object" && "anchor" in selection && typeof (selection as { anchor?: unknown }).anchor === "string");
 
 const draftFromAiSettings = (settings: AISettings): UpdateAISettingsInput => ({
   active_provider: settings.active_provider,
@@ -47,6 +55,11 @@ const draftFromAiSettings = (settings: AISettings): UpdateAISettingsInput => ({
   openai_base_url: settings.openai_base_url,
   anthropic_model: settings.anthropic_model,
   anthropic_base_url: settings.anthropic_base_url,
+  translation_provider: settings.translation_provider,
+  translation_openai_model: settings.translation_openai_model,
+  translation_anthropic_model: settings.translation_anthropic_model,
+  translation_target_lang: settings.translation_target_lang,
+  deepl_base_url: settings.deepl_base_url,
 });
 
 export default function App({ api }: { api: AppApi }) {
@@ -68,6 +81,7 @@ export default function App({ api }: { api: AppApi }) {
   });
   const [openAiApiKeyDraft, setOpenAiApiKeyDraft] = useState("");
   const [anthropicApiKeyDraft, setAnthropicApiKeyDraft] = useState("");
+  const [deeplApiKeyDraft, setDeeplApiKeyDraft] = useState("");
   const appShellRef = useRef<HTMLDivElement | null>(null);
 
   const library = useLibraryState({
@@ -132,6 +146,7 @@ export default function App({ api }: { api: AppApi }) {
     });
     setOpenAiApiKeyDraft("");
     setAnthropicApiKeyDraft("");
+    setDeeplApiKeyDraft("");
     setIsSettingsOpen(true);
   }, [getApi]);
 
@@ -139,6 +154,7 @@ export default function App({ api }: { api: AppApi }) {
     setIsSettingsOpen(false);
     setOpenAiApiKeyDraft("");
     setAnthropicApiKeyDraft("");
+    setDeeplApiKeyDraft("");
   }, []);
 
   const handleSaveAiSettings = useCallback(async () => {
@@ -146,6 +162,7 @@ export default function App({ api }: { api: AppApi }) {
       ...aiSettingsDraft,
       openai_api_key: openAiApiKeyDraft.trim() ? openAiApiKeyDraft : undefined,
       anthropic_api_key: anthropicApiKeyDraft.trim() ? anthropicApiKeyDraft : undefined,
+      deepl_api_key: deeplApiKeyDraft.trim() ? deeplApiKeyDraft : undefined,
     });
     setIsSidebarVisible(generalSettingsDraft.resourcesSidebarOpen);
     library.setItemSort?.(generalSettingsDraft.defaultItemSort);
@@ -156,21 +173,24 @@ export default function App({ api }: { api: AppApi }) {
     setAiSettingsDraft(draftFromAiSettings(next));
     setOpenAiApiKeyDraft("");
     setAnthropicApiKeyDraft("");
+    setDeeplApiKeyDraft("");
     setIsSettingsOpen(false);
     setStatusMessage("Saved settings.");
-  }, [aiSettingsDraft, anthropicApiKeyDraft, generalSettingsDraft, getApi, library, openAiApiKeyDraft, readerState]);
+  }, [aiSettingsDraft, anthropicApiKeyDraft, deeplApiKeyDraft, generalSettingsDraft, getApi, library, openAiApiKeyDraft, readerState]);
 
-  const handleClearSavedKey = useCallback(async (provider: AIProvider) => {
+  const handleClearSavedKey = useCallback(async (provider: AIProvider | "deepl") => {
     const next = await (await getApi()).updateAiSettings({
       ...aiSettingsDraft,
       clear_openai_api_key: provider === "openai" ? true : undefined,
       clear_anthropic_api_key: provider === "anthropic" ? true : undefined,
+      clear_deepl_api_key: provider === "deepl" ? true : undefined,
     });
     setAiSettings(next);
     setAiSettingsDraft(draftFromAiSettings(next));
     if (provider === "openai") setOpenAiApiKeyDraft("");
-    else setAnthropicApiKeyDraft("");
-    setStatusMessage(`${provider === "openai" ? "OpenAI" : "Anthropic"} API key cleared.`);
+    else if (provider === "anthropic") setAnthropicApiKeyDraft("");
+    else setDeeplApiKeyDraft("");
+    setStatusMessage(`${provider === "openai" ? "OpenAI" : provider === "anthropic" ? "Anthropic" : "DeepL"} API key cleared.`);
   }, [aiSettingsDraft, getApi]);
 
   useEffect(() => {
@@ -223,6 +243,23 @@ export default function App({ api }: { api: AppApi }) {
 
   useEffect(() => {
     function handleWindowKeydown(event: KeyboardEvent) {
+      const target = event.target;
+      const isEditable =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable);
+      if (!isEditable && event.key.toLowerCase() === "t" && (event.metaKey || event.ctrlKey)) {
+        if (readerState.translationSelection || readerState.pdfSelection) {
+          event.preventDefault();
+          void readerState.requestSelectionTranslation();
+        }
+        return;
+      }
+      if (event.key === "Escape" && readerState.translationPopover) {
+        readerState.closeTranslationPopover();
+        return;
+      }
       if (event.key === "Escape" && readerState.workspaceMode === "pdf_focus") {
         readerState.setWorkspaceMode("workspace");
         setIsSidebarVisible(true);
@@ -416,7 +453,7 @@ export default function App({ api }: { api: AppApi }) {
         onActivePdfHighlight={readerState.handleActivatePdfHighlight}
         onAiToggle={() => {
           if (ai.isAiPanelOpen) {
-            ai.setIsAiPanelOpen(false);
+            ai.closeAiPanel();
             return;
           }
           void ai.ensureSessionReady();
@@ -427,7 +464,6 @@ export default function App({ api }: { api: AppApi }) {
         onExitFocus={() => { readerState.setWorkspaceMode("workspace"); setIsSidebarVisible(true); }}
         onFindQueryChange={readerState.setReaderSearchQuery}
         onMoveMatch={(direction) => readerState.setReaderSearchMatchIndex((current: number) => current + direction)}
-        onShowLibrary={() => setIsSidebarVisible(true)}
         onOcrPdfPage={readerState.ocrPdfPage}
         onReaderFitModeChange={readerState.setReaderFitMode}
         onReaderPageChange={readerState.setReaderPageClamped}
@@ -436,7 +472,13 @@ export default function App({ api }: { api: AppApi }) {
         onReaderSearchMatchesChange={({ total, activeIndex }) => { readerState.setReaderSearchMatchCount(total); readerState.setReportedActiveSearchMatchIndex(activeIndex); }}
         onPdfZoomChange={readerState.setPdfZoomManual}
         onStepNormalizedZoom={readerState.stepNormalizedZoom}
-        onSelectionChange={(selection) => { readerState.setPdfSelection(selection); if (selection) readerState.dismissActivePdfHighlight(); }}
+        onRequestSelectionTranslation={readerState.requestSelectionTranslation}
+        onShowLibrary={() => setIsSidebarVisible(true)}
+        onSelectionChange={(selection) => {
+          readerState.setReaderSelection(selection);
+          readerState.setPdfSelection(isPdfTextSelection(selection) ? selection : null);
+          if (selection) readerState.dismissActivePdfHighlight();
+        }}
         openFindHud={readerState.openFindHud}
         openPapers={readerState.openPapers}
         pdfFocusHighlightBarRef={readerState.pdfFocusHighlightBarRef}
@@ -454,6 +496,11 @@ export default function App({ api }: { api: AppApi }) {
         reportedActiveSearchMatchIndex={readerState.reportedActiveSearchMatchIndex}
         setPdfPageCount={(pageCount) => activePaper && readerState.setPdfPageCounts((current: Record<number, number>) => current[activePaper.id] === pageCount ? current : { ...current, [activePaper.id]: pageCount })}
         textToolsEnabled={readerState.textToolsEnabled}
+        translationError={readerState.translationError}
+        translationLoading={readerState.translationLoading}
+        translationPopover={readerState.translationPopover}
+        translationSelection={readerState.translationSelection}
+        onCloseTranslationPopover={readerState.closeTranslationPopover}
         workspaceMode={readerState.workspaceMode}
       />
 
@@ -496,7 +543,7 @@ export default function App({ api }: { api: AppApi }) {
             notes={ai.notes}
             onAiComposerChange={ai.setAiComposerValue}
             onAiReferenceQueryChange={ai.setAiReferenceQuery}
-            onClosePanel={() => ai.setIsAiPanelOpen(false)}
+            onClosePanel={ai.closeAiPanel}
             onCreateResearchNote={ai.handleCreateResearchNote}
             onCreateSession={ai.handleCreateAiSession}
             onDeleteSession={(session) => setDeleteTarget({ kind: "ai_session", targetId: session.id, label: session.title })}
@@ -525,6 +572,7 @@ export default function App({ api }: { api: AppApi }) {
           aiSettingsDraft={aiSettingsDraft}
           openAiApiKeyDraft={openAiApiKeyDraft}
           anthropicApiKeyDraft={anthropicApiKeyDraft}
+          deeplApiKeyDraft={deeplApiKeyDraft}
           readerMinZoom={70}
           readerMaxZoom={180}
           defaultReaderZoom={DEFAULT_READER_ZOOM}
@@ -532,6 +580,7 @@ export default function App({ api }: { api: AppApi }) {
           onAiSettingsDraftChange={setAiSettingsDraft}
           onOpenAiApiKeyDraftChange={setOpenAiApiKeyDraft}
           onAnthropicApiKeyDraftChange={setAnthropicApiKeyDraft}
+          onDeeplApiKeyDraftChange={setDeeplApiKeyDraft}
           onClampReaderZoom={(value) => clamp(value, 70, 180)}
           onResetLayoutWidths={() => {
             setSidebarWidth(DEFAULT_SIDEBAR_WIDTH);
