@@ -36,6 +36,7 @@ type Props = {
   onReaderPageSubmit: () => void;
   onReaderSearchMatchesChange: (state: { total: number; activeIndex: number }) => void;
   onPdfZoomChange: (value: number) => void;
+  onShowLibrary: () => void;
   onStepNormalizedZoom: (direction: 1 | -1) => void;
   onSelectionChange: (selection: PdfTextSelection | null) => void;
   openFindHud: () => void;
@@ -86,6 +87,7 @@ export function ReaderWorkspace(props: Props) {
     onReaderPageSubmit,
     onReaderSearchMatchesChange,
     onPdfZoomChange,
+    onShowLibrary,
     onStepNormalizedZoom,
     onSelectionChange,
     openFindHud,
@@ -255,6 +257,9 @@ export function ReaderWorkspace(props: Props) {
               <p className="eyebrow">Ready for Reading</p>
               <h3>No collection selected</h3>
               <p>{hasCollections ? "Select a document from the resource tree." : "Create your first collection to start building the desktop library."}</p>
+              <button className="ghost-button" type="button" onClick={onShowLibrary}>
+                Show Library
+              </button>
             </div>
           )}
           {readerView && readerView.reader_kind !== "pdf" ? (

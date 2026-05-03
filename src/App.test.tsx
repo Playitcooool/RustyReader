@@ -183,6 +183,39 @@ describe("App reading workspace", () => {
     expect(screen.getByRole("button", { name: /Collapse Machine Learning/i })).toBeInTheDocument();
   });
 
+  it("reopens the library on startup when saved sidebar state is hidden with no active paper", async () => {
+    window.localStorage.setItem("paper-reader.sidebar-open", "false");
+
+    render(<App api={fakeApi} />);
+
+    expect(await screen.findByRole("tree", { name: "Library resources" })).toBeInTheDocument();
+    expect(window.localStorage.getItem("paper-reader.sidebar-open")).toBe("true");
+  });
+
+  it("offers a library entry point from the empty reader state", async () => {
+    const user = userEvent.setup();
+    render(<App api={fakeApi} />);
+
+    const showLibraryButton = await screen.findByRole("button", { name: "Show Library" });
+    await user.click(showLibraryButton);
+
+    expect(screen.getByRole("tree", { name: "Library resources" })).toBeInTheDocument();
+  });
+
+  it("keeps pdf focus sidebar hiding out of persisted startup state", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem("paper-reader.sidebar-open", "true");
+    render(<App api={fakeApi} />);
+
+    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    expect(await screen.findByRole("toolbar", { name: /pdf focus toolbar/i })).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.queryByRole("tree", { name: "Library resources" })).not.toBeInTheDocument();
+    });
+    expect(window.localStorage.getItem("paper-reader.sidebar-open")).toBe("true");
+  });
+
   it("single-clicking a pdf opens workspace preview while double-click enters focus", async () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);

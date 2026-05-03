@@ -104,12 +104,20 @@ export default function App({ api }: { api: AppApi }) {
     if (typeof window === "undefined") return;
     window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth));
     window.localStorage.setItem(AI_PANEL_WIDTH_KEY, String(aiPanelWidth));
-    window.localStorage.setItem(SIDEBAR_OPEN_KEY, String(isSidebarVisible));
+    if (readerState.workspaceMode === "workspace") {
+      window.localStorage.setItem(SIDEBAR_OPEN_KEY, String(isSidebarVisible));
+    }
     window.localStorage.setItem(ITEM_SORT_KEY, library.itemSort);
     window.localStorage.setItem(ATTACHMENT_FILTER_KEY, library.attachmentFilter);
     window.localStorage.setItem(READER_FIT_MODE_KEY, readerState.readerFitMode);
     window.localStorage.setItem(READER_ZOOM_KEY, String(readerState.readerZoom));
-  }, [aiPanelWidth, isSidebarVisible, library.attachmentFilter, library.itemSort, readerState.readerFitMode, readerState.readerZoom, sidebarWidth]);
+  }, [aiPanelWidth, isSidebarVisible, library.attachmentFilter, library.itemSort, readerState.readerFitMode, readerState.readerZoom, readerState.workspaceMode, sidebarWidth]);
+
+  useEffect(() => {
+    if (readerState.workspaceMode !== "workspace") return;
+    if (activePaper || readerState.openPapers.length > 0 || isSidebarVisible) return;
+    setIsSidebarVisible(true);
+  }, [activePaper, isSidebarVisible, readerState.openPapers.length, readerState.workspaceMode]);
 
   const openSettingsDialog = useCallback(async () => {
     const settings = await (await getApi()).getAiSettings();
@@ -419,6 +427,7 @@ export default function App({ api }: { api: AppApi }) {
         onExitFocus={() => { readerState.setWorkspaceMode("workspace"); setIsSidebarVisible(true); }}
         onFindQueryChange={readerState.setReaderSearchQuery}
         onMoveMatch={(direction) => readerState.setReaderSearchMatchIndex((current: number) => current + direction)}
+        onShowLibrary={() => setIsSidebarVisible(true)}
         onOcrPdfPage={readerState.ocrPdfPage}
         onReaderFitModeChange={readerState.setReaderFitMode}
         onReaderPageChange={readerState.setReaderPageClamped}
