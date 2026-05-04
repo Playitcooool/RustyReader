@@ -301,6 +301,28 @@ describe("App reading workspace", () => {
     expect(screen.getByTestId("normalized-reader")).toBeInTheDocument();
   });
 
+  it("clears AI overlays when entering pdf focus", async () => {
+    const user = userEvent.setup();
+    render(<App api={fakeApi} />);
+
+    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(screen.getByRole("button", { name: "Open AI panel" }));
+    await user.click(screen.getByRole("button", { name: "Chat History" }));
+    await user.click(screen.getByRole("button", { name: "Task History" }));
+    await user.click(screen.getByRole("button", { name: "Add AI reference" }));
+
+    expect(screen.getByLabelText("Chat History panel")).toBeInTheDocument();
+    expect(screen.getByLabelText("Task History panel")).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Add AI reference" })).toBeInTheDocument();
+
+    await user.dblClick(screen.getByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+
+    expect(await screen.findByRole("toolbar", { name: /pdf focus toolbar/i })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Chat History panel")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Task History panel")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Add AI reference" })).not.toBeInTheDocument();
+  });
+
   it("supports escape and back button to exit focus", async () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
@@ -750,6 +772,19 @@ describe("App reading workspace", () => {
     expect(workspacePanel).not.toBeNull();
     expect(screen.getByTestId("pdf-reader").closest(".reader-panel-workspace")).toBe(workspacePanel);
     expect(screen.getByLabelText("AI panel")).toContainElement(screen.getByRole("textbox", { name: "AI prompt" }));
+  });
+
+  it("collapses empty ai chat history so focus mode does not reserve a large blank panel", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<App api={fakeApi} />);
+
+    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(screen.getByRole("button", { name: "Open AI panel" }));
+
+    const chatHistory = container.querySelector(".ai-chat-history");
+    expect(chatHistory).not.toBeNull();
+    expect(chatHistory?.classList.contains("ai-chat-history-empty")).toBe(true);
+    expect(chatHistory?.querySelector(".ai-thread-entry")).toBeNull();
   });
 
   it("renders quick actions in the dock and appends them to the AI chat history", async () => {

@@ -218,6 +218,7 @@ export function AiPanel(props: Props) {
     onToggleSessionHistory,
     onUpdateNoteDraft,
   } = props;
+  const hasThreadContent = aiSessionThreadRuns.length > 0 || Boolean(activeAiPending);
 
   return (
     <aside className="ai-shell" aria-label="AI panel">
@@ -330,7 +331,7 @@ export function AiPanel(props: Props) {
         </aside>
       ) : null}
 
-      <div ref={aiChatHistoryRef} className="ai-chat-history">
+      <div ref={aiChatHistoryRef} className={`ai-chat-history ${hasThreadContent ? "" : "ai-chat-history-empty"}`.trim()}>
         {aiSessionThreadRuns.map((task) => (
           <article key={task.id} className="ai-thread-entry">
             <div className="ai-message ai-message-user">

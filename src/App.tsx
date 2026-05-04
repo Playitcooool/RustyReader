@@ -104,6 +104,7 @@ export default function App({ api }: { api: AppApi }) {
     openPapers: readerState.openPapers,
     setStatusMessage,
   });
+  const previousWorkspaceModeRef = useRef(readerState.workspaceMode);
 
   const activeCollection = library.activeCollection;
   const activePaper = readerState.activePaper;
@@ -136,6 +137,16 @@ export default function App({ api }: { api: AppApi }) {
   const closeAiPanel = useCallback(() => {
     if (readerState.workspaceMode === "pdf_focus") closeReaderFloatingUi();
     ai.closeAiPanel();
+  }, [ai, closeReaderFloatingUi, readerState.workspaceMode]);
+
+  useEffect(() => {
+    const previousWorkspaceMode = previousWorkspaceModeRef.current;
+    previousWorkspaceModeRef.current = readerState.workspaceMode;
+    if (previousWorkspaceMode === readerState.workspaceMode || readerState.workspaceMode !== "pdf_focus") return;
+    ai.setIsAiSessionHistoryOpen(false);
+    ai.setAiDockOpen({ artifacts: false, history: false, notes: false });
+    if (ai.isReferencePickerOpen) ai.toggleAiReferencePicker();
+    closeReaderFloatingUi();
   }, [ai, closeReaderFloatingUi, readerState.workspaceMode]);
 
   useEffect(() => {
