@@ -86,6 +86,12 @@ export const CloseCopilotIcon = () => (
   </AiIcon>
 );
 
+export const ClosePanelIcon = () => (
+  <AiIcon>
+    <path d="m6 6 8 8M14 6l-8 8" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+  </AiIcon>
+);
+
 export const DeleteSessionIcon = () => (
   <AiIcon>
     <path d="M8 5.5h4" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
@@ -304,6 +310,9 @@ export function AiPanel(props: Props) {
         <aside className="ai-session-history-panel ai-session-history-panel-open">
           <div className="ai-session-history-panel-header">
             <strong>Chat History</strong>
+            <button aria-label="Close Chat History" className="icon-button icon-button-small" type="button" onClick={onToggleSessionHistory}>
+              <ClosePanelIcon />
+            </button>
           </div>
           <div className="ai-session-history-list" role="list" aria-label="Chat History panel">
             {aiSessions.map((session) => (

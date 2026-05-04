@@ -953,7 +953,7 @@ describe("App reading workspace", () => {
     expect(styles).toMatch(/\.ai-reference-chip-list\s*\{[^}]*overflow-x:\s*auto;[^}]*overflow-y:\s*hidden;/s);
     expect(styles).toMatch(/\.ai-reference-picker-shell\s*\{[^}]*position:\s*relative;[^}]*z-index:\s*2;/s);
     expect(styles).toMatch(/\.ai-reference-popover\s*\{[^}]*position:\s*absolute;[^}]*z-index:\s*12;/s);
-    expect(styles).toMatch(/\.ai-session-history-panel\s*\{[^}]*right:\s*0;[^}]*left:\s*0;[^}]*width:\s*100%;/s);
+    expect(styles).toMatch(/\.ai-session-history-panel\s*\{[^}]*right:\s*0;[^}]*left:\s*auto;[^}]*width:\s*min\(300px, calc\(100% - 56px\)\);/s);
     expect(styles).not.toMatch(/\.ai-session-history-panel\s*\{[^}]*right:\s*-[0-9]/s);
   });
 
@@ -1044,6 +1044,19 @@ describe("App reading workspace", () => {
 
     expect(screen.getByText("Transformer Scaling Laws", { selector: ".meta-count" })).toBeInTheDocument();
     expect(container.querySelector(".ai-session-history-panel")).toBeNull();
+  });
+
+  it("closes chat history from its close button without selecting a session", async () => {
+    const user = userEvent.setup();
+    render(<App api={fakeApi} />);
+
+    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(screen.getByRole("button", { name: "Open AI panel" }));
+    await user.click(screen.getByRole("button", { name: "Chat History" }));
+
+    expect(screen.getByLabelText("Chat History panel")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close Chat History" }));
+    expect(screen.queryByLabelText("Chat History panel")).not.toBeInTheDocument();
   });
 
   it("deletes a non-current chat session without switching the active chat", async () => {
