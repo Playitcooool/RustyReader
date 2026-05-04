@@ -108,6 +108,35 @@ export default function App({ api }: { api: AppApi }) {
   const activeCollection = library.activeCollection;
   const activePaper = readerState.activePaper;
   const activePaperMetadata = useMemo(() => (activePaper ? [activePaper.authors, activePaper.publication_year, activePaper.source].filter(Boolean).join(" · ") || null : null), [activePaper]);
+  const closeReaderFloatingUi = useCallback(() => {
+    readerState.setIsFindHudOpen(false);
+    readerState.setReaderSearchQuery("");
+    readerState.setReaderSearchMatchIndex(0);
+    readerState.setReaderSearchMatchCount(0);
+    readerState.setReportedActiveSearchMatchIndex(-1);
+    readerState.setPdfSelection(null);
+    readerState.setReaderSelection(null);
+    readerState.dismissActivePdfHighlight();
+    readerState.closeTranslationPopover();
+  }, [readerState]);
+
+  const closeFindHud = useCallback(() => {
+    readerState.setIsFindHudOpen(false);
+    readerState.setReaderSearchQuery("");
+    readerState.setReaderSearchMatchIndex(0);
+    readerState.setReaderSearchMatchCount(0);
+    readerState.setReportedActiveSearchMatchIndex(-1);
+  }, [readerState]);
+
+  const ensureAiPanelReady = useCallback(() => {
+    if (readerState.workspaceMode === "pdf_focus") closeReaderFloatingUi();
+    void ai.ensureSessionReady();
+  }, [ai, closeReaderFloatingUi, readerState.workspaceMode]);
+
+  const closeAiPanel = useCallback(() => {
+    if (readerState.workspaceMode === "pdf_focus") closeReaderFloatingUi();
+    ai.closeAiPanel();
+  }, [ai, closeReaderFloatingUi, readerState.workspaceMode]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -254,6 +283,11 @@ export default function App({ api }: { api: AppApi }) {
           event.preventDefault();
           void readerState.requestSelectionTranslation();
         }
+        return;
+      }
+      if (!isEditable && event.key.toLowerCase() === "f" && (event.metaKey || event.ctrlKey) && readerState.textToolsEnabled) {
+        event.preventDefault();
+        readerState.openFindHud();
         return;
       }
       if (event.key === "Escape" && readerState.translationPopover) {
@@ -453,12 +487,12 @@ export default function App({ api }: { api: AppApi }) {
         onActivePdfHighlight={readerState.handleActivatePdfHighlight}
         onAiToggle={() => {
           if (ai.isAiPanelOpen) {
-            ai.closeAiPanel();
+            closeAiPanel();
             return;
           }
-          void ai.ensureSessionReady();
+          ensureAiPanelReady();
         }}
-        onCloseFindHud={() => { readerState.setIsFindHudOpen(false); readerState.setReaderSearchQuery(""); readerState.setReaderSearchMatchIndex(0); readerState.setReaderSearchMatchCount(0); readerState.setReportedActiveSearchMatchIndex(-1); }}
+        onCloseFindHud={closeFindHud}
         onCloseTab={readerState.closePaperTab}
         onCreatePdfFocusHighlight={readerState.handleCreatePdfFocusHighlight}
         onExitFocus={() => { readerState.setWorkspaceMode("workspace"); setIsSidebarVisible(true); }}
@@ -543,7 +577,7 @@ export default function App({ api }: { api: AppApi }) {
             notes={ai.notes}
             onAiComposerChange={ai.setAiComposerValue}
             onAiReferenceQueryChange={ai.setAiReferenceQuery}
-            onClosePanel={ai.closeAiPanel}
+            onClosePanel={closeAiPanel}
             onCreateResearchNote={ai.handleCreateResearchNote}
             onCreateSession={ai.handleCreateAiSession}
             onDeleteSession={(session) => setDeleteTarget({ kind: "ai_session", targetId: session.id, label: session.title })}

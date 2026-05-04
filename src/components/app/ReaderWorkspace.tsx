@@ -191,13 +191,6 @@ export function ReaderWorkspace(props: Props) {
       {workspaceMode === "pdf_focus" && activePaper?.attachment_format === "pdf" ? (
         <section className="reader-panel reader-panel-focus">
           <div className="reader-toolbar reader-toolbar-focus" role="toolbar" aria-label="PDF focus toolbar">
-            {textToolsEnabled ? (
-              <div className="reader-control-group">
-                <button aria-label="Find in document" className="ghost-button" type="button" onClick={openFindHud}>
-                  Search
-                </button>
-              </div>
-            ) : null}
             <div className="reader-control-group reader-control-group-page">
               <button aria-label="Previous Page" className="ghost-button" disabled={readerPage === 0} type="button" onClick={() => onReaderPageChange(readerPage - 1)}>
                 Prev

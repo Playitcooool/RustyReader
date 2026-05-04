@@ -321,7 +321,7 @@ describe("App reading workspace", () => {
     expect(screen.getByTestId("pdf-reader")).toBeInTheDocument();
   });
 
-  it("opens the find HUD in document workspace and pdf focus", async () => {
+  it("opens the find HUD in document workspace and with cmd-f in pdf focus", async () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
 
@@ -335,7 +335,10 @@ describe("App reading workspace", () => {
     });
 
     await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
-    await user.click(within(screen.getByRole("toolbar", { name: /pdf focus toolbar/i })).getByRole("button", { name: "Find in document" }));
+    const focusToolbar = screen.getByRole("toolbar", { name: /pdf focus toolbar/i });
+    expect(within(focusToolbar).queryByRole("button", { name: "Find in document" })).not.toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "f", metaKey: true });
     expect(await screen.findByRole("textbox", { name: "Find in document" })).toHaveFocus();
   });
 
@@ -490,14 +493,14 @@ describe("App reading workspace", () => {
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
     await user.click(screen.getByRole("button", { name: "Chat History" }));
     await user.click(screen.getByRole("button", { name: "Task History" }));
-    expect(container.querySelector(".ai-session-history-panel")?.getAttribute("aria-hidden")).toBe("false");
+    expect(container.querySelector(".ai-session-history-panel")).toBeInTheDocument();
     expect(screen.getByLabelText("Task History panel")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Close Copilot" }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
 
     await waitFor(() => {
-      expect(container.querySelector(".ai-session-history-panel")?.getAttribute("aria-hidden")).toBe("true");
+      expect(container.querySelector(".ai-session-history-panel")).toBeNull();
     });
     expect(screen.queryByLabelText("Task History panel")).not.toBeInTheDocument();
   });
@@ -906,7 +909,6 @@ describe("App reading workspace", () => {
     await user.click(screen.getByRole("button", { name: "Chat History" }));
     const historyPanel = screen.getByLabelText("Chat History panel");
     const firstSessionButton = within(historyPanel).getByRole("button", { name: /Transformer Scaling Laws Open/i });
-    const secondSessionButton = within(historyPanel).getByRole("button", { name: /New Chat Active/i });
 
     await user.type(screen.getByRole("textbox", { name: "AI prompt" }), "What is the key result?");
     await user.click(screen.getByRole("button", { name: "Send AI prompt" }));
@@ -916,7 +918,9 @@ describe("App reading workspace", () => {
     expect(screen.queryByLabelText("AI response loading")).not.toBeInTheDocument();
     expect(screen.queryByText("What is the key result?")).not.toBeInTheDocument();
 
-    await user.click(secondSessionButton);
+    await user.click(screen.getByRole("button", { name: "Chat History" }));
+    const reopenedHistoryPanel = screen.getByLabelText("Chat History panel");
+    await user.click(within(reopenedHistoryPanel).getByRole("button", { name: /New Chat Open/i }));
     expect(await screen.findByText("What is the key result?")).toBeInTheDocument();
     expect(await screen.findByText(/Reading Q&A: Transformer Scaling Laws/i)).toBeInTheDocument();
   });
@@ -1039,7 +1043,7 @@ describe("App reading workspace", () => {
     await user.click(within(historyPanel).getByRole("button", { name: /Transformer Scaling Laws Open/i }));
 
     expect(screen.getByText("Transformer Scaling Laws", { selector: ".meta-count" })).toBeInTheDocument();
-    expect(container.querySelector(".ai-session-history-panel")?.getAttribute("aria-hidden")).toBe("true");
+    expect(container.querySelector(".ai-session-history-panel")).toBeNull();
   });
 
   it("deletes a non-current chat session without switching the active chat", async () => {
@@ -1065,7 +1069,7 @@ describe("App reading workspace", () => {
       expect(within(historyPanel).queryByRole("button", { name: /Transformer Scaling Laws Open/i })).not.toBeInTheDocument();
     });
     expect(screen.getByText("New Chat", { selector: ".meta-count" })).toBeInTheDocument();
-    expect(container.querySelector(".ai-session-history-panel")?.getAttribute("aria-hidden")).toBe("false");
+    expect(container.querySelector(".ai-session-history-panel")).toBeInTheDocument();
   });
 
   it("deletes the active chat and switches to the newest remaining session", async () => {

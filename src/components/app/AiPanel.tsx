@@ -300,24 +300,26 @@ export function AiPanel(props: Props) {
         </div>
       </div>
 
-      <aside className={`ai-session-history-panel ${isAiSessionHistoryOpen ? "ai-session-history-panel-open" : ""}`} aria-hidden={!isAiSessionHistoryOpen}>
-        <div className="ai-session-history-panel-header">
-          <strong>Chat History</strong>
-        </div>
-        <div className="ai-session-history-list" role="list" aria-label="Chat History panel">
-          {aiSessions.map((session) => (
-            <div key={session.id} className={`nav-item ai-session-history-item ${session.id === activeAiSessionId ? "nav-item-active" : ""}`} role="listitem">
-              <button aria-label={`${session.title} ${session.id === activeAiSessionId ? "Active" : "Open"}`} className="ai-session-history-open-button" title={session.title} type="button" onClick={() => onOpenSession(session.id)}>
-                <span className="ai-session-history-item-title">{session.title}</span>
-                <span className="meta-count">{session.id === activeAiSessionId ? "Active" : "Open"}</span>
-              </button>
-              <button aria-label={`Delete ${session.title}`} className="icon-button icon-button-small ai-session-history-delete" title={`Delete ${session.title}`} type="button" onClick={() => onDeleteSession(session)}>
-                <DeleteSessionIcon />
-              </button>
-            </div>
-          ))}
-        </div>
-      </aside>
+      {isAiSessionHistoryOpen ? (
+        <aside className="ai-session-history-panel ai-session-history-panel-open">
+          <div className="ai-session-history-panel-header">
+            <strong>Chat History</strong>
+          </div>
+          <div className="ai-session-history-list" role="list" aria-label="Chat History panel">
+            {aiSessions.map((session) => (
+              <div key={session.id} className={`nav-item ai-session-history-item ${session.id === activeAiSessionId ? "nav-item-active" : ""}`} role="listitem">
+                <button aria-label={`${session.title} ${session.id === activeAiSessionId ? "Active" : "Open"}`} className="ai-session-history-open-button" title={session.title} type="button" onClick={() => onOpenSession(session.id)}>
+                  <span className="ai-session-history-item-title">{session.title}</span>
+                  <span className="meta-count">{session.id === activeAiSessionId ? "Active" : "Open"}</span>
+                </button>
+                <button aria-label={`Delete ${session.title}`} className="icon-button icon-button-small ai-session-history-delete" title={`Delete ${session.title}`} type="button" onClick={() => onDeleteSession(session)}>
+                  <DeleteSessionIcon />
+                </button>
+              </div>
+            ))}
+          </div>
+        </aside>
+      ) : null}
 
       <div ref={aiChatHistoryRef} className="ai-chat-history">
         {aiSessionThreadRuns.map((task) => (
