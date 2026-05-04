@@ -82,6 +82,8 @@ vi.mock("./components/readers/PdfContinuousReader", () => {
     onPageCountChange,
     onSelectionChange,
     onHighlightActivate,
+    onCreateTextBoxAnnotation,
+    textBoxToolActive,
     searchQuery,
     activeSearchMatchIndex = 0,
     onSearchMatchesChange,
@@ -92,6 +94,8 @@ vi.mock("./components/readers/PdfContinuousReader", () => {
     searchQuery?: string;
     onSelectionChange?: (selection: unknown) => void;
     onHighlightActivate?: (highlight: unknown) => void;
+    onCreateTextBoxAnnotation?: (draft: { anchor: string; body: string }) => void;
+    textBoxToolActive?: boolean;
     activeSearchMatchIndex?: number;
     onSearchMatchesChange?: (state: { total: number; activeIndex: number }) => void;
   }) {
@@ -147,6 +151,19 @@ vi.mock("./components/readers/PdfContinuousReader", () => {
           }
         >
           Activate highlight
+        </button>
+        <button
+          type="button"
+          aria-label="Mock draw text box annotation"
+          disabled={!textBoxToolActive}
+          onClick={() =>
+            onCreateTextBoxAnnotation?.({
+              anchor: JSON.stringify({ type: "pdf_text_box", page: page + 1, x: 0.1, y: 0.2, width: 0.3, height: 0.12 }),
+              body: "Important note",
+            })
+          }
+        >
+          Draw text box
         </button>
       </section>
     );
@@ -282,6 +299,26 @@ describe("App reading workspace", () => {
     });
     expect((createAnnotationSpy.mock.calls[0]?.[0] as { anchor?: string } | undefined)?.anchor).toContain(
       '"color":"yellow"',
+    );
+  });
+
+  it("creates a focus text box annotation from the toolbar tool", async () => {
+    const user = userEvent.setup();
+    const createAnnotationSpy = vi.spyOn(fakeApi, "createAnnotation");
+
+    render(<App api={fakeApi} />);
+    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(screen.getByRole("button", { name: "Add text box annotation" }));
+    await user.click(screen.getByRole("button", { name: "Mock draw text box annotation" }));
+
+    await waitFor(() => {
+      expect(createAnnotationSpy).toHaveBeenCalledWith(expect.objectContaining({
+        kind: "text_box",
+        body: "Important note",
+      }));
+    });
+    expect((createAnnotationSpy.mock.calls[0]?.[0] as { anchor?: string } | undefined)?.anchor).toContain(
+      '"type":"pdf_text_box"',
     );
   });
 

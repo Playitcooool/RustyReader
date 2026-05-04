@@ -5,7 +5,7 @@ import { PdfContinuousReader } from "../readers/PdfContinuousReader";
 import { PdfReader } from "../readers/PdfReader";
 import { attachmentFormatLabel, formatItemMetadata, type ReaderFitMode } from "../../lib/appView";
 import type { LibraryItem, ReaderView, Annotation } from "../../lib/contracts";
-import type { ActivePdfHighlight, ReaderTextSelection, TranslationPopover, WorkspaceMode } from "../../hooks/useReaderState";
+import type { ActivePdfHighlight, PdfTextBoxAnnotationDraft, ReaderTextSelection, TranslationPopover, WorkspaceMode } from "../../hooks/useReaderState";
 import type { PdfHighlightColor, PdfTextSelection } from "../readers/pdfSelection";
 import { useMemo, useState, type RefObject } from "react";
 
@@ -59,6 +59,7 @@ type ReaderWorkspaceActions = {
   onCloseFindHud: () => void;
   onCloseTab: (itemId: number) => void;
   onCreatePdfFocusHighlight: (color: PdfHighlightColor) => void | Promise<void>;
+  onCreatePdfFocusTextBoxAnnotation: (draft: PdfTextBoxAnnotationDraft) => void | Promise<void>;
   onExitFocus: () => void;
   onFindQueryChange: (value: string) => void;
   onMoveMatch: (direction: 1 | -1, source: "button" | "enter") => void;
@@ -132,6 +133,7 @@ export function ReaderWorkspace(props: Props) {
     onCloseFindHud,
     onCloseTab,
     onCreatePdfFocusHighlight,
+    onCreatePdfFocusTextBoxAnnotation,
     onExitFocus,
     onFindQueryChange,
     onMoveMatch,
@@ -150,6 +152,7 @@ export function ReaderWorkspace(props: Props) {
     setPdfPageCount,
   } = props.actions;
   const [readerContextMenu, setReaderContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [isPdfTextBoxToolActive, setIsPdfTextBoxToolActive] = useState(false);
 
   const showPdfFocusHighlightBar = Boolean(workspaceMode === "pdf_focus" && activePaper?.attachment_format === "pdf" && pdfSelection);
   const pdfFocusHighlightBarStyle = useMemo(() => {
@@ -241,6 +244,18 @@ export function ReaderWorkspace(props: Props) {
                 +
               </button>
             </div>
+            <div className="reader-control-group">
+              <button
+                aria-label="Add text box annotation"
+                aria-pressed={isPdfTextBoxToolActive}
+                className="ghost-button reader-icon-tool"
+                title="Add text box annotation"
+                type="button"
+                onClick={() => setIsPdfTextBoxToolActive((current) => !current)}
+              >
+                T
+              </button>
+            </div>
           </div>
           {readerView ? (
             <>
@@ -262,6 +277,11 @@ export function ReaderWorkspace(props: Props) {
                 onSearchMatchesChange={onReaderSearchMatchesChange}
                 onSelectionChange={onSelectionChange}
                 onHighlightActivate={onActivePdfHighlight}
+                onCreateTextBoxAnnotation={(draft) => {
+                  void onCreatePdfFocusTextBoxAnnotation(draft);
+                  setIsPdfTextBoxToolActive(false);
+                }}
+                textBoxToolActive={isPdfTextBoxToolActive}
                 onActivePageChange={onReaderPageChange}
                 onNavigateToPage={onReaderPageChange}
                 onPageCountChange={setPdfPageCount}

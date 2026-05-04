@@ -539,6 +539,7 @@ export default function App({ api }: { api: AppApi }) {
           onCloseTab: readerState.closePaperTab,
           onCloseTranslationPopover: readerState.closeTranslationPopover,
           onCreatePdfFocusHighlight: readerState.handleCreatePdfFocusHighlight,
+          onCreatePdfFocusTextBoxAnnotation: readerState.handleCreatePdfFocusTextBoxAnnotation,
           onExitFocus: () => { readerState.setWorkspaceMode("workspace"); setIsSidebarVisible(true); },
           onFindQueryChange: readerState.setReaderSearchQuery,
           onMoveMatch: (direction) => readerState.setReaderSearchMatchIndex((current: number) => current + direction),

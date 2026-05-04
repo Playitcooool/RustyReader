@@ -14,6 +14,10 @@ export type ReaderTextSelection = {
   quote: string;
   rect: { left: number; top: number; right: number; bottom: number };
 };
+export type PdfTextBoxAnnotationDraft = {
+  anchor: string;
+  body: string;
+};
 export type TranslationPopover = {
   rect: ReaderTextSelection["rect"];
   translatedText: string;
@@ -293,6 +297,20 @@ export function useReaderState({
     dismissPdfSelection();
   }, [activePaper, addColorToPdfAnchor, dismissPdfSelection, getApi, pdfSelection, pdfTextToolsEnabled, setStatusMessage, workspaceMode]);
 
+  const handleCreatePdfFocusTextBoxAnnotation = useCallback(async (draft: PdfTextBoxAnnotationDraft) => {
+    if (!activePaper || !pdfTextToolsEnabled || workspaceMode !== "pdf_focus") return;
+    const body = draft.body.trim();
+    if (!body) return;
+    const annotation = await (await getApi()).createAnnotation({
+      item_id: activePaper.id,
+      anchor: draft.anchor,
+      kind: "text_box",
+      body,
+    });
+    setAnnotations((current) => [...current, annotation]);
+    setStatusMessage("Created annotation.");
+  }, [activePaper, getApi, pdfTextToolsEnabled, setStatusMessage, workspaceMode]);
+
   const handleActivatePdfHighlight = useCallback((highlight: ActivePdfHighlight) => {
     dismissPdfSelection();
     setActivePdfHighlight(highlight);
@@ -359,6 +377,7 @@ export function useReaderState({
     getPdfPageTextsBatch,
     handleActivatePdfHighlight,
     handleCreatePdfFocusHighlight,
+    handleCreatePdfFocusTextBoxAnnotation,
     handleRemoveActivePdfHighlight,
     highlightActionBarRef,
     isFindHudOpen,

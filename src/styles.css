@@ -1666,10 +1666,12 @@ p {
   background:
     linear-gradient(90deg, rgba(255, 255, 255, 0.02), transparent 14%, transparent 86%, rgba(255, 255, 255, 0.02)),
     radial-gradient(circle at center, transparent 42%, rgba(0, 0, 0, 0.18));
+  z-index: 0;
 }
 
-.app-shell.app-shell-ai-open.app-shell-focus .reader-shell-focus::before {
-  display: none;
+.reader-shell-focus > * {
+  position: relative;
+  z-index: 1;
 }
 
 .reader-tabs-focus {
@@ -1891,6 +1893,57 @@ p {
 .pdf-reader .textLayer .pdf-search-hit {
   background: rgba(102, 164, 212, 0.26);
   border-radius: 0.22em;
+}
+
+.reader-icon-tool {
+  min-width: 38px;
+  font-weight: 700;
+}
+
+.reader-icon-tool[aria-pressed="true"] {
+  border-color: rgba(226, 139, 83, 0.52);
+  background: rgba(226, 139, 83, 0.18);
+  color: #fff7ea;
+}
+
+.pdf-text-box-drawing,
+.pdf-text-box-annotation {
+  position: absolute;
+  z-index: 3;
+  border: 1px solid rgba(226, 139, 83, 0.72);
+  border-radius: 8px;
+  background: rgba(255, 248, 225, 0.12);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+}
+
+.pdf-text-box-drawing {
+  pointer-events: none;
+}
+
+.pdf-text-box-annotation {
+  padding: 4px;
+  min-width: 24px;
+  min-height: 24px;
+}
+
+.pdf-text-box-annotation textarea {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  resize: none;
+  border: 0;
+  outline: 0;
+  background: rgba(255, 252, 238, 0.92);
+  color: #171512;
+  border-radius: 5px;
+  padding: 6px 8px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.pdf-text-box-annotation-persisted textarea {
+  cursor: default;
 }
 
 .pdf-focus-highlight-bar {
