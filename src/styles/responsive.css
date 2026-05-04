@@ -1,0 +1,214 @@
+.pdf-focus-highlight-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.18);
+  cursor: pointer;
+  box-shadow:
+    0 10px 18px rgba(0, 0, 0, 0.35),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+}
+
+.pdf-focus-highlight-swatch:hover {
+  transform: translateY(-1px);
+}
+
+.pdf-focus-highlight-swatch:active {
+  transform: translateY(0);
+}
+
+.pdf-focus-highlight-swatch[data-color="yellow"] {
+  background: rgba(241, 213, 91, 0.95);
+}
+
+.pdf-focus-highlight-swatch[data-color="red"] {
+  background: rgba(235, 95, 88, 0.95);
+}
+
+.pdf-focus-highlight-swatch[data-color="green"] {
+  background: rgba(96, 209, 145, 0.92);
+}
+
+.pdf-focus-highlight-swatch[data-color="blue"] {
+  background: rgba(102, 164, 212, 0.92);
+}
+
+.pdf-focus-highlight-swatch[data-color="purple"] {
+  background: rgba(185, 126, 234, 0.92);
+}
+
+.pdf-reader .textLayer .pdf-search-hit-active {
+  background: rgba(102, 164, 212, 0.42);
+  outline: 2px solid rgba(102, 164, 212, 0.42);
+  outline-offset: 1px;
+}
+
+.pdf-reader .pdf-link-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.pdf-reader .pdf-link-layer .pdf-link-overlay {
+  pointer-events: auto;
+}
+
+.pdf-reader .textLayer.selecting ~ .pdf-link-layer .pdf-link-overlay {
+  pointer-events: none;
+}
+
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(7, 9, 12, 0.48);
+  backdrop-filter: blur(6px);
+  z-index: 18;
+}
+
+@media (max-width: 1100px) {
+  .app-shell {
+    grid-template-columns: minmax(220px, var(--sidebar-width, 280px)) 10px 1fr;
+  }
+
+  .app-shell.app-shell-ai-open.app-shell-workspace {
+    grid-template-columns: minmax(220px, var(--sidebar-width, 280px)) 10px minmax(0, 1fr) 10px var(--ai-panel-width, 360px);
+  }
+
+  .app-shell.app-shell-ai-open.app-shell-focus {
+    grid-template-columns: minmax(0, 1fr) 10px var(--ai-panel-width, 360px);
+  }
+
+  .reader-panel-focus {
+    padding-inline: 18px;
+  }
+}
+
+@media (max-width: 820px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell.app-shell-ai-open.app-shell-workspace,
+  .app-shell.app-shell-ai-open.app-shell-focus {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar,
+  .reader-shell {
+    min-height: auto;
+  }
+
+  .pane-resizer {
+    display: none;
+  }
+
+  .reader-surface {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-shell {
+    min-height: auto;
+    border-left: none;
+    border-top: 1px solid var(--panel-border);
+    overflow: visible;
+  }
+
+  .reader-panel-focus {
+    padding: 14px 12px 24px;
+  }
+
+  .reader-panel-focus .reader-meta-row {
+    gap: 8px;
+  }
+
+  .reader-actions-focus {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .reader-panel-focus .reader-toolbar {
+    padding: 8px;
+    border-radius: 14px;
+  }
+
+  .reader-toolbar-status {
+    width: 100%;
+    margin-right: 0;
+  }
+
+  .reader-control-group-search {
+    min-width: 100%;
+    flex-basis: 100%;
+  }
+
+  .reader-control-group-page {
+    flex-wrap: wrap;
+  }
+
+  .reader-control-group-page,
+  .reader-control-group-zoom {
+    flex: 1 1 auto;
+  }
+
+  .reader-shell-focus .pdf-reader .citation-card {
+    padding: 16px 12px 18px;
+    border-radius: 20px;
+  }
+
+  .resource-tree-row {
+    grid-template-columns: 18px minmax(0, 1fr);
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .resource-tree-item,
+  .resource-tree-row-editing {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ai-composer-header {
+    flex-wrap: wrap;
+  }
+
+  .ai-reference-chip-list {
+    width: 100%;
+  }
+
+  .ai-copilot-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .ai-copilot-heading,
+  .ai-copilot-controls {
+    width: 100%;
+  }
+
+  .ai-copilot-controls {
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .ai-reference-popover {
+    left: 0;
+    right: 0;
+    width: auto;
+  }
+
+  .ai-session-history-panel {
+    right: 0;
+    left: 24px;
+    width: auto;
+    max-width: none;
+    transform: translateX(100%);
+  }
+
+  .ai-reference-result {
+    flex-direction: column;
+  }
+
+  .ai-reference-result-badges {
+    justify-items: start;
+  }
+}

@@ -1019,7 +1019,11 @@ describe("App reading workspace", () => {
   it("keeps the AI reference popover outside header overflow clipping", async () => {
     // @ts-expect-error Vitest runs this test in Node, even though the app TS config omits Node types.
     const { readFileSync } = await import("fs");
-    const styles = readFileSync("src/styles.css", "utf8");
+    const stylesEntry = readFileSync("src/styles.css", "utf8");
+    const styles = stylesEntry.replace(
+      /@import "\.\/styles\/([^"]+)";/g,
+      (_match: string, filename: string) => readFileSync(`src/styles/${filename}`, "utf8"),
+    );
 
     expect(styles).toMatch(/\.ai-composer-header\s*\{[^}]*overflow:\s*visible;/s);
     expect(styles).toMatch(/\.ai-reference-chip-list\s*\{[^}]*overflow-x:\s*auto;[^}]*overflow-y:\s*hidden;/s);

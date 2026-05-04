@@ -1,0 +1,363 @@
+.toolbar-row,
+.reader-actions,
+.collection-create-row,
+.reader-tabs,
+.ai-tabs,
+.reader-location-bar {
+  flex-wrap: wrap;
+}
+
+.reader-actions {
+  justify-content: flex-end;
+}
+
+.app-shell-focus {
+  grid-template-columns: minmax(0, 1fr);
+  background:
+    radial-gradient(circle at top center, rgba(201, 111, 52, 0.08), transparent 24%),
+    linear-gradient(180deg, rgba(7, 9, 12, 0.78), rgba(7, 9, 12, 0.92));
+}
+
+.app-shell.app-shell-ai-open.app-shell-focus .ai-shell {
+  z-index: 2;
+}
+
+.reader-shell-focus {
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.02), transparent 30%),
+    linear-gradient(180deg, rgba(14, 16, 20, 0.96), rgba(10, 11, 14, 0.98));
+  --focus-tabs-sticky-top: 0px;
+  min-height: 100vh;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.reader-shell-focus::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02), transparent 14%, transparent 86%, rgba(255, 255, 255, 0.02)),
+    radial-gradient(circle at center, transparent 42%, rgba(0, 0, 0, 0.18));
+  z-index: 0;
+}
+
+.reader-shell-focus > * {
+  position: relative;
+  z-index: 1;
+}
+
+.reader-tabs-focus {
+  justify-content: flex-start;
+  align-items: center;
+  padding: 6px 10px 2px;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  position: sticky;
+  top: var(--focus-tabs-sticky-top);
+  z-index: 60;
+  background: rgba(10, 11, 14, 0.92);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(10px);
+}
+
+.reader-tabs-focus .reader-tab-shell {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.reader-back-button {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  cursor: pointer;
+}
+
+.reader-back-button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.reader-shell-focus .pdf-reader-focus {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-width: none;
+  margin: 0;
+  display: flex;
+  min-height: 0;
+}
+
+.pdf-reader-workspace {
+  min-height: 0;
+}
+
+.reader-shell-focus .pdf-reader-focus .pdf-stage {
+  width: 100%;
+  margin: 0;
+  padding: 10px 0 18px;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 12px;
+}
+
+.pdf-reader-loading {
+  width: 100%;
+  max-width: min(920px, calc(100% - 24px));
+  margin: 0 12px 2px;
+  color: rgba(244, 239, 230, 0.7);
+}
+
+.pdf-page-skeleton {
+  display: block;
+  border-radius: 16px;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04)),
+    rgba(255, 255, 255, 0.03);
+  background-size: 220% 100%;
+  animation: pdf-page-skeleton-shimmer 1.4s linear infinite;
+  box-shadow:
+    0 30px 90px rgba(0, 0, 0, 0.28),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+@keyframes pdf-page-skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -40% 0;
+  }
+}
+
+.pdf-text-layer-notice {
+  width: 100%;
+  max-width: min(920px, calc(100% - 24px));
+  margin: 0 12px 6px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 193, 7, 0.1);
+  border: 1px solid rgba(255, 193, 7, 0.18);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.reader-shell-focus .pdf-reader-focus canvas {
+  margin: 0;
+  border-radius: 16px;
+  box-shadow:
+    0 30px 90px rgba(0, 0, 0, 0.52),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.01);
+}
+
+/* Minimal pdf.js TextLayer + AnnotationLayer CSS (scoped).
+   Avoid broad selectors like ".textLayer span" because we inject nested spans
+   (search hits + highlight decorations) inside the pdf.js textDiv spans. */
+.pdf-reader .textLayer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  overflow: clip;
+  transform-origin: 0 0;
+  line-height: 1;
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+}
+
+/* Target only pdf.js' own text layer nodes. Keep it narrow so we don't break nested highlight spans. */
+.pdf-reader .textLayer span[role="presentation"],
+.pdf-reader .textLayer br[role="presentation"] {
+  position: absolute;
+  transform-origin: 0% 0%;
+  white-space: pre;
+  cursor: text;
+  color: transparent;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.pdf-reader .textLayer span[role="presentation"] {
+  z-index: 1;
+  --font-height: 0;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1;
+  --rotate: 0deg;
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+
+.pdf-reader .textLayer .markedContent {
+  display: contents;
+}
+
+.pdf-reader .textLayer ::selection {
+  background: rgba(102, 164, 212, 0.35);
+}
+
+.pdf-reader .textLayer .pdf-annotation-highlight::selection {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.pdf-reader .textLayer br::selection {
+  background: transparent;
+}
+
+.pdf-reader .textLayer .endOfContent {
+  display: block;
+  position: absolute;
+  inset: 100% 0 0;
+  z-index: 0;
+  cursor: default;
+  user-select: none;
+}
+
+.pdf-reader .textLayer.selecting .endOfContent {
+  top: 0;
+}
+
+.pdf-reader .textLayer .pdf-annotation-highlight {
+  background: rgba(226, 139, 83, 0.34);
+  border-radius: 0.22em;
+  box-shadow: inset 0 0 0 1px rgba(226, 139, 83, 0.26);
+}
+
+.pdf-reader .textLayer.selecting .pdf-annotation-highlight {
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.pdf-reader .textLayer .pdf-annotation-highlight[data-color="yellow"] {
+  background: rgba(241, 213, 91, 0.36);
+  box-shadow: inset 0 0 0 1px rgba(241, 213, 91, 0.28);
+}
+
+.pdf-reader .textLayer .pdf-annotation-highlight[data-color="red"] {
+  background: rgba(235, 95, 88, 0.34);
+  box-shadow: inset 0 0 0 1px rgba(235, 95, 88, 0.26);
+}
+
+.pdf-reader .textLayer .pdf-annotation-highlight[data-color="green"] {
+  background: rgba(96, 209, 145, 0.28);
+  box-shadow: inset 0 0 0 1px rgba(96, 209, 145, 0.22);
+}
+
+.pdf-reader .textLayer .pdf-annotation-highlight[data-color="blue"] {
+  background: rgba(102, 164, 212, 0.30);
+  box-shadow: inset 0 0 0 1px rgba(102, 164, 212, 0.24);
+}
+
+.pdf-reader .textLayer .pdf-annotation-highlight[data-color="purple"] {
+  background: rgba(185, 126, 234, 0.30);
+  box-shadow: inset 0 0 0 1px rgba(185, 126, 234, 0.22);
+}
+
+.pdf-reader .textLayer .pdf-search-hit {
+  background: rgba(102, 164, 212, 0.26);
+  border-radius: 0.22em;
+}
+
+.reader-icon-tool {
+  min-width: 38px;
+  font-weight: 700;
+}
+
+.reader-icon-tool[aria-pressed="true"] {
+  border-color: rgba(226, 139, 83, 0.52);
+  background: rgba(226, 139, 83, 0.18);
+  color: #fff7ea;
+}
+
+.pdf-text-box-drawing,
+.pdf-text-box-annotation {
+  position: absolute;
+  z-index: 3;
+  border: 1px solid rgba(226, 139, 83, 0.72);
+  border-radius: 8px;
+  background: rgba(255, 248, 225, 0.12);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+}
+
+.pdf-text-box-drawing {
+  pointer-events: none;
+}
+
+.pdf-text-box-annotation {
+  padding: 4px;
+  min-width: 24px;
+  min-height: 24px;
+}
+
+.pdf-text-box-annotation textarea {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  resize: none;
+  border: 0;
+  outline: 0;
+  background: rgba(255, 252, 238, 0.92);
+  color: #171512;
+  border-radius: 5px;
+  padding: 6px 8px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.pdf-text-box-annotation-persisted textarea {
+  cursor: default;
+}
+
+.pdf-focus-highlight-bar {
+  position: fixed;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 999px;
+  background: rgba(7, 9, 12, 0.92);
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+}
+
+.pdf-highlight-action-bar {
+  position: fixed;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: rgba(7, 9, 12, 0.92);
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+}
+
+.modal-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(4, 5, 8, 0.56);
+}
+

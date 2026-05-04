@@ -245,6 +245,15 @@ fn starts_with_an_empty_library() {
 }
 
 #[test]
+fn new_returns_error_when_root_is_not_a_directory() {
+    let root = tempdir().unwrap();
+    let blocked_root = root.path().join("library-root-file");
+    fs::write(&blocked_root, b"not a directory").unwrap();
+
+    assert!(LibraryService::new(&blocked_root).is_err());
+}
+
+#[test]
 fn imports_pdf_with_metadata_text_page_count_and_search_index() {
     let root = tempdir().unwrap();
     let service = LibraryService::new(root.path()).unwrap();

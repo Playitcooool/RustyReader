@@ -24,6 +24,7 @@ import {
 } from "./pdfSelection";
 import { installPdfJsTextLayerSelectionSupport } from "./pdfTextLayerSelectionSupport";
 import { buildRustPdfTextLayer, pageWidthAtScale1FromPoints } from "./pdfRustTextLayer";
+import { parsePdfTextBoxAnchor, type PdfTextBoxAnchor } from "./pdfTextBoxAnchor";
 
 const escapeHtml = (value: string) =>
   value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -124,14 +125,6 @@ type RenderRequest = {
 };
 
 type ScrollSyncReason = "scroll" | "observer" | "page_effect";
-type PdfTextBoxAnchor = {
-  type: "pdf_text_box";
-  page: number;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-};
 type TextBoxDraft = {
   id: string;
   pageIndex0: number;
@@ -187,26 +180,6 @@ function shouldFallbackToOcr(strings: string[]): boolean {
   const totalChars = Array.from(joined).length;
   if (totalChars <= 0) return true;
   return suspiciousChars.length / totalChars >= SUSPICIOUS_TEXT_RATIO_THRESHOLD;
-}
-
-function parsePdfTextBoxAnchor(anchor: string): PdfTextBoxAnchor | null {
-  try {
-    const parsed = JSON.parse(anchor) as Partial<PdfTextBoxAnchor>;
-    if (!parsed || parsed.type !== "pdf_text_box") return null;
-    const values = [parsed.page, parsed.x, parsed.y, parsed.width, parsed.height];
-    if (values.some((value) => typeof value !== "number" || !Number.isFinite(value))) return null;
-    if ((parsed.width ?? 0) <= 0 || (parsed.height ?? 0) <= 0) return null;
-    return {
-      type: "pdf_text_box",
-      page: parsed.page!,
-      x: clamp(parsed.x!, 0, 1),
-      y: clamp(parsed.y!, 0, 1),
-      width: clamp(parsed.width!, 0, 1),
-      height: clamp(parsed.height!, 0, 1),
-    };
-  } catch {
-    return null;
-  }
 }
 
 export function PdfContinuousReader({

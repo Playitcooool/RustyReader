@@ -2,11 +2,7 @@
   "name": "paper-reader",
   "version": "1.0.0",
   "description": "A desktop application for reading, organizing, and researching academic papers",
-  "author": "Your Name",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/yourusername/paper-reader"
-  },
+  "author": "Codex",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -14,6 +10,7 @@
     "dev:tauri": "vite",
     "build": "tsc -b && vite build",
     "test": "vitest run",
+    "verify": "bash scripts/verify.sh",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
   },

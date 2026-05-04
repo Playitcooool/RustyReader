@@ -2,6 +2,7 @@ use std::{
     collections::HashSet,
     fs,
     io::{BufRead, BufReader, Cursor, Read, Seek},
+    mem::ManuallyDrop,
     ops::{Deref, DerefMut},
     panic,
     path::{Path, PathBuf},
@@ -278,7 +279,7 @@ pub struct LibraryService {
 }
 
 struct PooledConnection {
-    conn: Option<Connection>,
+    conn: ManuallyDrop<Connection>,
     pool: Arc<Mutex<Vec<Connection>>>,
 }
 
@@ -288,21 +289,20 @@ impl Deref for PooledConnection {
     type Target = Connection;
 
     fn deref(&self) -> &Self::Target {
-        self.conn.as_ref().expect("pooled connection missing")
+        &self.conn
     }
 }
 
 impl DerefMut for PooledConnection {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.conn.as_mut().expect("pooled connection missing")
+        &mut self.conn
     }
 }
 
 impl Drop for PooledConnection {
     fn drop(&mut self) {
-        let Some(conn) = self.conn.take() else {
-            return;
-        };
+        // SAFETY: `PooledConnection` owns `conn`, and `drop` runs once.
+        let conn = unsafe { ManuallyDrop::take(&mut self.conn) };
         let Ok(mut pool) = self.pool.lock() else {
             return;
         };
@@ -422,14 +422,13 @@ const COLLECTION_TOTAL_TEXT_LIMIT: usize = 40_000;
 const DEFAULT_AI_SESSION_TITLE: &str = "New Chat";
 const DEEPL_TEXT_LIMIT_BYTES: usize = 128 * 1024;
 
-impl Default for HttpAiTransport {
-    fn default() -> Self {
-        Self {
-            client: Client::builder()
-                .timeout(Duration::from_secs(90))
-                .build()
-                .expect("http client"),
-        }
+impl HttpAiTransport {
+    fn new() -> Result<Self> {
+        let client = Client::builder()
+            .timeout(Duration::from_secs(90))
+            .build()
+            .context("create HTTP AI client")?;
+        Ok(Self { client })
     }
 }
 
@@ -604,7 +603,7 @@ impl HttpAiTransport {
 
 impl LibraryService {
     pub fn new(root: &Path) -> Result<Self> {
-        Self::new_with_transport(root, Arc::new(HttpAiTransport::default()))
+        Self::new_with_transport(root, Arc::new(HttpAiTransport::new()?))
     }
 
     pub fn new_with_transport(root: &Path, ai_transport: Arc<dyn AiTransport>) -> Result<Self> {
@@ -2440,7 +2439,7 @@ impl LibraryService {
             .map(Ok)
             .unwrap_or_else(|| self.open_connection())?;
         Ok(PooledConnection {
-            conn: Some(conn),
+            conn: ManuallyDrop::new(conn),
             pool: self.connection_pool.clone(),
         })
     }
