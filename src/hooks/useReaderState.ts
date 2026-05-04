@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { readStoredNumber, readStoredString, type ReaderFitMode } from "../lib/appView";
 import type { AIArtifact, AITask, Annotation, AppApi, LibraryItem, ReaderView } from "../lib/contracts";
 import type { PdfHighlightColor, PdfTextSelection } from "../components/readers/pdfSelection";
+import { useAppApi } from "./useAppApi";
 
 export type WorkspaceMode = "workspace" | "pdf_focus";
 export type ActivePdfHighlight = {
@@ -37,7 +38,7 @@ export function useReaderState({
   setIsSidebarVisible: (value: React.SetStateAction<boolean>) => void;
   setStatusMessage: (value: string) => void;
 }) {
-  const getApi = useCallback(() => Promise.resolve(api), [api]);
+  const getApi = useAppApi(api);
   const readerSearchInputRef = useRef<HTMLInputElement | null>(null);
   const readerLoadRequestIdRef = useRef(0);
   const highlightActionBarRef = useRef<HTMLDivElement | null>(null);

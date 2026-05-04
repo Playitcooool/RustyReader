@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AiPanel } from "./components/app/AiPanel";
 import { DeleteConfirmDialog, type DeleteConfirmTarget } from "./components/app/DeleteConfirmDialog";
+import { ErrorBoundary } from "./components/app/ErrorBoundary";
 import { ActivePdfHighlightBar } from "./components/app/PdfHighlightBars";
 import { ReaderWorkspace } from "./components/app/ReaderWorkspace";
 import { ResourceSidebar } from "./components/app/ResourceSidebar";
@@ -484,72 +485,80 @@ export default function App({ api }: { api: AppApi }) {
       {isSidebarVisible && readerState.workspaceMode !== "pdf_focus" ? <div aria-hidden="true" className="pane-resizer" onPointerDown={(event) => startPaneResize("sidebar", event)} /> : null}
 
       <ReaderWorkspace
-        activePaper={activePaper}
-        activePaperMetadata={activePaperMetadata}
-        annotations={readerState.annotations}
-        currentReaderHtml={readerState.currentReaderHtml}
-        getPdfDocumentInfo={readerState.getPdfDocumentInfo}
-        getPdfPageBundle={readerState.getPdfPageBundle}
-        getPdfPageBundlesBatch={readerState.getPdfPageBundlesBatch}
-        getPdfPageText={readerState.getPdfPageText}
-        getPdfPageTextsBatch={readerState.getPdfPageTextsBatch}
-        pdfEngineSearch={readerState.pdfEngineSearch}
-        hasCollections={library.hasCollections}
-        isAiPanelOpen={ai.isAiPanelOpen}
-        isFindHudOpen={readerState.isFindHudOpen}
-        onActivateItem={(item, options) => readerState.activateItem(item, options)}
-        onActivePdfHighlight={readerState.handleActivatePdfHighlight}
-        onAiToggle={() => {
-          if (ai.isAiPanelOpen) {
-            closeAiPanel();
-            return;
-          }
-          ensureAiPanelReady();
+        data={{
+          activePaper,
+          activePaperMetadata,
+          annotations: readerState.annotations,
+          currentReaderHtml: readerState.currentReaderHtml,
+          hasCollections: library.hasCollections,
+          openPapers: readerState.openPapers,
+          readerView: readerState.readerView,
         }}
-        onCloseFindHud={closeFindHud}
-        onCloseTab={readerState.closePaperTab}
-        onCreatePdfFocusHighlight={readerState.handleCreatePdfFocusHighlight}
-        onExitFocus={() => { readerState.setWorkspaceMode("workspace"); setIsSidebarVisible(true); }}
-        onFindQueryChange={readerState.setReaderSearchQuery}
-        onMoveMatch={(direction) => readerState.setReaderSearchMatchIndex((current: number) => current + direction)}
-        onOcrPdfPage={readerState.ocrPdfPage}
-        onReaderFitModeChange={readerState.setReaderFitMode}
-        onReaderPageChange={readerState.setReaderPageClamped}
-        onReaderPageInputChange={readerState.setReaderPageInput}
-        onReaderPageSubmit={readerState.handleReaderPageSubmit}
-        onReaderSearchMatchesChange={({ total, activeIndex }) => { readerState.setReaderSearchMatchCount(total); readerState.setReportedActiveSearchMatchIndex(activeIndex); }}
-        onPdfZoomChange={readerState.setPdfZoomManual}
-        onStepNormalizedZoom={readerState.stepNormalizedZoom}
-        onRequestSelectionTranslation={readerState.requestSelectionTranslation}
-        onShowLibrary={() => setIsSidebarVisible(true)}
-        onSelectionChange={(selection) => {
-          readerState.setReaderSelection(selection);
-          readerState.setPdfSelection(isPdfTextSelection(selection) ? selection : null);
-          if (selection) readerState.dismissActivePdfHighlight();
+        pdfApi={{
+          getPdfDocumentInfo: readerState.getPdfDocumentInfo,
+          getPdfPageBundle: readerState.getPdfPageBundle,
+          getPdfPageBundlesBatch: readerState.getPdfPageBundlesBatch,
+          getPdfPageText: readerState.getPdfPageText,
+          getPdfPageTextsBatch: readerState.getPdfPageTextsBatch,
+          onOcrPdfPage: readerState.ocrPdfPage,
+          pdfEngineSearch: readerState.pdfEngineSearch,
         }}
-        openFindHud={readerState.openFindHud}
-        openPapers={readerState.openPapers}
-        pdfFocusHighlightBarRef={readerState.pdfFocusHighlightBarRef}
-        pdfSelection={readerState.pdfSelection}
-        readerFitMode={readerState.readerFitMode}
-        readerPage={readerState.readerPage}
-        readerPageCount={readerState.readerPageCount}
-        readerPageInput={readerState.readerPageInput}
-        readerSearchInputRef={readerState.readerSearchInputRef}
-        readerSearchMatchCount={readerState.readerSearchMatchCount}
-        readerSearchMatchIndex={readerState.readerSearchMatchIndex}
-        readerSearchQuery={readerState.readerSearchQuery}
-        readerView={readerState.readerView}
-        readerZoom={readerState.readerZoom}
-        reportedActiveSearchMatchIndex={readerState.reportedActiveSearchMatchIndex}
-        setPdfPageCount={(pageCount) => activePaper && readerState.setPdfPageCounts((current: Record<number, number>) => current[activePaper.id] === pageCount ? current : { ...current, [activePaper.id]: pageCount })}
-        textToolsEnabled={readerState.textToolsEnabled}
-        translationError={readerState.translationError}
-        translationLoading={readerState.translationLoading}
-        translationPopover={readerState.translationPopover}
-        translationSelection={readerState.translationSelection}
-        onCloseTranslationPopover={readerState.closeTranslationPopover}
-        workspaceMode={readerState.workspaceMode}
+        ui={{
+          isAiPanelOpen: ai.isAiPanelOpen,
+          isFindHudOpen: readerState.isFindHudOpen,
+          pdfFocusHighlightBarRef: readerState.pdfFocusHighlightBarRef,
+          pdfSelection: readerState.pdfSelection,
+          readerFitMode: readerState.readerFitMode,
+          readerPage: readerState.readerPage,
+          readerPageCount: readerState.readerPageCount,
+          readerPageInput: readerState.readerPageInput,
+          readerSearchInputRef: readerState.readerSearchInputRef,
+          readerSearchMatchCount: readerState.readerSearchMatchCount,
+          readerSearchMatchIndex: readerState.readerSearchMatchIndex,
+          readerSearchQuery: readerState.readerSearchQuery,
+          readerZoom: readerState.readerZoom,
+          reportedActiveSearchMatchIndex: readerState.reportedActiveSearchMatchIndex,
+          textToolsEnabled: readerState.textToolsEnabled,
+          translationError: readerState.translationError,
+          translationLoading: readerState.translationLoading,
+          translationPopover: readerState.translationPopover,
+          translationSelection: readerState.translationSelection,
+          workspaceMode: readerState.workspaceMode,
+        }}
+        actions={{
+          onActivateItem: (item, options) => readerState.activateItem(item, options),
+          onActivePdfHighlight: readerState.handleActivatePdfHighlight,
+          onAiToggle: () => {
+            if (ai.isAiPanelOpen) {
+              closeAiPanel();
+              return;
+            }
+            ensureAiPanelReady();
+          },
+          onCloseFindHud: closeFindHud,
+          onCloseTab: readerState.closePaperTab,
+          onCloseTranslationPopover: readerState.closeTranslationPopover,
+          onCreatePdfFocusHighlight: readerState.handleCreatePdfFocusHighlight,
+          onExitFocus: () => { readerState.setWorkspaceMode("workspace"); setIsSidebarVisible(true); },
+          onFindQueryChange: readerState.setReaderSearchQuery,
+          onMoveMatch: (direction) => readerState.setReaderSearchMatchIndex((current: number) => current + direction),
+          onPdfZoomChange: readerState.setPdfZoomManual,
+          onReaderFitModeChange: readerState.setReaderFitMode,
+          onReaderPageChange: readerState.setReaderPageClamped,
+          onReaderPageInputChange: readerState.setReaderPageInput,
+          onReaderPageSubmit: readerState.handleReaderPageSubmit,
+          onReaderSearchMatchesChange: ({ total, activeIndex }) => { readerState.setReaderSearchMatchCount(total); readerState.setReportedActiveSearchMatchIndex(activeIndex); },
+          onRequestSelectionTranslation: readerState.requestSelectionTranslation,
+          onSelectionChange: (selection) => {
+            readerState.setReaderSelection(selection);
+            readerState.setPdfSelection(isPdfTextSelection(selection) ? selection : null);
+            if (selection) readerState.dismissActivePdfHighlight();
+          },
+          onShowLibrary: () => setIsSidebarVisible(true),
+          onStepNormalizedZoom: readerState.stepNormalizedZoom,
+          openFindHud: readerState.openFindHud,
+          setPdfPageCount: (pageCount) => activePaper && readerState.setPdfPageCounts((current: Record<number, number>) => current[activePaper.id] === pageCount ? current : { ...current, [activePaper.id]: pageCount }),
+        }}
       />
 
       {showActivePdfHighlightBar ? <ActivePdfHighlightBar barRef={readerState.highlightActionBarRef} style={activePdfHighlightBarStyle} onRemoveHighlight={() => void readerState.handleRemoveActivePdfHighlight()} /> : null}
@@ -557,57 +566,79 @@ export default function App({ api }: { api: AppApi }) {
       {ai.isAiPanelOpen ? (
         <>
           {readerState.workspaceMode !== "pdf_focus" ? <div aria-hidden="true" className="pane-resizer" onPointerDown={(event) => startPaneResize("ai", event)} /> : null}
-          <AiPanel
-            activeAiPending={ai.activeAiPending}
-            activeAiSession={ai.activeAiSession}
-            activeAiSessionId={ai.activeAiSessionId}
-            activeNoteId={ai.activeNoteId}
-            aiChatHistoryRef={ai.aiChatHistoryRef}
-            aiComposerValue={ai.aiComposerValue}
-            aiDockOpen={ai.aiDockOpen}
-            aiPanelCanSend={ai.aiPanelCanSend}
-            aiReferenceButtonRef={ai.aiReferenceButtonRef}
-            aiReferenceCollectionIds={ai.aiReferenceCollectionIds}
-            aiReferenceItemIds={ai.aiReferenceItemIds}
-            aiReferencePickerResults={ai.aiReferencePickerResults}
-            aiReferencePopoverRef={ai.aiReferencePopoverRef}
-            aiReferenceQuery={ai.aiReferenceQuery}
-            aiReferenceSearchError={ai.aiReferenceSearchError}
-            aiReferenceSearchInputRef={ai.aiReferenceSearchInputRef}
-            aiReferenceSearchLoading={ai.aiReferenceSearchLoading}
-            aiSessionArtifact={ai.aiSessionArtifact}
-            aiSessionReferences={ai.aiSessionReferences}
-            aiSessionTaskRuns={ai.aiSessionTaskRuns}
-            aiSessionThreadRuns={ai.aiSessionThreadRuns}
-            aiSessions={ai.aiSessions}
-            areQuickActionsDisabled={ai.areQuickActionsDisabled}
-            collections={library.collections}
-            compareEnabled={ai.compareEnabled}
-            isAiPanelOpen={ai.isAiPanelOpen}
-            isAiSessionHistoryOpen={ai.isAiSessionHistoryOpen}
-            isReferencePickerOpen={ai.isReferencePickerOpen}
-            libraryItems={library.libraryItems}
-            noteDraft={ai.noteDraft}
-            notes={ai.notes}
-            onAiComposerChange={ai.setAiComposerValue}
-            onAiReferenceQueryChange={ai.setAiReferenceQuery}
-            onClosePanel={closeAiPanel}
-            onCreateResearchNote={ai.handleCreateResearchNote}
-            onCreateSession={ai.handleCreateAiSession}
-            onDeleteSession={(session) => setDeleteTarget({ kind: "ai_session", targetId: session.id, label: session.title })}
-            onExportMarkdown={ai.handleExportMarkdown}
-            onOpenSession={(sessionId) => { ai.setActiveAiSessionId(sessionId); ai.setIsAiSessionHistoryOpen(false); }}
-            onQuickAction={ai.handleQuickAction}
-            onAddReference={ai.handleAddAiReference}
-            onRemoveReference={ai.handleRemoveAiReference}
-            onSaveNoteEdits={ai.handleSaveNoteEdits}
-            onSelectNote={(note) => { ai.setActiveNoteId(note.id); ai.setNoteDraft(note.markdown); }}
-            onSendPrompt={ai.handleAiSubmit}
-            onToggleDockSection={ai.toggleAiDockSection}
-            onToggleReferencePicker={ai.toggleAiReferencePicker}
-            onToggleSessionHistory={() => ai.setIsAiSessionHistoryOpen((current: boolean) => !current)}
-            onUpdateNoteDraft={ai.setNoteDraft}
-          />
+          <ErrorBoundary
+            resetKey={ai.activeAiSessionId}
+            fallback={
+              <aside className="ai-shell" aria-label="AI panel">
+                <div className="ai-shell-header">
+                  <div className="ai-copilot-header">
+                    <div className="ai-copilot-heading">
+                      <span className="ai-copilot-title">Copilot</span>
+                      <span className="meta-count">Panel crashed</span>
+                    </div>
+                    <button className="icon-button" type="button" aria-label="Close AI panel" onClick={closeAiPanel}>
+                      ×
+                    </button>
+                  </div>
+                </div>
+                <div className="ai-empty-state" role="alert">
+                  AI panel failed to render. Close and reopen it to retry.
+                </div>
+              </aside>
+            }
+          >
+            <AiPanel
+              activeAiPending={ai.activeAiPending}
+              activeAiSession={ai.activeAiSession}
+              activeAiSessionId={ai.activeAiSessionId}
+              activeNoteId={ai.activeNoteId}
+              aiChatHistoryRef={ai.aiChatHistoryRef}
+              aiComposerValue={ai.aiComposerValue}
+              aiDockOpen={ai.aiDockOpen}
+              aiPanelCanSend={ai.aiPanelCanSend}
+              aiReferenceButtonRef={ai.aiReferenceButtonRef}
+              aiReferenceCollectionIds={ai.aiReferenceCollectionIds}
+              aiReferenceItemIds={ai.aiReferenceItemIds}
+              aiReferencePickerResults={ai.aiReferencePickerResults}
+              aiReferencePopoverRef={ai.aiReferencePopoverRef}
+              aiReferenceQuery={ai.aiReferenceQuery}
+              aiReferenceSearchError={ai.aiReferenceSearchError}
+              aiReferenceSearchInputRef={ai.aiReferenceSearchInputRef}
+              aiReferenceSearchLoading={ai.aiReferenceSearchLoading}
+              aiSessionArtifact={ai.aiSessionArtifact}
+              aiSessionReferences={ai.aiSessionReferences}
+              aiSessionTaskRuns={ai.aiSessionTaskRuns}
+              aiSessionThreadRuns={ai.aiSessionThreadRuns}
+              aiSessions={ai.aiSessions}
+              areQuickActionsDisabled={ai.areQuickActionsDisabled}
+              collections={library.collections}
+              compareEnabled={ai.compareEnabled}
+              isAiPanelOpen={ai.isAiPanelOpen}
+              isAiSessionHistoryOpen={ai.isAiSessionHistoryOpen}
+              isReferencePickerOpen={ai.isReferencePickerOpen}
+              libraryItems={library.libraryItems}
+              noteDraft={ai.noteDraft}
+              notes={ai.notes}
+              onAiComposerChange={ai.setAiComposerValue}
+              onAiReferenceQueryChange={ai.setAiReferenceQuery}
+              onClosePanel={closeAiPanel}
+              onCreateResearchNote={ai.handleCreateResearchNote}
+              onCreateSession={ai.handleCreateAiSession}
+              onDeleteSession={(session) => setDeleteTarget({ kind: "ai_session", targetId: session.id, label: session.title })}
+              onExportMarkdown={ai.handleExportMarkdown}
+              onOpenSession={(sessionId) => { ai.setActiveAiSessionId(sessionId); ai.setIsAiSessionHistoryOpen(false); }}
+              onQuickAction={ai.handleQuickAction}
+              onAddReference={ai.handleAddAiReference}
+              onRemoveReference={ai.handleRemoveAiReference}
+              onSaveNoteEdits={ai.handleSaveNoteEdits}
+              onSelectNote={(note) => { ai.setActiveNoteId(note.id); ai.setNoteDraft(note.markdown); }}
+              onSendPrompt={ai.handleAiSubmit}
+              onToggleDockSection={ai.toggleAiDockSection}
+              onToggleReferencePicker={ai.toggleAiReferencePicker}
+              onToggleSessionHistory={() => ai.setIsAiSessionHistoryOpen((current: boolean) => !current)}
+              onUpdateNoteDraft={ai.setNoteDraft}
+            />
+          </ErrorBoundary>
         </>
       ) : null}
 

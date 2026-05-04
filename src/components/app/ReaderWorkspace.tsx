@@ -7,22 +7,52 @@ import { attachmentFormatLabel, formatItemMetadata, type ReaderFitMode } from ".
 import type { LibraryItem, ReaderView, Annotation } from "../../lib/contracts";
 import type { ActivePdfHighlight, ReaderTextSelection, TranslationPopover, WorkspaceMode } from "../../hooks/useReaderState";
 import type { PdfHighlightColor, PdfTextSelection } from "../readers/pdfSelection";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type RefObject } from "react";
 
-type Props = {
+type ReaderWorkspaceData = {
   activePaper: LibraryItem | null;
   activePaperMetadata: string | null;
   annotations: Annotation[];
   currentReaderHtml: string;
+  hasCollections: boolean;
+  openPapers: LibraryItem[];
+  readerView: ReaderView | null;
+};
+
+type ReaderWorkspacePdfApi = {
   getPdfDocumentInfo: (primaryAttachmentId: number) => Promise<unknown>;
   getPdfPageBundle: (input: { primary_attachment_id: number; page_index0: number; target_width_px: number }) => Promise<unknown>;
   getPdfPageBundlesBatch: (input: { primary_attachment_id: number; page_indexes0: number[]; target_width_px: number }) => Promise<unknown>;
   getPdfPageText: (input: { primary_attachment_id: number; page_index0: number }) => Promise<unknown>;
   getPdfPageTextsBatch: (input: { primary_attachment_id: number; page_indexes0: number[] }) => Promise<unknown>;
   pdfEngineSearch: (input: { primary_attachment_id: number; query: string; max_matches?: number }) => Promise<unknown>;
-  hasCollections: boolean;
+  onOcrPdfPage: (input: { primary_attachment_id: number; page_index0: number; png_bytes: Uint8Array; lang?: string; config_version: string; source_resolution?: number }) => Promise<unknown>;
+};
+
+type ReaderWorkspaceUi = {
   isAiPanelOpen: boolean;
   isFindHudOpen: boolean;
+  pdfFocusHighlightBarRef: RefObject<HTMLDivElement>;
+  pdfSelection: PdfTextSelection | null;
+  readerFitMode: ReaderFitMode;
+  readerPage: number;
+  readerPageCount: number;
+  readerPageInput: string;
+  readerSearchInputRef: RefObject<HTMLInputElement>;
+  readerSearchMatchCount: number;
+  readerSearchMatchIndex: number;
+  readerSearchQuery: string;
+  readerZoom: number;
+  reportedActiveSearchMatchIndex: number;
+  textToolsEnabled: boolean;
+  translationError: string | null;
+  translationLoading: boolean;
+  translationPopover: TranslationPopover | null;
+  translationSelection: ReaderTextSelection | null;
+  workspaceMode: WorkspaceMode;
+};
+
+type ReaderWorkspaceActions = {
   onActivateItem: (item: LibraryItem, options?: { focusPdf?: boolean }) => void;
   onActivePdfHighlight: (highlight: ActivePdfHighlight) => void;
   onAiToggle: () => void | Promise<void>;
@@ -32,7 +62,6 @@ type Props = {
   onExitFocus: () => void;
   onFindQueryChange: (value: string) => void;
   onMoveMatch: (direction: 1 | -1, source: "button" | "enter") => void;
-  onOcrPdfPage: (input: { primary_attachment_id: number; page_index0: number; png_bytes: Uint8Array; lang?: string; config_version: string; source_resolution?: number }) => Promise<unknown>;
   onReaderFitModeChange: (mode: ReaderFitMode) => void;
   onReaderPageChange: (value: number) => void;
   onReaderPageInputChange: (value: string) => void;
@@ -45,27 +74,14 @@ type Props = {
   onSelectionChange: (selection: ReaderTextSelection | null) => void;
   onCloseTranslationPopover: () => void;
   openFindHud: () => void;
-  openPapers: LibraryItem[];
-  pdfFocusHighlightBarRef: React.RefObject<HTMLDivElement>;
-  pdfSelection: PdfTextSelection | null;
-  readerFitMode: ReaderFitMode;
-  readerPage: number;
-  readerPageCount: number;
-  readerPageInput: string;
-  readerSearchInputRef: React.RefObject<HTMLInputElement>;
-  readerSearchMatchCount: number;
-  readerSearchMatchIndex: number;
-  readerSearchQuery: string;
-  readerView: ReaderView | null;
-  readerZoom: number;
-  reportedActiveSearchMatchIndex: number;
   setPdfPageCount: (pageCount: number) => void;
-  textToolsEnabled: boolean;
-  translationError: string | null;
-  translationLoading: boolean;
-  translationPopover: TranslationPopover | null;
-  translationSelection: ReaderTextSelection | null;
-  workspaceMode: WorkspaceMode;
+};
+
+type Props = {
+  data: ReaderWorkspaceData;
+  pdfApi: ReaderWorkspacePdfApi;
+  ui: ReaderWorkspaceUi;
+  actions: ReaderWorkspaceActions;
 };
 
 export function ReaderWorkspace(props: Props) {
@@ -74,14 +90,42 @@ export function ReaderWorkspace(props: Props) {
     activePaperMetadata,
     annotations,
     currentReaderHtml,
+    hasCollections,
+    openPapers,
+    readerView,
+  } = props.data;
+  const {
     getPdfDocumentInfo,
     getPdfPageBundle,
     getPdfPageBundlesBatch,
     getPdfPageText,
     getPdfPageTextsBatch,
-    hasCollections,
+    onOcrPdfPage,
+    pdfEngineSearch,
+  } = props.pdfApi;
+  const {
     isAiPanelOpen,
     isFindHudOpen,
+    pdfFocusHighlightBarRef,
+    pdfSelection,
+    readerFitMode,
+    readerPage,
+    readerPageCount,
+    readerPageInput,
+    readerSearchInputRef,
+    readerSearchMatchCount,
+    readerSearchMatchIndex,
+    readerSearchQuery,
+    readerZoom,
+    reportedActiveSearchMatchIndex,
+    textToolsEnabled,
+    translationError,
+    translationLoading,
+    translationPopover,
+    translationSelection,
+    workspaceMode,
+  } = props.ui;
+  const {
     onActivateItem,
     onActivePdfHighlight,
     onAiToggle,
@@ -91,7 +135,6 @@ export function ReaderWorkspace(props: Props) {
     onExitFocus,
     onFindQueryChange,
     onMoveMatch,
-    onOcrPdfPage,
     onReaderFitModeChange,
     onReaderPageChange,
     onReaderPageInputChange,
@@ -104,29 +147,8 @@ export function ReaderWorkspace(props: Props) {
     onSelectionChange,
     onCloseTranslationPopover,
     openFindHud,
-    openPapers,
-    pdfFocusHighlightBarRef,
-    pdfSelection,
-    readerFitMode,
-    readerPage,
-    readerPageCount,
-    readerPageInput,
-    readerSearchInputRef,
-    readerSearchMatchCount,
-    readerSearchMatchIndex,
-    readerSearchQuery,
-    readerView,
-    readerZoom,
-    reportedActiveSearchMatchIndex,
     setPdfPageCount,
-    textToolsEnabled,
-    translationError,
-    translationLoading,
-    translationPopover,
-    translationSelection,
-    workspaceMode,
-    pdfEngineSearch,
-  } = props;
+  } = props.actions;
   const [readerContextMenu, setReaderContextMenu] = useState<{ x: number; y: number } | null>(null);
 
   const showPdfFocusHighlightBar = Boolean(workspaceMode === "pdf_focus" && activePaper?.attachment_format === "pdf" && pdfSelection);

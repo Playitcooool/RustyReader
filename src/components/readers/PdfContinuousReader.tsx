@@ -29,7 +29,7 @@ const escapeHtml = (value: string) =>
   value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 const blobFromBytes = (bytes: Uint8Array, type: string) =>
-  new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)], { type });
+  new Blob([bytes.slice()], { type });
 
 const widthBucket = (widthPx: number) => Math.max(1, Math.ceil(widthPx / 64) * 64);
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));

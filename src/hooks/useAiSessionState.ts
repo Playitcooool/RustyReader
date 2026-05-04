@@ -20,6 +20,7 @@ import type {
   LibraryItem,
   ResearchNote,
 } from "../lib/contracts";
+import { useAppApi } from "./useAppApi";
 
 export type AiDockSection = "artifacts" | "history" | "notes";
 
@@ -67,7 +68,7 @@ export function useAiSessionState({
   openPapers: LibraryItem[];
   setStatusMessage: (value: string) => void;
 }) {
-  const getApi = useCallback(() => Promise.resolve(api), [api]);
+  const getApi = useAppApi(api);
   const [aiSessions, setAiSessions] = useState<AISession[]>([]);
   const [activeAiSessionId, setActiveAiSessionId] = useState<number | null>(null);
   const [aiSessionReferences, setAiSessionReferences] = useState<AISessionReference[]>([]);

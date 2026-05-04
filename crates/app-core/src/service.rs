@@ -2,9 +2,10 @@ use std::{
     collections::HashSet,
     fs,
     io::{BufRead, BufReader, Cursor, Read, Seek},
+    ops::{Deref, DerefMut},
     panic,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 
@@ -273,6 +274,42 @@ pub struct LibraryService {
     db_path: PathBuf,
     files_dir: PathBuf,
     ai_transport: Arc<dyn AiTransport>,
+    connection_pool: Arc<Mutex<Vec<Connection>>>,
+}
+
+struct PooledConnection {
+    conn: Option<Connection>,
+    pool: Arc<Mutex<Vec<Connection>>>,
+}
+
+const SQLITE_CONNECTION_POOL_LIMIT: usize = 8;
+
+impl Deref for PooledConnection {
+    type Target = Connection;
+
+    fn deref(&self) -> &Self::Target {
+        self.conn.as_ref().expect("pooled connection missing")
+    }
+}
+
+impl DerefMut for PooledConnection {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.conn.as_mut().expect("pooled connection missing")
+    }
+}
+
+impl Drop for PooledConnection {
+    fn drop(&mut self) {
+        let Some(conn) = self.conn.take() else {
+            return;
+        };
+        let Ok(mut pool) = self.pool.lock() else {
+            return;
+        };
+        if pool.len() < SQLITE_CONNECTION_POOL_LIMIT {
+            pool.push(conn);
+        }
+    }
 }
 
 pub trait AiTransport: Send + Sync {
@@ -583,6 +620,7 @@ impl LibraryService {
             db_path,
             files_dir,
             ai_transport,
+            connection_pool: Arc::new(Mutex::new(Vec::new())),
         };
         service.migrate()?;
         Ok(service)
@@ -2393,7 +2431,21 @@ impl LibraryService {
         Ok(())
     }
 
-    fn connect(&self) -> Result<Connection> {
+    fn connect(&self) -> Result<PooledConnection> {
+        let conn = self
+            .connection_pool
+            .lock()
+            .ok()
+            .and_then(|mut pool| pool.pop())
+            .map(Ok)
+            .unwrap_or_else(|| self.open_connection())?;
+        Ok(PooledConnection {
+            conn: Some(conn),
+            pool: self.connection_pool.clone(),
+        })
+    }
+
+    fn open_connection(&self) -> Result<Connection> {
         let conn = Connection::open(&self.db_path)?;
         // Background repair tasks can overlap with UI reads; tolerate short-lived locks.
         conn.busy_timeout(Duration::from_secs(5))?;
@@ -2535,6 +2587,24 @@ impl LibraryService {
                 title,
                 plain_text
             );
+
+            CREATE INDEX IF NOT EXISTS idx_collections_parent_id ON collections(parent_id);
+            CREATE INDEX IF NOT EXISTS idx_items_collection_id ON items(collection_id);
+            CREATE INDEX IF NOT EXISTS idx_attachments_item_primary ON attachments(item_id, is_primary);
+            CREATE INDEX IF NOT EXISTS idx_item_tags_tag_id ON item_tags(tag_id);
+            CREATE INDEX IF NOT EXISTS idx_extracted_content_item_id ON extracted_content(item_id);
+            CREATE INDEX IF NOT EXISTS idx_annotations_item_id ON annotations(item_id);
+            CREATE INDEX IF NOT EXISTS idx_ai_tasks_session_id ON ai_tasks(session_id);
+            CREATE INDEX IF NOT EXISTS idx_ai_tasks_item_collection ON ai_tasks(item_id, collection_id);
+            CREATE INDEX IF NOT EXISTS idx_ai_tasks_collection_item ON ai_tasks(collection_id, item_id);
+            CREATE INDEX IF NOT EXISTS idx_ai_artifacts_session_id ON ai_artifacts(session_id);
+            CREATE INDEX IF NOT EXISTS idx_ai_artifacts_item_collection ON ai_artifacts(item_id, collection_id);
+            CREATE INDEX IF NOT EXISTS idx_ai_artifacts_collection_item ON ai_artifacts(collection_id, item_id);
+            CREATE INDEX IF NOT EXISTS idx_ai_artifacts_task_id ON ai_artifacts(task_id);
+            CREATE INDEX IF NOT EXISTS idx_ai_session_references_session_sort ON ai_session_references(session_id, sort_index);
+            CREATE INDEX IF NOT EXISTS idx_ai_session_references_target ON ai_session_references(kind, target_id);
+            CREATE INDEX IF NOT EXISTS idx_research_notes_collection_id ON research_notes(collection_id);
+            CREATE INDEX IF NOT EXISTS idx_research_notes_session_id ON research_notes(session_id);
             ",
         )?;
         ensure_column(&conn, "items", "authors", "TEXT NOT NULL DEFAULT ''")?;
@@ -2987,11 +3057,18 @@ fn prune_scope_item_ids_column(
     let mut updates = Vec::new();
     for row in rows {
         let (id, raw_scope) = row?;
+        if !scope_item_ids_may_contain_removed_id(&raw_scope, removed_item_ids) {
+            continue;
+        }
         let scope_item_ids: Vec<i64> = serde_json::from_str(&raw_scope)?;
         let next_scope_item_ids = scope_item_ids
-            .into_iter()
+            .iter()
+            .copied()
             .filter(|item_id| !removed_item_ids.contains(item_id))
             .collect::<Vec<_>>();
+        if next_scope_item_ids.len() == scope_item_ids.len() {
+            continue;
+        }
         let next_scope_raw = if next_scope_item_ids.is_empty() {
             None
         } else {
@@ -3005,6 +3082,15 @@ fn prune_scope_item_ids_column(
         conn.execute(&update_sql, params![raw_scope, id])?;
     }
     Ok(())
+}
+
+fn scope_item_ids_may_contain_removed_id(raw_scope: &str, removed_item_ids: &HashSet<i64>) -> bool {
+    removed_item_ids.iter().any(|removed| {
+        let needle = removed.to_string();
+        raw_scope
+            .split(|ch: char| !ch.is_ascii_digit() && ch != '-')
+            .any(|part| part == needle)
+    })
 }
 
 fn child_collections_for_conn(

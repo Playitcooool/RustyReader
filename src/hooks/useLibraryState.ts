@@ -17,6 +17,7 @@ import {
 } from "../lib/appView";
 import { isTauriRuntime } from "../lib/api";
 import type { AppApi, Collection, ImportBatchResult, LibraryItem, Tag } from "../lib/contracts";
+import { useAppApi } from "./useAppApi";
 
 export type ResourceContextMenuState =
   | { x: number; y: number; kind: "collection" | "item"; targetId: number }
@@ -36,7 +37,7 @@ export function useLibraryState({
   onActivateItem: (item: LibraryItem, options?: { focusPdf?: boolean }) => void;
   setStatusMessage: (value: string) => void;
 }) {
-  const getApi = useCallback(() => Promise.resolve(api), [api]);
+  const getApi = useAppApi(api);
   const importDocumentsRef = useRef<() => void>(() => {});
   const importCitationsRef = useRef<() => void>(() => {});
   const importPathsRef = useRef<(paths: string[], sourceLabel: string) => void>(() => {});

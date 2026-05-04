@@ -161,6 +161,9 @@ describe("PdfContinuousReader", () => {
     const getPdfPageBundle = vi.fn().mockImplementation(async ({ page_index0 }: { page_index0: number }) =>
       makeBundle(`Page ${page_index0 + 1}`),
     );
+    const getPdfPageBundlesBatch = vi.fn().mockImplementation(async ({ page_indexes0 }: { page_indexes0: number[] }) =>
+      page_indexes0.map((pageIndex0) => makeBundle(`Page ${pageIndex0 + 1}`)),
+    );
     const getPdfDocumentInfo = vi.fn().mockResolvedValue(makeDocumentInfo(20));
     const getPdfPageText = vi.fn().mockResolvedValue({ page_index0: 0, spans: [] });
     const ocrPdfPage = vi.fn().mockResolvedValue({
@@ -175,6 +178,7 @@ describe("PdfContinuousReader", () => {
       <PdfContinuousReader
         getPdfDocumentInfo={getPdfDocumentInfo}
         getPdfPageBundle={getPdfPageBundle}
+        getPdfPageBundlesBatch={getPdfPageBundlesBatch}
         getPdfPageText={getPdfPageText}
         ocrPdfPage={ocrPdfPage}
         page={0}
@@ -191,6 +195,7 @@ describe("PdfContinuousReader", () => {
       <PdfContinuousReader
         getPdfDocumentInfo={getPdfDocumentInfo}
         getPdfPageBundle={getPdfPageBundle}
+        getPdfPageBundlesBatch={getPdfPageBundlesBatch}
         getPdfPageText={getPdfPageText}
         ocrPdfPage={ocrPdfPage}
         page={10}
@@ -200,8 +205,14 @@ describe("PdfContinuousReader", () => {
     );
 
     await waitFor(() => {
-      expect(getPdfPageBundle.mock.calls.length).toBeLessThanOrEqual(9);
-      expect(getPdfPageBundle.mock.calls.length).toBeGreaterThanOrEqual(5);
+      const requestedPages =
+        getPdfPageBundle.mock.calls.length +
+        getPdfPageBundlesBatch.mock.calls.reduce((total, call) => {
+          const input = call[0] as { page_indexes0?: number[] } | undefined;
+          return total + (input?.page_indexes0?.length ?? 0);
+        }, 0);
+      expect(requestedPages).toBeLessThanOrEqual(12);
+      expect(requestedPages).toBeGreaterThanOrEqual(5);
     });
   });
 

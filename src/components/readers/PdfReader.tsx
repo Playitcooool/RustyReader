@@ -23,7 +23,7 @@ const escapeHtml = (value: string) =>
   value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 const blobFromBytes = (bytes: Uint8Array, type: string) =>
-  new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)], { type });
+  new Blob([bytes.slice()], { type });
 
 type PdfReaderProps = {
   view: ReaderView;

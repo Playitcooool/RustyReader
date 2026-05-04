@@ -18,7 +18,7 @@ use ai_stream::emit_ai_task_stream;
 use ai_stream::split_markdown_chunks;
 use pdf_engine::PdfEngineCache;
 use serde::Deserialize;
-use state::{root_dir, service, service_for_root, AppState};
+use state::{root_dir, service, AppState};
 use tauri::{AppHandle, Manager, State};
 #[derive(Deserialize)]
 struct CreateCollectionInput {
@@ -96,7 +96,7 @@ mod tests {
 
 #[tauri::command]
 fn list_collections(state: State<'_, AppState>) -> Result<Vec<Collection>, String> {
-    service(&state)?
+    service(&state)
         .list_collections()
         .map_err(|error| error.to_string())
 }
@@ -106,14 +106,14 @@ fn create_collection(
     state: State<'_, AppState>,
     input: CreateCollectionInput,
 ) -> Result<Collection, String> {
-    service(&state)?
+    service(&state)
         .create_collection(&input.name, input.parent_id)
         .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
 fn move_collection(state: State<'_, AppState>, input: MoveCollectionInput) -> Result<(), String> {
-    service(&state)?
+    service(&state)
         .move_collection(input.collection_id, input.parent_id)
         .map_err(|error| error.to_string())
 }
@@ -123,7 +123,7 @@ fn rename_collection(
     state: State<'_, AppState>,
     input: RenameCollectionInput,
 ) -> Result<(), String> {
-    service(&state)?
+    service(&state)
         .rename_collection(input.collection_id, &input.name)
         .map_err(|error| error.to_string())
 }
@@ -133,22 +133,20 @@ fn remove_collection(
     state: State<'_, AppState>,
     input: RemoveCollectionInput,
 ) -> Result<(), String> {
-    service(&state)?
+    service(&state)
         .remove_collection(input.collection_id)
         .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
 fn get_reader_view(state: State<'_, AppState>, item_id: i64) -> Result<ReaderView, String> {
-    let svc = service(&state)?;
+    let svc = service(&state);
     let view = svc
         .get_reader_view(item_id)
         .map_err(|error| error.to_string())?;
-    let library_root = state.library_root.clone();
+    let repair_service = state.library_service.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        if let Ok(service) = LibraryService::new(&library_root) {
-            let _ = service.repair_item_content_if_needed(item_id);
-        }
+        let _ = repair_service.repair_item_content_if_needed(item_id);
     });
     Ok(view)
 }
@@ -158,7 +156,7 @@ fn read_primary_attachment_bytes(
     state: State<'_, AppState>,
     primary_attachment_id: i64,
 ) -> Result<tauri::ipc::Response, String> {
-    let bytes = service(&state)?
+    let bytes = service(&state)
         .read_primary_attachment_bytes(primary_attachment_id)
         .map_err(|error| error.to_string())?;
     Ok(tauri::ipc::Response::new(bytes))
@@ -170,7 +168,7 @@ fn run_item_task(
     state: State<'_, AppState>,
     input: RunItemTaskInput,
 ) -> Result<(), String> {
-    let library_root = state.library_root.clone();
+    let service = state.library_service.clone();
     match input.kind.as_str() {
         "item.summarize" | "item.translate" | "item.explain_term" | "item.ask" => {
             if let Some(stream_id) = input.stream_id.as_deref() {
@@ -192,30 +190,6 @@ fn run_item_task(
                 );
             }
             tauri::async_runtime::spawn_blocking(move || {
-                let service = match service_for_root(&library_root) {
-                    Ok(service) => service,
-                    Err(error) => {
-                        if let Some(stream_id) = input.stream_id.as_deref() {
-                            emit_ai_task_stream(
-                                &app_handle,
-                                stream_id,
-                                "paper",
-                                None,
-                                Some(input.item_id),
-                                None,
-                                None,
-                                &input.kind,
-                                "failed",
-                                None,
-                                input.prompt.clone(),
-                                None,
-                                None,
-                                Some(error),
-                            );
-                        }
-                        return;
-                    }
-                };
                 let mut streamed = String::new();
                 let result = service.run_item_task_with_stream(
                     input.item_id,
@@ -319,7 +293,7 @@ fn run_collection_task(
     state: State<'_, AppState>,
     input: RunCollectionTaskInput,
 ) -> Result<(), String> {
-    let library_root = state.library_root.clone();
+    let service = state.library_service.clone();
     match input.kind.as_str() {
         "collection.review_draft"
         | "collection.bulk_summarize"
@@ -345,30 +319,6 @@ fn run_collection_task(
                 );
             }
             tauri::async_runtime::spawn_blocking(move || {
-                let service = match service_for_root(&library_root) {
-                    Ok(service) => service,
-                    Err(error) => {
-                        if let Some(stream_id) = input.stream_id.as_deref() {
-                            emit_ai_task_stream(
-                                &app_handle,
-                                stream_id,
-                                "collection",
-                                None,
-                                None,
-                                Some(input.collection_id),
-                                Some(input.scope_item_ids.clone()),
-                                &input.kind,
-                                "failed",
-                                None,
-                                input.prompt.clone(),
-                                None,
-                                None,
-                                Some(error),
-                            );
-                        }
-                        return;
-                    }
-                };
                 let result = service.run_collection_task_with_stream(
                     input.collection_id,
                     &input.kind,
@@ -471,7 +421,7 @@ fn run_ai_session_task(
     state: State<'_, AppState>,
     input: RunAiSessionTaskInput,
 ) -> Result<(), String> {
-    let library_root = state.library_root.clone();
+    let service = state.library_service.clone();
     if let Some(stream_id) = input.stream_id.as_deref() {
         emit_ai_task_stream(
             &app_handle,
@@ -498,30 +448,6 @@ fn run_ai_session_task(
         | "session.review_draft"
         | "session.ask" => {
             tauri::async_runtime::spawn_blocking(move || {
-                let service = match service_for_root(&library_root) {
-                    Ok(service) => service,
-                    Err(error) => {
-                        if let Some(stream_id) = input.stream_id.as_deref() {
-                            emit_ai_task_stream(
-                                &app_handle,
-                                stream_id,
-                                "session",
-                                Some(input.session_id),
-                                None,
-                                None,
-                                None,
-                                &input.kind,
-                                "failed",
-                                None,
-                                input.prompt.clone(),
-                                None,
-                                None,
-                                Some(error),
-                            );
-                        }
-                        return;
-                    }
-                };
                 let result = service.run_ai_session_task_with_stream(
                     input.session_id,
                     &input.kind,
@@ -624,8 +550,13 @@ fn main() {
         .setup(|app| {
             let library_root = root_dir(app.handle());
             fs::create_dir_all(&library_root)?;
+            let library_service = Arc::new(
+                LibraryService::new(&library_root)
+                    .map_err(|error| tauri::Error::Anyhow(error.into()))?,
+            );
             app.manage(AppState {
                 library_root,
+                library_service,
                 pdf_cache: Arc::new(Mutex::new(PdfEngineCache::default())),
                 export_authorizations: Arc::new(Mutex::new(HashMap::new())),
             });
