@@ -685,7 +685,10 @@ fn main() {
             ocr::ocr_pdf_page,
             pdf_engine::pdf_engine_get_document_info,
             pdf_engine::pdf_engine_get_page_bundle,
+            pdf_engine::pdf_engine_get_page_bundles_batch,
             pdf_engine::pdf_engine_get_page_text,
+            pdf_engine::pdf_engine_get_page_texts_batch,
+            pdf_engine::pdf_engine_search,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run paper-reader desktop app");

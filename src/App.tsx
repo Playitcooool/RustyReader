@@ -490,7 +490,10 @@ export default function App({ api }: { api: AppApi }) {
         currentReaderHtml={readerState.currentReaderHtml}
         getPdfDocumentInfo={readerState.getPdfDocumentInfo}
         getPdfPageBundle={readerState.getPdfPageBundle}
+        getPdfPageBundlesBatch={readerState.getPdfPageBundlesBatch}
         getPdfPageText={readerState.getPdfPageText}
+        getPdfPageTextsBatch={readerState.getPdfPageTextsBatch}
+        pdfEngineSearch={readerState.pdfEngineSearch}
         hasCollections={library.hasCollections}
         isAiPanelOpen={ai.isAiPanelOpen}
         isFindHudOpen={readerState.isFindHudOpen}

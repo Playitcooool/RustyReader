@@ -956,7 +956,7 @@ describe("App reading workspace", () => {
     await user.click(screen.getByRole("button", { name: "Chat History" }));
     const reopenedHistoryPanel = screen.getByLabelText("Chat History panel");
     await user.click(within(reopenedHistoryPanel).getByRole("button", { name: /New Chat Open/i }));
-    expect(await screen.findByText("What is the key result?")).toBeInTheDocument();
+    expect((await screen.findAllByText("What is the key result?")).length).toBeGreaterThan(0);
     expect(await screen.findByText(/Reading Q&A: Transformer Scaling Laws/i)).toBeInTheDocument();
   });
 

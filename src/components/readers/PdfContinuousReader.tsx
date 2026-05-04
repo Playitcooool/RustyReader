@@ -6,6 +6,8 @@ import type {
   OcrPdfPageInput,
   PdfDocumentInfo,
   PdfEngineGetPageBundleInput,
+  PdfSearchMatch,
+  PdfSearchResult,
   PdfPageText,
   ReaderView,
 } from "../../lib/contracts";
@@ -26,11 +28,8 @@ import { buildRustPdfTextLayer, pageWidthAtScale1FromPoints } from "./pdfRustTex
 const escapeHtml = (value: string) =>
   value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-const arrayBufferForBytes = (bytes: Uint8Array) => {
-  const copy = new Uint8Array(bytes.byteLength);
-  copy.set(bytes);
-  return copy.buffer;
-};
+const blobFromBytes = (bytes: Uint8Array, type: string) =>
+  new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)], { type });
 
 const widthBucket = (widthPx: number) => Math.max(1, Math.ceil(widthPx / 64) * 64);
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -60,6 +59,16 @@ type PdfContinuousReaderProps = {
     spans: Array<{ text: string; x0: number; y0: number; x1: number; y1: number }>;
   }>;
   getPdfPageText: (input: { primary_attachment_id: number; page_index0: number }) => Promise<PdfPageText>;
+  getPdfPageBundlesBatch?: (input: { primary_attachment_id: number; page_indexes0: number[]; target_width_px: number }) => Promise<Array<{
+    png_bytes: Uint8Array;
+    width_px: number;
+    height_px: number;
+    page_width_pt: number;
+    page_height_pt: number;
+    spans: Array<{ text: string; x0: number; y0: number; x1: number; y1: number }>;
+  }>>;
+  getPdfPageTextsBatch?: (input: { primary_attachment_id: number; page_indexes0: number[] }) => Promise<PdfPageText[]>;
+  pdfEngineSearch?: (input: { primary_attachment_id: number; query: string; max_matches?: number }) => Promise<PdfSearchResult>;
   ocrPdfPage: (input: OcrPdfPageInput) => Promise<{
     primary_attachment_id: number;
     page_index0: number;
@@ -171,7 +180,10 @@ export function PdfContinuousReader({
   fitMode = "fit_width",
   getPdfDocumentInfo,
   getPdfPageBundle,
+  getPdfPageBundlesBatch,
   getPdfPageText,
+  getPdfPageTextsBatch,
+  pdfEngineSearch,
   ocrPdfPage,
   onPageCountChange,
   onActivePageChange,
@@ -193,6 +205,7 @@ export function PdfContinuousReader({
   const imageUrlsByIndexRef = useRef(new Map<number, string>());
   const inFlightRenderPagesRef = useRef(new Set<number>());
   const inFlightRenderKeysRef = useRef(new Set<string>());
+  const latestRequestKeyByPageRef = useRef(new Map<number, string>());
   const inFlightOcrPagesRef = useRef(new Set<number>());
   const pagesRef = useRef<Record<number, RenderedPageState>>({});
   const dominantPageIndexRef = useRef(0);
@@ -215,6 +228,7 @@ export function PdfContinuousReader({
   const [textLayerEpoch, setTextLayerEpoch] = useState(0);
   const [dominantPageIndex, setDominantPageIndex] = useState(0);
   const [visiblePageIndexes, setVisiblePageIndexes] = useState<number[]>([]);
+  const [searchMatchesFromRust, setSearchMatchesFromRust] = useState<PdfSearchMatch[]>([]);
 
   const onPageCountChangeRef = useRef(onPageCountChange);
   const onActivePageChangeRef = useRef(onActivePageChange);
@@ -438,23 +452,34 @@ export function PdfContinuousReader({
 
   const searchMatches = useMemo(() => {
     if (!textEnabled || loweredSearch.length === 0) return [];
-    const matches: Array<{ pageIndex: number; divIndex: number; start: number; end: number }> = [];
-    for (const [pageIndexText, divStrings] of Object.entries(pageTextByIndex)) {
-      const pageIndex = Number(pageIndexText);
-      for (let divIndex = 0; divIndex < divStrings.length; divIndex += 1) {
-        const text = divStrings[divIndex] ?? "";
-        const lowered = text.toLowerCase();
-        let cursor = 0;
-        while (cursor < lowered.length) {
-          const index = lowered.indexOf(loweredSearch, cursor);
-          if (index === -1) break;
-          matches.push({ pageIndex, divIndex, start: index, end: index + loweredSearch.length });
-          cursor = index + Math.max(1, loweredSearch.length);
+    if (!pdfEngineSearch) {
+      const matches: Array<{ pageIndex: number; divIndex: number; start: number; end: number }> = [];
+      for (const [pageIndexText, divStrings] of Object.entries(pageTextByIndex)) {
+        const pageIndex = Number(pageIndexText);
+        for (let divIndex = 0; divIndex < divStrings.length; divIndex += 1) {
+          const text = divStrings[divIndex] ?? "";
+          const lowered = text.toLowerCase();
+          let cursor = 0;
+          while (cursor < lowered.length) {
+            const index = lowered.indexOf(loweredSearch, cursor);
+            if (index === -1) break;
+            matches.push({ pageIndex, divIndex, start: index, end: index + loweredSearch.length });
+            cursor = index + Math.max(1, loweredSearch.length);
+          }
         }
       }
+      return matches;
     }
-    return matches;
-  }, [loweredSearch, pageTextByIndex, textEnabled, textLayerEpoch]);
+
+    // Rust returns match coordinates relative to the span text, not the DOM divs.
+    // We map 1:1 spans -> divs in `buildRustPdfTextLayer`, so span_index is the div index.
+    return searchMatchesFromRust.map((match) => ({
+      pageIndex: match.page_index0,
+      divIndex: match.span_index,
+      start: match.start,
+      end: match.end,
+    }));
+  }, [loweredSearch, pdfEngineSearch, pageTextByIndex, searchMatchesFromRust, textEnabled, textLayerEpoch]);
 
   const activeSearchTargetPage = useMemo(() => {
     if (searchMatches.length === 0) return null;
@@ -545,6 +570,7 @@ export function PdfContinuousReader({
       if (existing && existing.requestKey === request.requestKey) return;
       if (inFlightRenderKeysRef.current.has(request.requestKey)) return;
       if (inFlightRenderPagesRef.current.has(request.pageIndex0) && request.priority === "idle") return;
+      latestRequestKeyByPageRef.current.set(request.pageIndex0, request.requestKey);
       inFlightRenderPagesRef.current.add(request.pageIndex0);
       inFlightRenderKeysRef.current.add(request.requestKey);
       try {
@@ -558,11 +584,10 @@ export function PdfContinuousReader({
           target_width_px: request.targetRasterWidthPx,
         });
         if (cancelled) return;
+        if (latestRequestKeyByPageRef.current.get(request.pageIndex0) !== request.requestKey) return;
 
         const previousUrl = imageUrlsByIndexRef.current.get(request.pageIndex0);
-        const blobUrl = URL.createObjectURL(
-          new Blob([arrayBufferForBytes(bundle.png_bytes)], { type: "image/png" }),
-        );
+        const blobUrl = URL.createObjectURL(blobFromBytes(bundle.png_bytes, "image/png"));
         if (previousUrl) URL.revokeObjectURL(previousUrl);
         imageUrlsByIndexRef.current.set(request.pageIndex0, blobUrl);
 
@@ -655,25 +680,160 @@ export function PdfContinuousReader({
       }
     };
 
+    const applyBundleToPage = (request: RenderRequest, bundle: Awaited<ReturnType<typeof getPdfPageBundle>>) => {
+      if (cancelled) return;
+      if (latestRequestKeyByPageRef.current.get(request.pageIndex0) !== request.requestKey) {
+        // Avoid leaking object URLs for stale results.
+        const url = URL.createObjectURL(blobFromBytes(bundle.png_bytes, "image/png"));
+        URL.revokeObjectURL(url);
+        return;
+      }
+
+      const previousUrl = imageUrlsByIndexRef.current.get(request.pageIndex0);
+      const blobUrl = URL.createObjectURL(blobFromBytes(bundle.png_bytes, "image/png"));
+      if (previousUrl) URL.revokeObjectURL(previousUrl);
+      imageUrlsByIndexRef.current.set(request.pageIndex0, blobUrl);
+
+      const nextRenderedState: RenderedPageState = {
+        imageUrl: blobUrl,
+        cssWidthPx: request.cssWidthPx,
+        cssHeightPx: request.cssHeightPx,
+        rasterWidthPx: bundle.width_px,
+        rasterHeightPx: bundle.height_px,
+        rasterScale: request.rasterScale,
+        bucketWidthPx: request.bucketWidthPx,
+        requestKey: request.requestKey,
+        textSource: pickPageTextSource(bundle.spans.map((span) => span.text ?? "")),
+      };
+      pagesRef.current = {
+        ...pagesRef.current,
+        [request.pageIndex0]: nextRenderedState,
+      };
+      setPages((current) => ({
+        ...current,
+        [request.pageIndex0]: nextRenderedState,
+      }));
+      if (!pageWidthAtScale1 && bundle.page_width_pt > 0) {
+        setPageWidthAtScale1(pageWidthAtScale1FromPoints(bundle.page_width_pt));
+      }
+
+      const currentHost = textLayerHostByIndexRef.current.get(request.pageIndex0);
+      if (!currentHost) return;
+      const nativeLayer = buildRustPdfTextLayer({
+        host: currentHost,
+        bundle,
+        renderedWidthCssPx: request.cssWidthPx,
+        renderedHeightCssPx: request.cssHeightPx,
+      });
+      setTextLayerForPage({
+        pageIndex0: request.pageIndex0,
+        divs: nativeLayer.divs,
+        strings: nativeLayer.strings,
+        textSource: pickPageTextSource(nativeLayer.strings),
+      });
+      if (request.pageIndex0 === page) setStatus("ready");
+    };
+
+    const processBatch = async (batch: RenderRequest[]) => {
+      if (batch.length === 0) return;
+      const targetWidth = batch[0]!.targetRasterWidthPx;
+      const uniquePages = Array.from(new Set(batch.map((r) => r.pageIndex0)));
+      for (const request of batch) {
+        latestRequestKeyByPageRef.current.set(request.pageIndex0, request.requestKey);
+        inFlightRenderPagesRef.current.add(request.pageIndex0);
+        inFlightRenderKeysRef.current.add(request.requestKey);
+        const host = textLayerHostByIndexRef.current.get(request.pageIndex0);
+        if (host) clearChildren(host);
+      }
+
+      try {
+        const bundles = getPdfPageBundlesBatch
+          ? await getPdfPageBundlesBatch({
+              primary_attachment_id: primaryAttachmentId,
+              page_indexes0: uniquePages,
+              target_width_px: targetWidth,
+            })
+          : await Promise.all(
+              uniquePages.map((page_index0) =>
+                getPdfPageBundle({
+                  primary_attachment_id: primaryAttachmentId,
+                  page_index0,
+                  target_width_px: targetWidth,
+                }),
+              ),
+            );
+        if (cancelled) return;
+        for (let i = 0; i < uniquePages.length; i += 1) {
+          const pageIndex0 = uniquePages[i]!;
+          const request = batch.find((r) => r.pageIndex0 === pageIndex0);
+          const bundle = bundles[i];
+          if (!request || !bundle) continue;
+          applyBundleToPage(request, bundle as never);
+        }
+      } catch (error) {
+        if (cancelled) return;
+        setStatus("error");
+        setErrorMessage(error instanceof Error ? error.message : "Unknown PDF rendering error.");
+      } finally {
+        for (const request of batch) {
+          inFlightRenderPagesRef.current.delete(request.pageIndex0);
+          inFlightRenderKeysRef.current.delete(request.requestKey);
+        }
+      }
+    };
+
+    const MAX_FRONTEND_RENDER_INFLIGHT = 2;
+    const chunk = <T,>(items: T[], size: number) => {
+      const out: T[][] = [];
+      for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+      return out;
+    };
+
+    const runBatches = (requests: RenderRequest[]) => {
+      const groups = new Map<string, RenderRequest[]>();
+      for (const req of requests) {
+        const key = String(req.targetRasterWidthPx);
+        const existing = groups.get(key) ?? [];
+        existing.push(req);
+        groups.set(key, existing);
+      }
+      const allBatches: RenderRequest[][] = [];
+      for (const group of groups.values()) {
+        group.sort((a, b) => Math.abs(a.pageIndex0 - page) - Math.abs(b.pageIndex0 - page));
+        allBatches.push(...chunk(group, 4));
+      }
+
+      let cursor = 0;
+      let inflight = 0;
+      const pump = () => {
+        if (cancelled) return;
+        while (inflight < MAX_FRONTEND_RENDER_INFLIGHT && cursor < allBatches.length) {
+          const nextBatch = allBatches[cursor++]!;
+          inflight += 1;
+          void (async () => {
+            await processBatch(nextBatch);
+          })().finally(() => {
+            inflight -= 1;
+            pump();
+          });
+        }
+      };
+      pump();
+    };
+
     const immediateRequests = renderRequests.filter((request) => request.priority === "immediate");
     const idleRequests = renderRequests.filter((request) => request.priority === "idle");
 
-    void (async () => {
-      for (const request of immediateRequests) {
-        await processRequest(request);
-        if (cancelled) return;
-      }
-      if (idleRequests.length === 0 || cancelled) return;
+    // Current page always rendered via the single-page API to minimize time-to-first-paint.
+    const currentPageImmediate = immediateRequests.find((r) => r.pageIndex0 === page);
+    if (currentPageImmediate) void processRequest(currentPageImmediate);
+    const otherImmediate = immediateRequests.filter((r) => r.pageIndex0 !== page);
+    runBatches(otherImmediate);
+
+    if (idleRequests.length > 0) {
       idleRenderCancelRef.current?.();
-      idleRenderCancelRef.current = scheduleIdle(() => {
-        void (async () => {
-          for (const request of idleRequests) {
-            await processRequest(request);
-            if (cancelled) return;
-          }
-        })();
-      });
-    })();
+      idleRenderCancelRef.current = scheduleIdle(() => runBatches(idleRequests));
+    }
 
     return () => {
       cancelled = true;
@@ -684,6 +844,7 @@ export function PdfContinuousReader({
   }, [
     effectiveZoom,
     getPdfPageBundle,
+    getPdfPageBundlesBatch,
     ocrPdfPage,
     page,
     pageWidthAtScale1,
@@ -798,29 +959,68 @@ export function PdfContinuousReader({
   useEffect(() => {
     let cancelled = false;
     const primaryAttachmentId = view.primary_attachment_id;
-    if (!primaryAttachmentId || loweredSearch.length === 0 || pageCount <= 0) return;
+    if (!primaryAttachmentId) {
+      setSearchMatchesFromRust([]);
+      return;
+    }
+    if (!textEnabled || loweredSearch.length === 0) {
+      setSearchMatchesFromRust([]);
+      return;
+    }
+    if (!pdfEngineSearch) {
+      // Legacy fallback used by some tests/mocks.
+      void (async () => {
+        const scanOrder = Array.from({ length: pageCount }, (_, offset) => (page + offset) % pageCount);
+        for (const pageIndex0 of scanOrder) {
+          if (pageTextByIndex[pageIndex0]) continue;
+          try {
+            const result = await getPdfPageText({
+              primary_attachment_id: primaryAttachmentId,
+              page_index0: pageIndex0,
+            });
+            if (cancelled) return;
+            rememberPageText(pageIndex0, result.spans.map((span) => span.text));
+          } catch {
+            return;
+          }
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
 
-    void (async () => {
-      const scanOrder = Array.from({ length: pageCount }, (_, offset) => (page + offset) % pageCount);
-      for (const pageIndex0 of scanOrder) {
-        if (pageTextByIndex[pageIndex0]) continue;
+    const handle = window.setTimeout(() => {
+      void (async () => {
         try {
-          const result = await getPdfPageText({
+          const result = await pdfEngineSearch({
             primary_attachment_id: primaryAttachmentId,
-            page_index0: pageIndex0,
+            query: loweredSearch,
           });
           if (cancelled) return;
-          rememberPageText(pageIndex0, result.spans.map((span) => span.text));
+          setSearchMatchesFromRust(result.matches ?? []);
         } catch {
-          return;
+          if (cancelled) return;
+          setSearchMatchesFromRust([]);
         }
-      }
-    })();
+      })();
+    }, 120);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(handle);
     };
-  }, [getPdfPageText, loweredSearch, page, pageCount, pageTextByIndex, rememberPageText, view.primary_attachment_id]);
+  }, [
+    getPdfPageText,
+    loweredSearch,
+    page,
+    pageCount,
+    pageTextByIndex,
+    pdfEngineSearch,
+    rememberPageText,
+    textEnabled,
+    view.primary_attachment_id,
+  ]);
 
   useEffect(() => {
     const report = onSearchMatchesChangeRef.current;

@@ -32,6 +32,8 @@ const makeDocumentInfo = (pageCount = 3) => ({
   pages: [{ width_pt: 600, height_pt: 750 }],
 });
 
+const emptySearchResult = () => ({ total: 0, matches: [] as Array<{ page_index0: number; span_index: number; start: number; end: number }> });
+
 describe("PdfContinuousReader", () => {
   beforeEach(() => {
     if (!("createObjectURL" in URL)) {
@@ -99,8 +101,13 @@ describe("PdfContinuousReader", () => {
     const getPdfPageBundle = vi.fn().mockImplementation(async ({ page_index0 }: { page_index0: number }) =>
       makeBundle(`Page ${page_index0 + 1}`),
     );
+    const getPdfPageBundlesBatch = vi.fn().mockImplementation(async ({ page_indexes0 }: { page_indexes0: number[] }) =>
+      page_indexes0.map((pageIndex0) => makeBundle(`Page ${pageIndex0 + 1}`)),
+    );
     const getPdfDocumentInfo = vi.fn().mockResolvedValue(makeDocumentInfo());
     const getPdfPageText = vi.fn().mockResolvedValue({ page_index0: 0, spans: [] });
+    const getPdfPageTextsBatch = vi.fn().mockResolvedValue([]);
+    const pdfEngineSearch = vi.fn().mockResolvedValue(emptySearchResult());
     const ocrPdfPage = vi.fn().mockResolvedValue({
       primary_attachment_id: 101,
       page_index0: 0,
@@ -113,8 +120,11 @@ describe("PdfContinuousReader", () => {
       <PdfContinuousReader
         getPdfDocumentInfo={getPdfDocumentInfo}
         getPdfPageBundle={getPdfPageBundle}
+        getPdfPageBundlesBatch={getPdfPageBundlesBatch}
         getPdfPageText={getPdfPageText}
+        getPdfPageTextsBatch={getPdfPageTextsBatch}
         ocrPdfPage={ocrPdfPage}
+        pdfEngineSearch={pdfEngineSearch}
         page={0}
         view={pdfView}
         zoom={100}
@@ -130,8 +140,11 @@ describe("PdfContinuousReader", () => {
       <PdfContinuousReader
         getPdfDocumentInfo={getPdfDocumentInfo}
         getPdfPageBundle={getPdfPageBundle}
+        getPdfPageBundlesBatch={getPdfPageBundlesBatch}
         getPdfPageText={getPdfPageText}
+        getPdfPageTextsBatch={getPdfPageTextsBatch}
         ocrPdfPage={ocrPdfPage}
+        pdfEngineSearch={pdfEngineSearch}
         page={2}
         view={pdfView}
         zoom={100}

@@ -21,8 +21,12 @@ import type {
   PdfEngineGetDocumentInfoInput,
   PdfEngineGetPageBundleInput,
   PdfEngineGetPageTextInput,
+  PdfEngineSearchInput,
+  PdfEngineGetPageBundlesBatchInput,
+  PdfEngineGetPageTextsBatchInput,
   PdfPageBundle,
   PdfPageText,
+  PdfSearchResult,
   ReaderView,
   ResearchNote,
   Tag,
@@ -1606,6 +1610,20 @@ export const fakeApi: AppApi = {
     };
   },
 
+  async pdfEngineGetPageBundlesBatch(input: PdfEngineGetPageBundlesBatchInput): Promise<PdfPageBundle[]> {
+    return input.page_indexes0.map((pageIndex0) => ({
+      png_bytes: new Uint8Array([137, 80, 78, 71]),
+      width_px: 100,
+      height_px: 120,
+      page_width_pt: 612,
+      page_height_pt: 792,
+      spans: [
+        { text: "Hello", x0: 10, y0: 10, x1: 50, y1: 20 },
+        { text: "world", x0: 55, y0: 10, x1: 95, y1: 20 },
+      ],
+    }));
+  },
+
   async pdfEngineGetPageText(input: PdfEngineGetPageTextInput): Promise<PdfPageText> {
     return {
       page_index0: input.page_index0,
@@ -1613,6 +1631,25 @@ export const fakeApi: AppApi = {
         { text: "Hello", x0: 10, y0: 10, x1: 50, y1: 20 },
         { text: "world", x0: 55, y0: 10, x1: 95, y1: 20 },
       ],
+    };
+  },
+
+  async pdfEngineGetPageTextsBatch(input: PdfEngineGetPageTextsBatchInput): Promise<PdfPageText[]> {
+    return input.page_indexes0.map((pageIndex0) => ({
+      page_index0: pageIndex0,
+      spans: [
+        { text: "Hello", x0: 10, y0: 10, x1: 50, y1: 20 },
+        { text: "world", x0: 55, y0: 10, x1: 95, y1: 20 },
+      ],
+    }));
+  },
+
+  async pdfEngineSearch(input: PdfEngineSearchInput): Promise<PdfSearchResult> {
+    if (!input.query.trim()) return { total: 0, matches: [] };
+    // Default fake: report a single match on page 0, span 0.
+    return {
+      total: 1,
+      matches: [{ page_index0: 0, span_index: 0, start: 0, end: Math.min(4, input.query.length) }],
     };
   },
 };

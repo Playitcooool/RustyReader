@@ -212,8 +212,11 @@ export function useReaderState({
   }, [activePaperId, setActivePaperId, setIsSidebarVisible]);
 
   const getPdfPageBundle = useCallback(async (input: { primary_attachment_id: number; page_index0: number; target_width_px: number }) => (await getApi()).pdfEngineGetPageBundle(input), [getApi]);
+  const getPdfPageBundlesBatch = useCallback(async (input: { primary_attachment_id: number; page_indexes0: number[]; target_width_px: number }) => (await getApi()).pdfEngineGetPageBundlesBatch(input), [getApi]);
   const getPdfDocumentInfo = useCallback(async (primaryAttachmentId: number) => (await getApi()).pdfEngineGetDocumentInfo({ primary_attachment_id: primaryAttachmentId }), [getApi]);
   const getPdfPageText = useCallback(async (input: { primary_attachment_id: number; page_index0: number }) => (await getApi()).pdfEngineGetPageText(input), [getApi]);
+  const getPdfPageTextsBatch = useCallback(async (input: { primary_attachment_id: number; page_indexes0: number[] }) => (await getApi()).pdfEngineGetPageTextsBatch(input), [getApi]);
+  const pdfEngineSearch = useCallback(async (input: { primary_attachment_id: number; query: string; max_matches?: number }) => (await getApi()).pdfEngineSearch(input), [getApi]);
   const ocrPdfPage = useCallback(async (input: { primary_attachment_id: number; page_index0: number; png_bytes: Uint8Array; lang?: string; config_version: string; source_resolution?: number }) => (await getApi()).ocrPdfPage(input), [getApi]);
 
   const dismissPdfSelection = useCallback(() => {
@@ -350,7 +353,9 @@ export function useReaderState({
     closeTranslationPopover,
     getPdfDocumentInfo,
     getPdfPageBundle,
+    getPdfPageBundlesBatch,
     getPdfPageText,
+    getPdfPageTextsBatch,
     handleActivatePdfHighlight,
     handleCreatePdfFocusHighlight,
     handleRemoveActivePdfHighlight,
@@ -358,6 +363,7 @@ export function useReaderState({
     isFindHudOpen,
     isPdfReader,
     ocrPdfPage,
+    pdfEngineSearch,
     openFindHud: () => textToolsEnabled && setIsFindHudOpen(true),
     openPaperIds,
     openPapers,

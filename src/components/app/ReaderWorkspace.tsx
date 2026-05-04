@@ -16,7 +16,10 @@ type Props = {
   currentReaderHtml: string;
   getPdfDocumentInfo: (primaryAttachmentId: number) => Promise<unknown>;
   getPdfPageBundle: (input: { primary_attachment_id: number; page_index0: number; target_width_px: number }) => Promise<unknown>;
+  getPdfPageBundlesBatch: (input: { primary_attachment_id: number; page_indexes0: number[]; target_width_px: number }) => Promise<unknown>;
   getPdfPageText: (input: { primary_attachment_id: number; page_index0: number }) => Promise<unknown>;
+  getPdfPageTextsBatch: (input: { primary_attachment_id: number; page_indexes0: number[] }) => Promise<unknown>;
+  pdfEngineSearch: (input: { primary_attachment_id: number; query: string; max_matches?: number }) => Promise<unknown>;
   hasCollections: boolean;
   isAiPanelOpen: boolean;
   isFindHudOpen: boolean;
@@ -73,7 +76,9 @@ export function ReaderWorkspace(props: Props) {
     currentReaderHtml,
     getPdfDocumentInfo,
     getPdfPageBundle,
+    getPdfPageBundlesBatch,
     getPdfPageText,
+    getPdfPageTextsBatch,
     hasCollections,
     isAiPanelOpen,
     isFindHudOpen,
@@ -120,6 +125,7 @@ export function ReaderWorkspace(props: Props) {
     translationPopover,
     translationSelection,
     workspaceMode,
+    pdfEngineSearch,
   } = props;
   const [readerContextMenu, setReaderContextMenu] = useState<{ x: number; y: number } | null>(null);
 
@@ -221,8 +227,11 @@ export function ReaderWorkspace(props: Props) {
                 fitMode={readerFitMode}
                 getPdfDocumentInfo={getPdfDocumentInfo as never}
                 getPdfPageBundle={getPdfPageBundle as never}
+                getPdfPageBundlesBatch={getPdfPageBundlesBatch as never}
                 getPdfPageText={getPdfPageText as never}
+                getPdfPageTextsBatch={getPdfPageTextsBatch as never}
                 ocrPdfPage={onOcrPdfPage as never}
+                pdfEngineSearch={pdfEngineSearch as never}
                 page={readerPage}
                 searchQuery={readerSearchQuery}
                 activeSearchMatchIndex={readerSearchMatchIndex}

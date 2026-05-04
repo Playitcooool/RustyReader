@@ -22,11 +22,8 @@ import { buildRustPdfTextLayer, pageWidthAtScale1FromPoints } from "./pdfRustTex
 const escapeHtml = (value: string) =>
   value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-const arrayBufferForBytes = (bytes: Uint8Array) => {
-  const copy = new Uint8Array(bytes.byteLength);
-  copy.set(bytes);
-  return copy.buffer;
-};
+const blobFromBytes = (bytes: Uint8Array, type: string) =>
+  new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)], { type });
 
 type PdfReaderProps = {
   view: ReaderView;
@@ -180,7 +177,7 @@ export function PdfReader({
         setRenderedWidthCssPx(bundle.width_px);
         setRenderedHeightCssPx(bundle.height_px);
 
-        const blobUrl = URL.createObjectURL(new Blob([arrayBufferForBytes(bundle.png_bytes)], { type: "image/png" }));
+        const blobUrl = URL.createObjectURL(blobFromBytes(bundle.png_bytes, "image/png"));
         if (imageUrlRef.current) URL.revokeObjectURL(imageUrlRef.current);
         imageUrlRef.current = blobUrl;
         setImageUrl(blobUrl);

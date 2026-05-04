@@ -254,6 +254,12 @@ export type PdfEngineGetPageBundleInput = {
   target_width_px: number;
 };
 
+export type PdfEngineGetPageBundlesBatchInput = {
+  primary_attachment_id: number;
+  page_indexes0: number[];
+  target_width_px: number;
+};
+
 export type PdfEngineGetDocumentInfoInput = {
   primary_attachment_id: number;
 };
@@ -263,9 +269,32 @@ export type PdfEngineGetPageTextInput = {
   page_index0: number;
 };
 
+export type PdfEngineGetPageTextsBatchInput = {
+  primary_attachment_id: number;
+  page_indexes0: number[];
+};
+
 export type PdfPageText = {
   page_index0: number;
   spans: PdfTextSpan[];
+};
+
+export type PdfSearchMatch = {
+  page_index0: number;
+  span_index: number;
+  start: number;
+  end: number;
+};
+
+export type PdfSearchResult = {
+  total: number;
+  matches: PdfSearchMatch[];
+};
+
+export type PdfEngineSearchInput = {
+  primary_attachment_id: number;
+  query: string;
+  max_matches?: number;
 };
 
 export type AppApi = {
@@ -359,5 +388,8 @@ export type AppApi = {
   ocrPdfPage: (input: OcrPdfPageInput) => Promise<OcrPageResult>;
   pdfEngineGetDocumentInfo: (input: PdfEngineGetDocumentInfoInput) => Promise<PdfDocumentInfo>;
   pdfEngineGetPageBundle: (input: PdfEngineGetPageBundleInput) => Promise<PdfPageBundle>;
+  pdfEngineGetPageBundlesBatch: (input: PdfEngineGetPageBundlesBatchInput) => Promise<PdfPageBundle[]>;
   pdfEngineGetPageText: (input: PdfEngineGetPageTextInput) => Promise<PdfPageText>;
+  pdfEngineGetPageTextsBatch: (input: PdfEngineGetPageTextsBatchInput) => Promise<PdfPageText[]>;
+  pdfEngineSearch: (input: PdfEngineSearchInput) => Promise<PdfSearchResult>;
 };

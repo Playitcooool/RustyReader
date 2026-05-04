@@ -70,6 +70,40 @@ pub(crate) struct PdfPageText {
     spans: Vec<PdfTextSpan>,
 }
 
+#[derive(Deserialize)]
+pub(crate) struct PdfEngineGetPageBundlesBatchInput {
+    primary_attachment_id: i64,
+    page_indexes0: Vec<i64>,
+    target_width_px: u32,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct PdfEngineGetPageTextsBatchInput {
+    primary_attachment_id: i64,
+    page_indexes0: Vec<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct PdfSearchMatch {
+    page_index0: i64,
+    span_index: usize,
+    start: usize,
+    end: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct PdfSearchResult {
+    total: usize,
+    matches: Vec<PdfSearchMatch>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct PdfEngineSearchInput {
+    primary_attachment_id: i64,
+    query: String,
+    max_matches: Option<usize>,
+}
+
 #[derive(Default)]
 pub(crate) struct PdfEngineCache {
     pub(crate) document_info_by_attachment: HashMap<i64, PdfDocumentInfo>,
@@ -78,11 +112,51 @@ pub(crate) struct PdfEngineCache {
     pub(crate) bundle_by_key: HashMap<(i64, i64, u32), PdfPageBundle>,
     bundle_order: VecDeque<(i64, i64, u32)>,
     bundle_total_bytes: usize,
+    search_cache_by_query: HashMap<(i64, String), PdfSearchResult>,
+    search_order: VecDeque<(i64, String)>,
 }
 
 const PDF_TEXT_PAGE_CACHE_LIMIT: usize = 64;
 const PDF_BUNDLE_CACHE_ENTRY_LIMIT: usize = 24;
 const PDF_BUNDLE_CACHE_BYTES_LIMIT: usize = 96 * 1024 * 1024;
+const MAX_BUNDLE_BATCH: usize = 4;
+const MAX_TEXT_BATCH: usize = 16;
+const SEARCH_CACHE_LIMIT: usize = 8;
+
+fn remember_search_result(
+    cache: &mut PdfEngineCache,
+    key: (i64, String),
+    result: PdfSearchResult,
+) {
+    cache.search_cache_by_query.insert(key.clone(), result);
+    cache.search_order.retain(|existing| existing != &key);
+    cache.search_order.push_back(key);
+    while cache.search_order.len() > SEARCH_CACHE_LIMIT {
+        if let Some(oldest) = cache.search_order.pop_front() {
+            cache.search_cache_by_query.remove(&oldest);
+        }
+    }
+}
+
+fn normalized_query(input: &str) -> String {
+    input.trim().to_lowercase()
+}
+
+fn unique_preserve_order(page_indexes0: &[i64]) -> Result<Vec<i64>, String> {
+    let mut seen = HashMap::<i64, ()>::new();
+    let mut unique = Vec::new();
+    for index0 in page_indexes0 {
+        if *index0 < 0 {
+            return Err("invalid page index".to_string());
+        }
+        if seen.contains_key(index0) {
+            continue;
+        }
+        seen.insert(*index0, ());
+        unique.push(*index0);
+    }
+    Ok(unique)
+}
 
 fn remember_text_spans(cache: &mut PdfEngineCache, key: (i64, i64), spans: Vec<PdfTextSpan>) {
     cache.text_spans_by_page.insert(key, spans);
@@ -377,6 +451,370 @@ pub(crate) async fn pdf_engine_get_page_bundle(
     .map_err(|error| error.to_string())?
 }
 
+#[tauri::command]
+pub(crate) async fn pdf_engine_get_page_bundles_batch(
+    state: State<'_, AppState>,
+    input: PdfEngineGetPageBundlesBatchInput,
+) -> Result<Vec<PdfPageBundle>, String> {
+    if input.page_indexes0.is_empty() {
+        return Ok(Vec::new());
+    }
+    if input.page_indexes0.len() > MAX_BUNDLE_BATCH {
+        return Err("too many pages in batch".to_string());
+    }
+    let target_width_px = input.target_width_px.clamp(1, 8192);
+    let bucketed_width = width_bucket(target_width_px);
+    let unique = unique_preserve_order(&input.page_indexes0)?;
+
+    // Fast path: if all cached, return immediately.
+    let cached_all = {
+        let cache = state
+            .pdf_cache
+            .lock()
+            .map_err(|_| "pdf cache poisoned".to_string())?;
+        unique.iter().all(|page_index0| {
+            cache.bundle_by_key.contains_key(&(input.primary_attachment_id, *page_index0, bucketed_width))
+        })
+    };
+    if cached_all {
+        let cache = state
+            .pdf_cache
+            .lock()
+            .map_err(|_| "pdf cache poisoned".to_string())?;
+        let mut by_page: HashMap<i64, PdfPageBundle> = HashMap::new();
+        for page_index0 in &unique {
+            if let Some(bundle) =
+                cache.bundle_by_key.get(&(input.primary_attachment_id, *page_index0, bucketed_width)).cloned()
+            {
+                by_page.insert(*page_index0, bundle);
+            }
+        }
+        return Ok(input
+            .page_indexes0
+            .iter()
+            .filter_map(|page_index0| by_page.get(page_index0).cloned())
+            .collect());
+    }
+
+    let semaphore = PDF_RENDER_SEMAPHORE
+        .get_or_init(|| Arc::new(Semaphore::new(2)))
+        .clone();
+    let permit = semaphore
+        .acquire_owned()
+        .await
+        .map_err(|error| error.to_string())?;
+    let library_root = state.library_root.clone();
+    let pdf_cache = state.pdf_cache.clone();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let _permit = permit;
+
+        // Determine which pages are missing without holding the lock during heavy work.
+        let missing: Vec<i64> = {
+            let cache = pdf_cache
+                .lock()
+                .map_err(|_| "pdf cache poisoned".to_string())?;
+            unique
+                .iter()
+                .copied()
+                .filter(|page_index0| {
+                    !cache.bundle_by_key.contains_key(&(input.primary_attachment_id, *page_index0, bucketed_width))
+                })
+                .collect()
+        };
+
+        if !missing.is_empty() {
+            let bytes = service_for_root(&library_root)?
+                .read_primary_attachment_bytes(input.primary_attachment_id)
+                .map_err(|error| error.to_string())?;
+            let mut doc = OxidePdfDocument::from_bytes(bytes).map_err(|error| error.to_string())?;
+
+            for page_index0 in &missing {
+                let page_index: usize =
+                    usize::try_from(*page_index0).map_err(|_| "invalid page index")?;
+                let page_info = doc
+                    .get_page_info(page_index)
+                    .map_err(|error| error.to_string())?;
+                let page_width_pt = page_info.media_box.width;
+                let page_height_pt = page_info.media_box.height;
+                if !(page_width_pt.is_finite()
+                    && page_height_pt.is_finite()
+                    && page_width_pt > 0.0
+                    && page_height_pt > 0.0)
+                {
+                    return Err("invalid page size".to_string());
+                }
+
+                let dpi = ((bucketed_width as f32) * 72.0 / page_width_pt)
+                    .clamp(36.0, 600.0)
+                    .round() as u32;
+                let opts = RenderOptions {
+                    dpi,
+                    format: ImageFormat::Png,
+                    ..Default::default()
+                };
+                let rendered =
+                    render_page(&mut doc, page_index, &opts).map_err(|error| error.to_string())?;
+
+                let spans = {
+                    let cache = pdf_cache
+                        .lock()
+                        .map_err(|_| "pdf cache poisoned".to_string())?;
+                    cache
+                        .text_spans_by_page
+                        .get(&(input.primary_attachment_id, *page_index0))
+                        .cloned()
+                }
+                .unwrap_or_else(|| spans_from_document(&doc, page_index).unwrap_or_default());
+
+                let bundle = PdfPageBundle {
+                    png_bytes: rendered.data,
+                    width_px: rendered.width,
+                    height_px: rendered.height,
+                    page_width_pt,
+                    page_height_pt,
+                    spans: spans.clone(),
+                };
+
+                let mut cache = pdf_cache
+                    .lock()
+                    .map_err(|_| "pdf cache poisoned".to_string())?;
+                remember_text_spans(&mut cache, (input.primary_attachment_id, *page_index0), spans);
+                remember_page_bundle(
+                    &mut cache,
+                    (input.primary_attachment_id, *page_index0, bucketed_width),
+                    bundle,
+                );
+            }
+        }
+
+        // Collect results in input order (including duplicates).
+        let cache = pdf_cache
+            .lock()
+            .map_err(|_| "pdf cache poisoned".to_string())?;
+        let mut by_page: HashMap<i64, PdfPageBundle> = HashMap::new();
+        for page_index0 in &unique {
+            if let Some(bundle) =
+                cache.bundle_by_key.get(&(input.primary_attachment_id, *page_index0, bucketed_width)).cloned()
+            {
+                by_page.insert(*page_index0, bundle);
+            }
+        }
+        Ok(input
+            .page_indexes0
+            .iter()
+            .filter_map(|page_index0| by_page.get(page_index0).cloned())
+            .collect())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub(crate) async fn pdf_engine_get_page_texts_batch(
+    state: State<'_, AppState>,
+    input: PdfEngineGetPageTextsBatchInput,
+) -> Result<Vec<PdfPageText>, String> {
+    if input.page_indexes0.is_empty() {
+        return Ok(Vec::new());
+    }
+    if input.page_indexes0.len() > MAX_TEXT_BATCH {
+        return Err("too many pages in batch".to_string());
+    }
+    let unique = unique_preserve_order(&input.page_indexes0)?;
+
+    let library_root = state.library_root.clone();
+    let pdf_cache = state.pdf_cache.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let missing: Vec<i64> = {
+            let cache = pdf_cache
+                .lock()
+                .map_err(|_| "pdf cache poisoned".to_string())?;
+            unique
+                .iter()
+                .copied()
+                .filter(|page_index0| {
+                    !cache
+                        .text_spans_by_page
+                        .contains_key(&(input.primary_attachment_id, *page_index0))
+                })
+                .collect()
+        };
+
+        if !missing.is_empty() {
+            let bytes = service_for_root(&library_root)?
+                .read_primary_attachment_bytes(input.primary_attachment_id)
+                .map_err(|error| error.to_string())?;
+            let doc = OxidePdfDocument::from_bytes(bytes).map_err(|error| error.to_string())?;
+            for page_index0 in &missing {
+                let page_index: usize =
+                    usize::try_from(*page_index0).map_err(|_| "invalid page index")?;
+                let spans = spans_from_document(&doc, page_index)?;
+                let mut cache = pdf_cache
+                    .lock()
+                    .map_err(|_| "pdf cache poisoned".to_string())?;
+                remember_text_spans(&mut cache, (input.primary_attachment_id, *page_index0), spans);
+            }
+        }
+
+        let cache = pdf_cache
+            .lock()
+            .map_err(|_| "pdf cache poisoned".to_string())?;
+        let mut by_page: HashMap<i64, Vec<PdfTextSpan>> = HashMap::new();
+        for page_index0 in &unique {
+            if let Some(spans) = cache
+                .text_spans_by_page
+                .get(&(input.primary_attachment_id, *page_index0))
+                .cloned()
+            {
+                by_page.insert(*page_index0, spans);
+            }
+        }
+
+        Ok(input
+            .page_indexes0
+            .iter()
+            .filter_map(|page_index0| {
+                by_page.get(page_index0).cloned().map(|spans| PdfPageText {
+                    page_index0: *page_index0,
+                    spans,
+                })
+            })
+            .collect())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub(crate) async fn pdf_engine_search(
+    state: State<'_, AppState>,
+    input: PdfEngineSearchInput,
+) -> Result<PdfSearchResult, String> {
+    let q = normalized_query(&input.query);
+    if q.is_empty() {
+        return Ok(PdfSearchResult {
+            total: 0,
+            matches: Vec::new(),
+        });
+    }
+
+    if let Some(cached) = state
+        .pdf_cache
+        .lock()
+        .map_err(|_| "pdf cache poisoned".to_string())?
+        .search_cache_by_query
+        .get(&(input.primary_attachment_id, q.clone()))
+        .cloned()
+    {
+        return Ok(cached);
+    }
+
+    let max_matches = input.max_matches.unwrap_or(5_000).clamp(1, 50_000);
+    let library_root = state.library_root.clone();
+    let pdf_cache = state.pdf_cache.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        // Ensure spans for every page are cached.
+        let bytes = service_for_root(&library_root)?
+            .read_primary_attachment_bytes(input.primary_attachment_id)
+            .map_err(|error| error.to_string())?;
+        let doc = OxidePdfDocument::from_bytes(bytes).map_err(|error| error.to_string())?;
+        let page_count = doc.page_count().map_err(|error| error.to_string())?;
+
+        // Determine missing pages.
+        let missing_pages: Vec<i64> = {
+            let cache = pdf_cache
+                .lock()
+                .map_err(|_| "pdf cache poisoned".to_string())?;
+            (0..page_count)
+                .filter_map(|page_index| {
+                    let page_index0 = page_index as i64;
+                    if cache
+                        .text_spans_by_page
+                        .contains_key(&(input.primary_attachment_id, page_index0))
+                    {
+                        None
+                    } else {
+                        Some(page_index0)
+                    }
+                })
+                .collect()
+        };
+
+        for page_index0 in &missing_pages {
+            let page_index: usize = usize::try_from(*page_index0).map_err(|_| "invalid page index")?;
+            let spans = spans_from_document(&doc, page_index)?;
+            let mut cache = pdf_cache
+                .lock()
+                .map_err(|_| "pdf cache poisoned".to_string())?;
+            remember_text_spans(&mut cache, (input.primary_attachment_id, *page_index0), spans);
+        }
+
+        // Snapshot spans for search without holding the lock.
+        let spans_by_page: Vec<(i64, Vec<PdfTextSpan>)> = {
+            let cache = pdf_cache
+                .lock()
+                .map_err(|_| "pdf cache poisoned".to_string())?;
+            (0..page_count)
+                .map(|page_index| {
+                    let page_index0 = page_index as i64;
+                    let spans = cache
+                        .text_spans_by_page
+                        .get(&(input.primary_attachment_id, page_index0))
+                        .cloned()
+                        .unwrap_or_default();
+                    (page_index0, spans)
+                })
+                .collect()
+        };
+
+        let mut matches: Vec<PdfSearchMatch> = Vec::new();
+        for (page_index0, spans) in spans_by_page {
+            for (span_index, span) in spans.iter().enumerate() {
+                let hay = span.text.to_lowercase();
+                let mut cursor = 0;
+                while cursor < hay.len() {
+                    if let Some(pos) = hay[cursor..].find(&q) {
+                        let start = cursor + pos;
+                        let end = start + q.len();
+                        matches.push(PdfSearchMatch {
+                            page_index0,
+                            span_index,
+                            start,
+                            end,
+                        });
+                        if matches.len() >= max_matches {
+                            break;
+                        }
+                        cursor = start + q.len().max(1);
+                    } else {
+                        break;
+                    }
+                }
+                if matches.len() >= max_matches {
+                    break;
+                }
+            }
+            if matches.len() >= max_matches {
+                break;
+            }
+        }
+
+        let result = PdfSearchResult {
+            total: matches.len(),
+            matches,
+        };
+
+        let mut cache = pdf_cache
+            .lock()
+            .map_err(|_| "pdf cache poisoned".to_string())?;
+        remember_search_result(&mut cache, (input.primary_attachment_id, q), result.clone());
+        Ok(result)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -486,5 +924,12 @@ mod tests {
         assert_eq!(info.pages[0].height_pt, 792.0);
         assert_eq!(info.pages[1].width_pt, 420.0);
         assert_eq!(info.pages[1].height_pt, 595.0);
+    }
+
+    #[test]
+    fn unique_preserve_order_dedups_and_keeps_first_occurrence_order() {
+        let input = vec![2, 1, 2, 3, 1];
+        let unique = unique_preserve_order(&input).expect("should be valid");
+        assert_eq!(unique, vec![2, 1, 3]);
     }
 }

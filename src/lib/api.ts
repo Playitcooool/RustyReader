@@ -86,6 +86,26 @@ export async function createTauriApi(): Promise<AppApi> {
     };
   };
 
+  const toPdfSearchResult = (value: unknown) => {
+    if (!value || typeof value !== "object") throw new Error("Unexpected PDF search response.");
+    const obj = value as Record<string, unknown>;
+    const matches = Array.isArray(obj.matches)
+      ? (obj.matches as unknown[]).map((match) => {
+          const m = match && typeof match === "object" ? (match as Record<string, unknown>) : {};
+          return {
+            page_index0: Number(m.page_index0),
+            span_index: Number(m.span_index),
+            start: Number(m.start),
+            end: Number(m.end),
+          };
+        })
+      : [];
+    return {
+      total: Number(obj.total ?? matches.length),
+      matches,
+    };
+  };
+
   return {
     listCollections: () => invoke("list_collections"),
     createCollection: (input) => invoke("create_collection", { input }),
@@ -223,9 +243,25 @@ export async function createTauriApi(): Promise<AppApi> {
           input,
         }),
       ),
+    pdfEngineGetPageBundlesBatch: async (input) => {
+      const raw = await invoke("pdf_engine_get_page_bundles_batch", { input });
+      if (!Array.isArray(raw)) throw new Error("Unexpected PDF page bundles batch response.");
+      return raw.map(toPdfPageBundle);
+    },
     pdfEngineGetPageText: async (input) =>
       toPdfPageText(
         await invoke("pdf_engine_get_page_text", {
+          input,
+        }),
+      ),
+    pdfEngineGetPageTextsBatch: async (input) => {
+      const raw = await invoke("pdf_engine_get_page_texts_batch", { input });
+      if (!Array.isArray(raw)) throw new Error("Unexpected PDF page texts batch response.");
+      return raw.map(toPdfPageText);
+    },
+    pdfEngineSearch: async (input) =>
+      toPdfSearchResult(
+        await invoke("pdf_engine_search", {
           input,
         }),
       ),
