@@ -112,6 +112,8 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  z-index: 1;
+  isolation: isolate;
 }
 
 .reader-shell {
@@ -1243,6 +1245,15 @@ p {
   padding-right: 2px;
 }
 
+.ai-chat-history-empty {
+  flex: 0 0 auto;
+  min-height: 0;
+  max-height: 0;
+  overflow: hidden;
+  gap: 0;
+  padding-right: 0;
+}
+
 .ai-thread-entry {
   display: flex;
   flex-direction: column;
@@ -1631,6 +1642,10 @@ p {
     linear-gradient(180deg, rgba(7, 9, 12, 0.78), rgba(7, 9, 12, 0.92));
 }
 
+.app-shell.app-shell-ai-open.app-shell-focus .ai-shell {
+  z-index: 2;
+}
+
 .reader-shell-focus {
   background:
     radial-gradient(circle at top, rgba(255, 255, 255, 0.02), transparent 30%),
@@ -1651,6 +1666,10 @@ p {
   background:
     linear-gradient(90deg, rgba(255, 255, 255, 0.02), transparent 14%, transparent 86%, rgba(255, 255, 255, 0.02)),
     radial-gradient(circle at center, transparent 42%, rgba(0, 0, 0, 0.18));
+}
+
+.app-shell.app-shell-ai-open.app-shell-focus .reader-shell-focus::before {
+  display: none;
 }
 
 .reader-tabs-focus {
