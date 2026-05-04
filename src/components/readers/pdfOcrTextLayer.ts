@@ -13,6 +13,8 @@ export function buildOcrTextLayer(input: {
 
   const divs: HTMLElement[] = [];
   const strings: string[] = [];
+  const pendingScale: Array<{ span: HTMLElement; targetWidth: number }> = [];
+  const fragment = document.createDocumentFragment();
 
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
@@ -39,27 +41,30 @@ export function buildOcrTextLayer(input: {
     span.style.transformOrigin = "0 0";
     span.style.transform = "none";
 
-    host.appendChild(span);
-
-    // pdf.js' TextLayer uses horizontal scaling to better match the underlying glyph boxes.
-    // We do the same so selection/copy feels more natural.
-    const naturalWidth = span.getBoundingClientRect().width;
-    if (Number.isFinite(width) && width > 0 && Number.isFinite(naturalWidth) && naturalWidth > 0.5) {
-      const scaleX = Math.max(0.01, width / naturalWidth);
-      span.style.transform = `scaleX(${scaleX})`;
-    }
-
     // Keep the element box close to the OCR bbox to improve hit testing and highlight overlays.
     if (Number.isFinite(width) && width > 0) span.style.width = `${width}px`;
     if (Number.isFinite(height) && height > 0) span.style.height = `${height}px`;
+    if (Number.isFinite(width) && width > 0) pendingScale.push({ span, targetWidth: width });
 
     divs.push(span);
     strings.push(text);
+    fragment.appendChild(span);
   }
 
   const end = document.createElement("div");
   end.className = "endOfContent";
-  host.appendChild(end);
+  fragment.appendChild(end);
+  host.appendChild(fragment);
+
+  // pdf.js' TextLayer uses horizontal scaling to better match the underlying glyph boxes.
+  // Measure after the batch insert so OCR pages do not force layout once per appended node.
+  for (const item of pendingScale) {
+    const naturalWidth = item.span.getBoundingClientRect().width;
+    if (Number.isFinite(naturalWidth) && naturalWidth > 0.5) {
+      const scaleX = Math.max(0.01, item.targetWidth / naturalWidth);
+      item.span.style.transform = `scaleX(${scaleX})`;
+    }
+  }
 
   return { divs, strings };
 }

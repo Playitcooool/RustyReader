@@ -169,6 +169,42 @@ fn remember_text_spans(cache: &mut PdfEngineCache, key: (i64, i64), spans: Vec<P
     }
 }
 
+fn collect_search_matches_for_page(
+    page_index0: i64,
+    spans: &[PdfTextSpan],
+    q: &str,
+    max_remaining: usize,
+) -> Vec<PdfSearchMatch> {
+    let mut matches = Vec::new();
+    if q.is_empty() || max_remaining == 0 {
+        return matches;
+    }
+
+    for (span_index, span) in spans.iter().enumerate() {
+        let hay = span.text.to_lowercase();
+        let mut cursor = 0;
+        while cursor < hay.len() {
+            let Some(pos) = hay[cursor..].find(q) else {
+                break;
+            };
+            let start = cursor + pos;
+            let end = start + q.len();
+            matches.push(PdfSearchMatch {
+                page_index0,
+                span_index,
+                start,
+                end,
+            });
+            if matches.len() >= max_remaining {
+                return matches;
+            }
+            cursor = start + q.len().max(1);
+        }
+    }
+
+    matches
+}
+
 fn bundle_weight(bundle: &PdfPageBundle) -> usize {
     let span_text_bytes = bundle
         .spans
@@ -714,87 +750,35 @@ pub(crate) async fn pdf_engine_search(
     let library_root = state.library_root.clone();
     let pdf_cache = state.pdf_cache.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        // Ensure spans for every page are cached.
         let bytes = service_for_root(&library_root)?
             .read_primary_attachment_bytes(input.primary_attachment_id)
             .map_err(|error| error.to_string())?;
         let doc = OxidePdfDocument::from_bytes(bytes).map_err(|error| error.to_string())?;
         let page_count = doc.page_count().map_err(|error| error.to_string())?;
 
-        // Determine missing pages.
-        let missing_pages: Vec<i64> = {
-            let cache = pdf_cache
-                .lock()
-                .map_err(|_| "pdf cache poisoned".to_string())?;
-            (0..page_count)
-                .filter_map(|page_index| {
-                    let page_index0 = page_index as i64;
-                    if cache
-                        .text_spans_by_page
-                        .contains_key(&(input.primary_attachment_id, page_index0))
-                    {
-                        None
-                    } else {
-                        Some(page_index0)
-                    }
-                })
-                .collect()
-        };
-
-        for page_index0 in &missing_pages {
-            let page_index: usize = usize::try_from(*page_index0).map_err(|_| "invalid page index")?;
-            let spans = spans_from_document(&doc, page_index)?;
-            let mut cache = pdf_cache
-                .lock()
-                .map_err(|_| "pdf cache poisoned".to_string())?;
-            remember_text_spans(&mut cache, (input.primary_attachment_id, *page_index0), spans);
-        }
-
-        // Snapshot spans for search without holding the lock.
-        let spans_by_page: Vec<(i64, Vec<PdfTextSpan>)> = {
-            let cache = pdf_cache
-                .lock()
-                .map_err(|_| "pdf cache poisoned".to_string())?;
-            (0..page_count)
-                .map(|page_index| {
-                    let page_index0 = page_index as i64;
-                    let spans = cache
-                        .text_spans_by_page
-                        .get(&(input.primary_attachment_id, page_index0))
-                        .cloned()
-                        .unwrap_or_default();
-                    (page_index0, spans)
-                })
-                .collect()
-        };
-
         let mut matches: Vec<PdfSearchMatch> = Vec::new();
-        for (page_index0, spans) in spans_by_page {
-            for (span_index, span) in spans.iter().enumerate() {
-                let hay = span.text.to_lowercase();
-                let mut cursor = 0;
-                while cursor < hay.len() {
-                    if let Some(pos) = hay[cursor..].find(&q) {
-                        let start = cursor + pos;
-                        let end = start + q.len();
-                        matches.push(PdfSearchMatch {
-                            page_index0,
-                            span_index,
-                            start,
-                            end,
-                        });
-                        if matches.len() >= max_matches {
-                            break;
-                        }
-                        cursor = start + q.len().max(1);
-                    } else {
-                        break;
-                    }
+        for page_index in 0..page_count {
+            let page_index0 = page_index as i64;
+            let cache_key = (input.primary_attachment_id, page_index0);
+            let cached_spans = {
+                let cache = pdf_cache
+                    .lock()
+                    .map_err(|_| "pdf cache poisoned".to_string())?;
+                cache.text_spans_by_page.get(&cache_key).cloned()
+            };
+            let spans = match cached_spans {
+                Some(spans) => spans,
+                None => {
+                    let spans = spans_from_document(&doc, page_index)?;
+                    let mut cache = pdf_cache
+                        .lock()
+                        .map_err(|_| "pdf cache poisoned".to_string())?;
+                    remember_text_spans(&mut cache, cache_key, spans.clone());
+                    spans
                 }
-                if matches.len() >= max_matches {
-                    break;
-                }
-            }
+            };
+            let remaining = max_matches.saturating_sub(matches.len());
+            matches.extend(collect_search_matches_for_page(page_index0, &spans, &q, remaining));
             if matches.len() >= max_matches {
                 break;
             }
@@ -931,5 +915,45 @@ mod tests {
         let input = vec![2, 1, 2, 3, 1];
         let unique = unique_preserve_order(&input).expect("should be valid");
         assert_eq!(unique, vec![2, 1, 3]);
+    }
+
+    #[test]
+    fn search_matches_do_not_depend_on_full_text_cache_retention() {
+        let mut cache = PdfEngineCache::default();
+        let page_count = PDF_TEXT_PAGE_CACHE_LIMIT + 2;
+        let pages = (0..page_count)
+            .map(|page_index0| {
+                vec![PdfTextSpan {
+                    text: if page_index0 == 0 || page_index0 == page_count - 1 {
+                        format!("needle page {page_index0}")
+                    } else {
+                        format!("filler page {page_index0}")
+                    },
+                    x0: 0.0,
+                    y0: 0.0,
+                    x1: 1.0,
+                    y1: 1.0,
+                }]
+            })
+            .collect::<Vec<_>>();
+
+        for page_index0 in 0..page_count {
+            remember_text_spans(&mut cache, (9, page_index0 as i64), pages[page_index0].clone());
+        }
+        assert!(!cache.text_spans_by_page.contains_key(&(9, 0)));
+
+        let mut matches = Vec::new();
+        for (page_index0, spans) in pages.iter().enumerate() {
+            matches.extend(collect_search_matches_for_page(
+                page_index0 as i64,
+                spans,
+                "needle",
+                usize::MAX,
+            ));
+        }
+
+        assert_eq!(matches.len(), 2);
+        assert_eq!(matches[0].page_index0, 0);
+        assert_eq!(matches[1].page_index0, (page_count - 1) as i64);
     }
 }

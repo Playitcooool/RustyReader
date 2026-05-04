@@ -216,6 +216,109 @@ describe("PdfContinuousReader", () => {
     });
   });
 
+  it("keeps long-document far pages as lightweight spacers", async () => {
+    const longPdfView: ReaderView = { ...pdfView, page_count: 80 };
+    const getPdfPageBundle = vi.fn().mockImplementation(async ({ page_index0 }: { page_index0: number }) =>
+      makeBundle(`Page ${page_index0 + 1}`),
+    );
+    const getPdfDocumentInfo = vi.fn().mockResolvedValue(makeDocumentInfo(80));
+    const getPdfPageText = vi.fn().mockResolvedValue({ page_index0: 0, spans: [] });
+    const ocrPdfPage = vi.fn().mockResolvedValue({
+      primary_attachment_id: 101,
+      page_index0: 0,
+      lang: "eng+chi_sim",
+      config_version: "test",
+      lines: [],
+    });
+
+    const { container } = render(
+      <PdfContinuousReader
+        getPdfDocumentInfo={getPdfDocumentInfo}
+        getPdfPageBundle={getPdfPageBundle}
+        getPdfPageText={getPdfPageText}
+        ocrPdfPage={ocrPdfPage}
+        page={40}
+        view={longPdfView}
+        zoom={100}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelectorAll(".pdf-page-shell")).toHaveLength(80);
+    });
+    expect(container.querySelectorAll(".pdf-text-layer").length).toBeLessThan(10);
+    expect(container.querySelector('[data-page-index="10"]')?.classList.contains("pdf-page-shell-spacer")).toBe(true);
+    expect(container.querySelector('[data-page-index="40"]')?.classList.contains("pdf-page-shell-spacer")).toBe(false);
+  });
+
+  it("bounds layout reads while syncing active page on long-document scroll", async () => {
+    const longPdfView: ReaderView = { ...pdfView, page_count: 80 };
+    const getPdfPageBundle = vi.fn().mockImplementation(async ({ page_index0 }: { page_index0: number }) =>
+      makeBundle(`Page ${page_index0 + 1}`),
+    );
+    const getPdfDocumentInfo = vi.fn().mockResolvedValue(makeDocumentInfo(80));
+    const getPdfPageText = vi.fn().mockResolvedValue({ page_index0: 0, spans: [] });
+    const ocrPdfPage = vi.fn().mockResolvedValue({
+      primary_attachment_id: 101,
+      page_index0: 0,
+      lang: "eng+chi_sim",
+      config_version: "test",
+      lines: [],
+    });
+
+    const { container, rerender } = render(
+      <PdfContinuousReader
+        getPdfDocumentInfo={getPdfDocumentInfo}
+        getPdfPageBundle={getPdfPageBundle}
+        getPdfPageText={getPdfPageText}
+        ocrPdfPage={ocrPdfPage}
+        page={40}
+        view={longPdfView}
+        zoom={100}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelectorAll(".pdf-page-shell")).toHaveLength(80);
+    });
+
+    let shellRectReads = 0;
+    container.querySelectorAll<HTMLElement>(".pdf-page-shell").forEach((shell) => {
+      const index = Number(shell.dataset.pageIndex ?? 0);
+      shell.getBoundingClientRect = vi.fn(() => {
+        shellRectReads += 1;
+        return {
+          x: 0,
+          y: (index - 40) * 1012,
+          left: 0,
+          right: 800,
+          top: (index - 40) * 1012,
+          bottom: (index - 40) * 1012 + 1000,
+          width: 800,
+          height: 1000,
+          toJSON: () => ({}),
+        } as DOMRect;
+      });
+    });
+
+    rerender(
+      <PdfContinuousReader
+        getPdfDocumentInfo={getPdfDocumentInfo}
+        getPdfPageBundle={getPdfPageBundle}
+        getPdfPageText={getPdfPageText}
+        ocrPdfPage={ocrPdfPage}
+        page={41}
+        view={longPdfView}
+        zoom={100}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(shellRectReads).toBeGreaterThan(0);
+      expect(shellRectReads).toBeLessThanOrEqual(15);
+    });
+  });
+
   it("reports search matches across rendered pages", async () => {
     const getPdfPageBundle = vi.fn().mockImplementation(async ({ page_index0 }: { page_index0: number }) =>
       makeBundle(page_index0 === 1 ? "needle here" : "no match"),
@@ -250,6 +353,48 @@ describe("PdfContinuousReader", () => {
 
     await waitFor(() => {
       expect(onSearchMatchesChange).toHaveBeenLastCalledWith({ total: 1, activeIndex: 0 });
+    });
+  });
+
+  it("keeps global search hit indexes stable across pages", async () => {
+    const getPdfPageBundle = vi.fn().mockImplementation(async ({ page_index0 }: { page_index0: number }) =>
+      makeBundle(page_index0 === 0 ? "needle first" : page_index0 === 1 ? "needle second" : "no match"),
+    );
+    const getPdfDocumentInfo = vi.fn().mockResolvedValue(makeDocumentInfo());
+    const getPdfPageText = vi.fn().mockResolvedValue({ page_index0: 0, spans: [] });
+    const pdfEngineSearch = vi.fn().mockResolvedValue({
+      total: 2,
+      matches: [
+        { page_index0: 0, span_index: 0, start: 0, end: 6 },
+        { page_index0: 1, span_index: 0, start: 0, end: 6 },
+      ],
+    });
+    const ocrPdfPage = vi.fn().mockResolvedValue({
+      primary_attachment_id: 101,
+      page_index0: 0,
+      lang: "eng+chi_sim",
+      config_version: "test",
+      lines: [],
+    });
+
+    render(
+      <PdfContinuousReader
+        getPdfDocumentInfo={getPdfDocumentInfo}
+        getPdfPageBundle={getPdfPageBundle}
+        getPdfPageText={getPdfPageText}
+        ocrPdfPage={ocrPdfPage}
+        pdfEngineSearch={pdfEngineSearch}
+        page={0}
+        searchQuery="needle"
+        activeSearchMatchIndex={1}
+        view={pdfView}
+        zoom={100}
+      />,
+    );
+
+    await waitFor(() => {
+      const active = document.querySelector(".pdf-search-hit-active") as HTMLElement | null;
+      expect(active?.dataset.hitIndex).toBe("1");
     });
   });
 

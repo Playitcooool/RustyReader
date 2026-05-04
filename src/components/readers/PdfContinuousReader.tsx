@@ -125,6 +125,7 @@ type RenderRequest = {
 };
 
 type ScrollSyncReason = "scroll" | "observer" | "page_effect";
+type SearchMatchWithHitIndex = { pageIndex: number; divIndex: number; start: number; end: number; hitIndex: number };
 type TextBoxDraft = {
   id: string;
   pageIndex0: number;
@@ -216,10 +217,12 @@ export function PdfContinuousReader({
   const imageUrlsByIndexRef = useRef(new Map<number, string>());
   const inFlightRenderPagesRef = useRef(new Set<number>());
   const inFlightRenderKeysRef = useRef(new Set<string>());
+  const requestedRenderKeysRef = useRef(new Set<string>());
   const latestRequestKeyByPageRef = useRef(new Map<number, string>());
   const inFlightOcrPagesRef = useRef(new Set<number>());
   const pagesRef = useRef<Record<number, RenderedPageState>>({});
   const dominantPageIndexRef = useRef(0);
+  const visiblePageIndexesRef = useRef<number[]>([]);
   const lastReportedActivePageRef = useRef(0);
   const pendingProgrammaticPageRef = useRef<number | null>(null);
   const scrollSyncRafRef = useRef<number | null>(null);
@@ -288,6 +291,10 @@ export function PdfContinuousReader({
     pagesRef.current = pages;
   }, [pages]);
 
+  useEffect(() => {
+    visiblePageIndexesRef.current = visiblePageIndexes;
+  }, [visiblePageIndexes]);
+
   const rememberPageText = useCallback((pageIndex0: number, strings: string[]) => {
     pageTextOrderRef.current = [...pageTextOrderRef.current.filter((entry) => entry !== pageIndex0), pageIndex0];
     const stale = pageTextOrderRef.current.length > PAGE_TEXT_CACHE_LIMIT ? pageTextOrderRef.current.shift() : undefined;
@@ -350,6 +357,7 @@ export function PdfContinuousReader({
     inFlightOcrPagesRef.current.delete(pageIndex0);
     if (pagesRef.current[pageIndex0]) {
       const nextPages = { ...pagesRef.current };
+      requestedRenderKeysRef.current.delete(nextPages[pageIndex0]!.requestKey);
       delete nextPages[pageIndex0];
       pagesRef.current = nextPages;
     }
@@ -364,11 +372,28 @@ export function PdfContinuousReader({
         scrollFallback instanceof HTMLElement
           ? scrollFallback.getBoundingClientRect()
           : { top: 0, bottom: window.innerHeight };
-      const pageRects = Array.from(pageShellByIndexRef.current.entries())
-        .map(([pageIndex0, shell]) => {
+      const candidateIndexes = new Set<number>();
+      const addRange = (center: number | null | undefined, radius: number) => {
+        if (center === null || center === undefined || center < 0) return;
+        for (let index = Math.max(0, center - radius); index <= Math.min(pageCount - 1, center + radius); index += 1) {
+          candidateIndexes.add(index);
+        }
+      };
+      for (const index of visiblePageIndexesRef.current) candidateIndexes.add(index);
+      addRange(dominantPageIndexRef.current, 2);
+      addRange(lastReportedActivePageRef.current, 2);
+      addRange(pendingProgrammaticPageRef.current, 1);
+      addRange(page, 1);
+      if (candidateIndexes.size === 0) addRange(0, 1);
+
+      const pageRects = Array.from(candidateIndexes)
+        .map((pageIndex0) => {
+          const shell = pageShellByIndexRef.current.get(pageIndex0);
+          if (!shell) return null;
           const rect = shell.getBoundingClientRect();
           return { pageIndex0, top: rect.top, bottom: rect.bottom };
         })
+        .filter((rect): rect is { pageIndex0: number; top: number; bottom: number } => rect !== null)
         .filter((rect) => Number.isFinite(rect.top) && Number.isFinite(rect.bottom) && rect.bottom > rect.top);
       const next = computeActivePageIndexFromRects({
         rootRect: { top: rootRect.top, bottom: rootRect.bottom },
@@ -387,7 +412,7 @@ export function PdfContinuousReader({
         onActivePageChangeRef.current?.(next);
       }
     },
-    [],
+    [page, pageCount],
   );
 
   useEffect(() => {
@@ -418,6 +443,7 @@ export function PdfContinuousReader({
     pageTextOrderRef.current = [];
     inFlightRenderPagesRef.current.clear();
     inFlightRenderKeysRef.current.clear();
+    requestedRenderKeysRef.current.clear();
     inFlightOcrPagesRef.current.clear();
     dominantPageIndexRef.current = 0;
     lastReportedActivePageRef.current = 0;
@@ -470,10 +496,10 @@ export function PdfContinuousReader({
     setPageShells(nextShells);
   }, [desiredWidthCssPx, pageCount, pdfDocumentInfo]);
 
-  const searchMatches = useMemo(() => {
+  const searchMatches = useMemo((): SearchMatchWithHitIndex[] => {
     if (!textEnabled || loweredSearch.length === 0) return [];
+    const rawMatches: Array<{ pageIndex: number; divIndex: number; start: number; end: number }> = [];
     if (!pdfEngineSearch) {
-      const matches: Array<{ pageIndex: number; divIndex: number; start: number; end: number }> = [];
       for (const [pageIndexText, divStrings] of Object.entries(pageTextByIndex)) {
         const pageIndex = Number(pageIndexText);
         for (let divIndex = 0; divIndex < divStrings.length; divIndex += 1) {
@@ -483,21 +509,22 @@ export function PdfContinuousReader({
           while (cursor < lowered.length) {
             const index = lowered.indexOf(loweredSearch, cursor);
             if (index === -1) break;
-            matches.push({ pageIndex, divIndex, start: index, end: index + loweredSearch.length });
+            rawMatches.push({ pageIndex, divIndex, start: index, end: index + loweredSearch.length });
             cursor = index + Math.max(1, loweredSearch.length);
           }
         }
       }
-      return matches;
+      return rawMatches.map((match, hitIndex) => ({ ...match, hitIndex }));
     }
 
     // Rust returns match coordinates relative to the span text, not the DOM divs.
     // We map 1:1 spans -> divs in `buildRustPdfTextLayer`, so span_index is the div index.
-    return searchMatchesFromRust.map((match) => ({
+    return searchMatchesFromRust.map((match, hitIndex) => ({
       pageIndex: match.page_index0,
       divIndex: match.span_index,
       start: match.start,
       end: match.end,
+      hitIndex,
     }));
   }, [loweredSearch, pdfEngineSearch, pageTextByIndex, searchMatchesFromRust, textEnabled, textLayerEpoch]);
 
@@ -506,6 +533,18 @@ export function PdfContinuousReader({
     const normalized = ((activeSearchMatchIndex % searchMatches.length) + searchMatches.length) % searchMatches.length;
     return searchMatches[normalized]?.pageIndex ?? null;
   }, [activeSearchMatchIndex, searchMatches]);
+
+  const searchMatchesByPageAndDiv = useMemo(() => {
+    const byPage = new Map<number, Map<number, SearchMatchWithHitIndex[]>>();
+    for (const match of searchMatches) {
+      const byDiv = byPage.get(match.pageIndex) ?? new Map<number, SearchMatchWithHitIndex[]>();
+      const matchesForDiv = byDiv.get(match.divIndex) ?? [];
+      matchesForDiv.push(match);
+      byDiv.set(match.divIndex, matchesForDiv);
+      byPage.set(match.pageIndex, byDiv);
+    }
+    return byPage;
+  }, [searchMatches]);
 
   const visiblePageSet = useMemo(() => new Set(visiblePageIndexes), [visiblePageIndexes]);
 
@@ -588,8 +627,10 @@ export function PdfContinuousReader({
     const processRequest = async (request: RenderRequest) => {
       const existing = pagesRef.current[request.pageIndex0];
       if (existing && existing.requestKey === request.requestKey) return;
+      if (requestedRenderKeysRef.current.has(request.requestKey)) return;
       if (inFlightRenderKeysRef.current.has(request.requestKey)) return;
       if (inFlightRenderPagesRef.current.has(request.pageIndex0) && request.priority === "idle") return;
+      requestedRenderKeysRef.current.add(request.requestKey);
       latestRequestKeyByPageRef.current.set(request.pageIndex0, request.requestKey);
       inFlightRenderPagesRef.current.add(request.pageIndex0);
       inFlightRenderKeysRef.current.add(request.requestKey);
@@ -755,11 +796,19 @@ export function PdfContinuousReader({
     };
 
     const processBatch = async (batch: RenderRequest[]) => {
+      batch = batch.filter((request) => {
+        const existing = pagesRef.current[request.pageIndex0];
+        if (existing && existing.requestKey === request.requestKey) return false;
+        if (requestedRenderKeysRef.current.has(request.requestKey)) return false;
+        if (inFlightRenderKeysRef.current.has(request.requestKey)) return false;
+        return true;
+      });
       if (batch.length === 0) return;
       const targetWidth = batch[0]!.targetRasterWidthPx;
       const uniquePages = Array.from(new Set(batch.map((r) => r.pageIndex0)));
       for (const request of batch) {
         latestRequestKeyByPageRef.current.set(request.pageIndex0, request.requestKey);
+        requestedRenderKeysRef.current.add(request.requestKey);
         inFlightRenderPagesRef.current.add(request.pageIndex0);
         inFlightRenderKeysRef.current.add(request.requestKey);
         const host = textLayerHostByIndexRef.current.get(request.pageIndex0);
@@ -1084,6 +1133,23 @@ export function PdfContinuousReader({
     return grouped;
   }, [annotations, textBoxDrafts]);
 
+  const fullPageMountSet = useMemo(() => {
+    const mounted = new Set<number>();
+    const addRange = (center: number | null, radius: number) => {
+      if (center === null || center < 0) return;
+      for (let pageIndex0 = Math.max(0, center - radius); pageIndex0 <= Math.min(pageCount - 1, center + radius); pageIndex0 += 1) {
+        mounted.add(pageIndex0);
+      }
+    };
+    addRange(page, 1);
+    addRange(dominantPageIndex, 1);
+    for (const visiblePageIndex of visiblePageIndexes) addRange(visiblePageIndex, 1);
+    addRange(activeSearchTargetPage, SEARCH_TARGET_RENDER_RADIUS);
+    for (const pageIndex0 of textBoxesByPage.keys()) mounted.add(pageIndex0);
+    if (drawingTextBox) mounted.add(drawingTextBox.pageIndex0);
+    return mounted;
+  }, [activeSearchTargetPage, dominantPageIndex, drawingTextBox, page, pageCount, textBoxesByPage, visiblePageIndexes]);
+
   useEffect(() => {
     const id = newestTextBoxDraftIdRef.current;
     if (!id) return;
@@ -1211,7 +1277,7 @@ export function PdfContinuousReader({
         }
       }
 
-      const pageMatches = searchMatches.filter((m) => m.pageIndex === pageIndex);
+      const pageMatchesByDiv = searchMatchesByPageAndDiv.get(pageIndex);
       for (let divIndex = 0; divIndex < divs.length; divIndex += 1) {
         const div = divs[divIndex];
         const text = plain[divIndex] ?? "";
@@ -1248,8 +1314,7 @@ export function PdfContinuousReader({
         }
 
         const searchRanges: Array<{ start: number; end: number; hitIndex: number }> = [];
-        for (const match of pageMatches) {
-          if (match.divIndex !== divIndex) continue;
+        for (const match of pageMatchesByDiv?.get(divIndex) ?? []) {
           let overlapsAnnotation = false;
           for (let i = Math.max(0, match.start); i < Math.min(text.length, match.end); i += 1) {
             if (paints[i]) {
@@ -1258,9 +1323,8 @@ export function PdfContinuousReader({
             }
           }
           if (overlapsAnnotation) continue;
-          const hitIndex = searchMatches.indexOf(match);
-          if (hitIndex === normalizedActive) activeMatchPageIndex = pageIndex;
-          searchRanges.push({ start: match.start, end: match.end, hitIndex });
+          if (match.hitIndex === normalizedActive) activeMatchPageIndex = pageIndex;
+          searchRanges.push({ start: match.start, end: match.end, hitIndex: match.hitIndex });
         }
 
         const segments: Array<
@@ -1318,7 +1382,7 @@ export function PdfContinuousReader({
         if (activeMatchPageIndex !== dominantPageIndexRef.current) onActivePageChangeRef.current?.(activeMatchPageIndex);
       }
     }
-  }, [activeSearchMatchIndex, anchorsForActivePage, searchMatches, textEnabled, textLayerEpoch, textLayerReadyByPage]);
+  }, [activeSearchMatchIndex, anchorsForActivePage, searchMatches.length, searchMatchesByPageAndDiv, textEnabled, textLayerEpoch, textLayerReadyByPage]);
 
   useEffect(() => {
     if (!onHighlightActivate) return;
@@ -1428,10 +1492,11 @@ export function PdfContinuousReader({
           const shell = pageShells[index];
           const width = rendered?.cssWidthPx ?? shell?.widthCssPx ?? desiredWidthCssPx;
           const height = rendered?.cssHeightPx ?? shell?.heightCssPx;
+          const shouldMountFullPage = fullPageMountSet.has(index);
           return (
             <div
               key={index}
-              className="pdf-page-shell"
+              className={`pdf-page-shell${shouldMountFullPage ? "" : " pdf-page-shell-spacer"}`}
               data-page-index={index}
               ref={(element) => {
                 if (!element) {
@@ -1446,86 +1511,88 @@ export function PdfContinuousReader({
               }}
               onPointerDown={(event) => startTextBoxDraw(event, index)}
             >
-              <div style={{ position: "relative" }}>
-                {rendered ? (
-                  <img
-                    alt={`PDF page ${index + 1}`}
-                    aria-label={`PDF page ${index + 1} image`}
-                    src={rendered.imageUrl}
-                    style={{ display: "block", width: `${rendered.cssWidthPx}px`, height: `${rendered.cssHeightPx}px` }}
-                  />
-                ) : height ? (
+              {shouldMountFullPage ? (
+                <div style={{ position: "relative" }}>
+                  {rendered ? (
+                    <img
+                      alt={`PDF page ${index + 1}`}
+                      aria-label={`PDF page ${index + 1} image`}
+                      src={rendered.imageUrl}
+                      style={{ display: "block", width: `${rendered.cssWidthPx}px`, height: `${rendered.cssHeightPx}px` }}
+                    />
+                  ) : height ? (
+                    <div
+                      aria-hidden="true"
+                      className="pdf-page-skeleton"
+                      style={{ width: `${width}px`, height: `${height}px` }}
+                    />
+                  ) : null}
                   <div
-                    aria-hidden="true"
-                    className="pdf-page-skeleton"
-                    style={{ width: `${width}px`, height: `${height}px` }}
-                  />
-                ) : null}
-                <div
-                  aria-label={`PDF page ${index + 1} text layer`}
-                  className="pdf-text-layer textLayer"
-                  ref={(element) => {
-                    if (!element) {
-                      textLayerSelectionCleanupByIndexRef.current.get(index)?.();
-                      textLayerSelectionCleanupByIndexRef.current.delete(index);
-                      textLayerHostByIndexRef.current.delete(index);
-                      return;
-                    }
-                    textLayerHostByIndexRef.current.set(index, element);
-                  }}
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    width: width > 0 ? `${width}px` : undefined,
-                    height: height ? `${height}px` : undefined,
-                    pointerEvents: textEnabled && textLayerReadyByPage[index] ? "auto" : "none",
-                    userSelect: textEnabled && textLayerReadyByPage[index] ? "text" : "none",
-                    WebkitUserSelect: textEnabled && textLayerReadyByPage[index] ? "text" : "none",
-                  }}
-                />
-                {textBoxesByPage.get(index)?.map((textBox) => (
-                  <div
-                    key={textBox.id}
-                    className={`pdf-text-box-annotation ${textBox.persisted ? "pdf-text-box-annotation-persisted" : "pdf-text-box-annotation-draft"}`}
-                    data-text-box-draft-id={textBox.persisted ? undefined : textBox.id}
-                    style={{
-                      left: `${textBox.anchor.x * 100}%`,
-                      top: `${textBox.anchor.y * 100}%`,
-                      width: `${textBox.anchor.width * 100}%`,
-                      height: `${textBox.anchor.height * 100}%`,
+                    aria-label={`PDF page ${index + 1} text layer`}
+                    className="pdf-text-layer textLayer"
+                    ref={(element) => {
+                      if (!element) {
+                        textLayerSelectionCleanupByIndexRef.current.get(index)?.();
+                        textLayerSelectionCleanupByIndexRef.current.delete(index);
+                        textLayerHostByIndexRef.current.delete(index);
+                        return;
+                      }
+                      textLayerHostByIndexRef.current.set(index, element);
                     }}
-                    onPointerDown={(event) => event.stopPropagation()}
-                  >
-                    <textarea
-                      aria-label="PDF text box annotation"
-                      readOnly={textBox.persisted}
-                      value={textBox.body}
-                      onBlur={() => {
-                        if (textBox.persisted) return;
-                        const draft = textBoxDrafts.find((entry) => entry.id === textBox.id);
-                        if (draft) commitTextBoxDraft(draft);
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      width: width > 0 ? `${width}px` : undefined,
+                      height: height ? `${height}px` : undefined,
+                      pointerEvents: textEnabled && textLayerReadyByPage[index] ? "auto" : "none",
+                      userSelect: textEnabled && textLayerReadyByPage[index] ? "text" : "none",
+                      WebkitUserSelect: textEnabled && textLayerReadyByPage[index] ? "text" : "none",
+                    }}
+                  />
+                  {textBoxesByPage.get(index)?.map((textBox) => (
+                    <div
+                      key={textBox.id}
+                      className={`pdf-text-box-annotation ${textBox.persisted ? "pdf-text-box-annotation-persisted" : "pdf-text-box-annotation-draft"}`}
+                      data-text-box-draft-id={textBox.persisted ? undefined : textBox.id}
+                      style={{
+                        left: `${textBox.anchor.x * 100}%`,
+                        top: `${textBox.anchor.y * 100}%`,
+                        width: `${textBox.anchor.width * 100}%`,
+                        height: `${textBox.anchor.height * 100}%`,
                       }}
-                      onChange={(event) => {
-                        if (textBox.persisted) return;
-                        const nextBody = event.target.value;
-                        setTextBoxDrafts((current) => current.map((entry) => entry.id === textBox.id ? { ...entry, body: nextBody } : entry));
+                      onPointerDown={(event) => event.stopPropagation()}
+                    >
+                      <textarea
+                        aria-label="PDF text box annotation"
+                        readOnly={textBox.persisted}
+                        value={textBox.body}
+                        onBlur={() => {
+                          if (textBox.persisted) return;
+                          const draft = textBoxDrafts.find((entry) => entry.id === textBox.id);
+                          if (draft) commitTextBoxDraft(draft);
+                        }}
+                        onChange={(event) => {
+                          if (textBox.persisted) return;
+                          const nextBody = event.target.value;
+                          setTextBoxDrafts((current) => current.map((entry) => entry.id === textBox.id ? { ...entry, body: nextBody } : entry));
+                        }}
+                      />
+                    </div>
+                  ))}
+                  {drawingTextBox?.pageIndex0 === index ? (
+                    <div
+                      aria-hidden="true"
+                      className="pdf-text-box-drawing"
+                      style={{
+                        left: `${Math.min(drawingTextBox.startX, drawingTextBox.currentX)}px`,
+                        top: `${Math.min(drawingTextBox.startY, drawingTextBox.currentY)}px`,
+                        width: `${Math.abs(drawingTextBox.currentX - drawingTextBox.startX)}px`,
+                        height: `${Math.abs(drawingTextBox.currentY - drawingTextBox.startY)}px`,
                       }}
                     />
-                  </div>
-                ))}
-                {drawingTextBox?.pageIndex0 === index ? (
-                  <div
-                    aria-hidden="true"
-                    className="pdf-text-box-drawing"
-                    style={{
-                      left: `${Math.min(drawingTextBox.startX, drawingTextBox.currentX)}px`,
-                      top: `${Math.min(drawingTextBox.startY, drawingTextBox.currentY)}px`,
-                      width: `${Math.abs(drawingTextBox.currentX - drawingTextBox.startX)}px`,
-                      height: `${Math.abs(drawingTextBox.currentY - drawingTextBox.startY)}px`,
-                    }}
-                  />
-                ) : null}
-              </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           );
         })}
