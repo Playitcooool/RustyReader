@@ -340,6 +340,28 @@
   box-shadow: 0 0 0 2px rgba(102, 164, 212, 0.35);
 }
 
+.reader-selection-menu .nav-item {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 8px 10px;
+  white-space: nowrap;
+}
+
+.reader-selection-color-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reader-selection-color-swatch {
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+  border-radius: 5px;
+  box-shadow: none;
+  cursor: default;
+}
+
 .translation-popover {
   position: fixed;
   z-index: 1001;
@@ -419,4 +441,3 @@
   margin-left: auto;
   flex: 0 0 auto;
 }
-

@@ -230,12 +230,61 @@ export function useReaderState({
     setTranslationSelection(null);
     setTranslationPopover(null);
     setTranslationError(null);
+    setTranslationLoading(false);
     try {
       window.getSelection?.()?.removeAllRanges?.();
     } catch {
       // Ignore.
     }
   }, []);
+
+  const getReaderSelectionQuote = useCallback(() => {
+    return (translationSelection?.quote ?? pdfSelection?.quote ?? "").trim();
+  }, [pdfSelection, translationSelection]);
+
+  const copyReaderSelection = useCallback(async () => {
+    const quote = getReaderSelectionQuote();
+    if (!quote) return;
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(quote);
+        setStatusMessage("Copied selection.");
+        return;
+      } catch {
+        // Fall back below.
+      }
+    }
+
+    const textArea = document.createElement("textarea");
+    textArea.value = quote;
+    textArea.setAttribute("readonly", "");
+    textArea.style.position = "fixed";
+    textArea.style.left = "-9999px";
+    textArea.style.top = "0";
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    try {
+      const copied = document.execCommand("copy");
+      setStatusMessage(copied ? "Copied selection." : "Unable to copy selection.");
+    } catch {
+      setStatusMessage("Unable to copy selection.");
+    } finally {
+      textArea.remove();
+    }
+  }, [getReaderSelectionQuote, setStatusMessage]);
+
+  const searchReaderSelection = useCallback(() => {
+    const quote = getReaderSelectionQuote();
+    if (!quote) return;
+    setReaderSearchQuery(quote);
+    setReaderSearchMatchIndex(0);
+    setIsFindHudOpen(true);
+  }, [getReaderSelectionQuote]);
+
+  const clearReaderSelection = useCallback(() => {
+    dismissPdfSelection();
+  }, [dismissPdfSelection]);
 
   const setReaderSelection = useCallback((selection: ReaderTextSelection | null) => {
     setTranslationSelection(selection);
@@ -367,6 +416,8 @@ export function useReaderState({
     closePaperTab,
     collectionArtifact,
     collectionTaskRuns,
+    clearReaderSelection,
+    copyReaderSelection,
     currentReaderHtml,
     dismissActivePdfHighlight,
     dismissPdfSelection,
@@ -407,6 +458,7 @@ export function useReaderState({
     readerFitMode,
     reportedActiveSearchMatchIndex,
     requestSelectionTranslation,
+    searchReaderSelection,
     clampReaderZoom,
     handleReaderPageSubmit,
     setAnnotations,

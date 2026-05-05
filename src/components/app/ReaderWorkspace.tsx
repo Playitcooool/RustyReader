@@ -9,6 +9,8 @@ import type { ActivePdfHighlight, PdfTextBoxAnnotationDraft, ReaderTextSelection
 import type { PdfHighlightColor, PdfTextSelection } from "../readers/pdfSelection";
 import { useMemo, useState, type RefObject } from "react";
 
+const pdfHighlightColors = ["yellow", "red", "green", "blue", "purple"] as const satisfies readonly PdfHighlightColor[];
+
 type ReaderWorkspaceData = {
   activePaper: LibraryItem | null;
   activePaperMetadata: string | null;
@@ -59,6 +61,8 @@ type ReaderWorkspaceActions = {
   onAiToggle: () => void | Promise<void>;
   onCloseFindHud: () => void;
   onCloseTab: (itemId: number) => void;
+  onClearReaderSelection: () => void;
+  onCopyReaderSelection: () => void | Promise<void>;
   onCreatePdfFocusHighlight: (color: PdfHighlightColor) => void | Promise<void>;
   onCreatePdfFocusTextBoxAnnotation: (draft: PdfTextBoxAnnotationDraft) => void | Promise<void>;
   onExitFocus: () => void;
@@ -71,6 +75,7 @@ type ReaderWorkspaceActions = {
   onReaderSearchMatchesChange: (state: { total: number; activeIndex: number }) => void;
   onPdfZoomChange: (value: number) => void;
   onRequestSelectionTranslation: () => void | Promise<void>;
+  onSearchReaderSelection: () => void;
   onShowLibrary: () => void;
   onStepNormalizedZoom: (direction: 1 | -1) => void;
   onSelectionChange: (selection: ReaderTextSelection | null) => void;
@@ -132,8 +137,10 @@ export function ReaderWorkspace(props: Props) {
     onActivateItem,
     onActivePdfHighlight,
     onAiToggle,
+    onClearReaderSelection,
     onCloseFindHud,
     onCloseTab,
+    onCopyReaderSelection,
     onCreatePdfFocusHighlight,
     onCreatePdfFocusTextBoxAnnotation,
     onExitFocus,
@@ -146,6 +153,7 @@ export function ReaderWorkspace(props: Props) {
     onReaderSearchMatchesChange,
     onPdfZoomChange,
     onRequestSelectionTranslation,
+    onSearchReaderSelection,
     onShowLibrary,
     onStepNormalizedZoom,
     onSelectionChange,
@@ -173,6 +181,7 @@ export function ReaderWorkspace(props: Props) {
     return { left: `${left}px`, top: `${top}px` } as const;
   }, [pdfSelection, showPdfFocusHighlightBar]);
   const selectionForActions = translationSelection ?? (pdfSelection ? { quote: pdfSelection.quote, rect: pdfSelection.rect } : null);
+  const showPdfHighlightActions = workspaceMode === "pdf_focus" && Boolean(pdfSelection);
   const translationPopoverStyle = useMemo(() => {
     if (!translationPopover) return {};
     const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -366,10 +375,60 @@ export function ReaderWorkspace(props: Props) {
             type="button"
             onClick={() => {
               setReaderContextMenu(null);
+              void onCopyReaderSelection();
+            }}
+          >
+            Copy
+          </button>
+          <button
+            className="nav-item"
+            role="menuitem"
+            type="button"
+            onClick={() => {
+              setReaderContextMenu(null);
+              onSearchReaderSelection();
+            }}
+          >
+            Search Selection
+          </button>
+          <button
+            className="nav-item"
+            role="menuitem"
+            type="button"
+            onClick={() => {
+              setReaderContextMenu(null);
               void onRequestSelectionTranslation();
             }}
           >
             Translate
+          </button>
+          {showPdfHighlightActions
+            ? pdfHighlightColors.map((color) => (
+                <button
+                  key={color}
+                  className="nav-item reader-selection-color-item"
+                  role="menuitem"
+                  type="button"
+                  onClick={() => {
+                    setReaderContextMenu(null);
+                    void onCreatePdfFocusHighlight(color);
+                  }}
+                >
+                  <span className="pdf-focus-highlight-swatch reader-selection-color-swatch" data-color={color} aria-hidden="true" />
+                  <span>Highlight {color}</span>
+                </button>
+              ))
+            : null}
+          <button
+            className="nav-item"
+            role="menuitem"
+            type="button"
+            onClick={() => {
+              setReaderContextMenu(null);
+              onClearReaderSelection();
+            }}
+          >
+            Clear Selection
           </button>
         </div>
       ) : null}

@@ -536,9 +536,11 @@ export default function App({ api }: { api: AppApi }) {
             }
             ensureAiPanelReady();
           },
+          onClearReaderSelection: readerState.clearReaderSelection,
           onCloseFindHud: closeFindHud,
           onCloseTab: readerState.closePaperTab,
           onCloseTranslationPopover: readerState.closeTranslationPopover,
+          onCopyReaderSelection: readerState.copyReaderSelection,
           onCreatePdfFocusHighlight: readerState.handleCreatePdfFocusHighlight,
           onCreatePdfFocusTextBoxAnnotation: readerState.handleCreatePdfFocusTextBoxAnnotation,
           onExitFocus: () => { readerState.setWorkspaceMode("workspace"); setIsSidebarVisible(true); },
@@ -551,6 +553,7 @@ export default function App({ api }: { api: AppApi }) {
           onReaderPageSubmit: readerState.handleReaderPageSubmit,
           onReaderSearchMatchesChange: ({ total, activeIndex }) => { readerState.setReaderSearchMatchCount(total); readerState.setReportedActiveSearchMatchIndex(activeIndex); },
           onRequestSelectionTranslation: readerState.requestSelectionTranslation,
+          onSearchReaderSelection: readerState.searchReaderSelection,
           onSelectionChange: (selection) => {
             readerState.setReaderSelection(selection);
             readerState.setPdfSelection(isPdfTextSelection(selection) ? selection : null);

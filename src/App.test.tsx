@@ -302,6 +302,73 @@ describe("App reading workspace", () => {
     );
   });
 
+  it("offers selection context menu actions in pdf focus", async () => {
+    const user = userEvent.setup();
+    const createAnnotationSpy = vi.spyOn(fakeApi, "createAnnotation");
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    render(<App api={fakeApi} />);
+    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(screen.getByRole("button", { name: "Mock select PDF text" }));
+
+    fireEvent.contextMenu(screen.getByTestId("pdf-reader"), { clientX: 140, clientY: 150 });
+    expect(screen.getByRole("menuitem", { name: "Copy" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Search Selection" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Translate" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Highlight yellow" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Highlight red" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Highlight green" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Highlight blue" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Highlight purple" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Clear Selection" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("menuitem", { name: "Copy" }));
+    expect(writeText).toHaveBeenCalledWith("Hello");
+
+    fireEvent.contextMenu(screen.getByTestId("pdf-reader"), { clientX: 140, clientY: 150 });
+    await user.click(screen.getByRole("menuitem", { name: "Search Selection" }));
+    expect(await screen.findByRole("textbox", { name: "Find in document" })).toHaveValue("Hello");
+
+    fireEvent.contextMenu(screen.getByTestId("pdf-reader"), { clientX: 140, clientY: 150 });
+    await user.click(screen.getByRole("menuitem", { name: "Highlight yellow" }));
+    await waitFor(() => {
+      expect(createAnnotationSpy).toHaveBeenCalled();
+    });
+    expect((createAnnotationSpy.mock.calls[0]?.[0] as { anchor?: string } | undefined)?.anchor).toContain(
+      '"color":"yellow"',
+    );
+  });
+
+  it("clears selection from the context menu and falls back when clipboard is unavailable", async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: undefined,
+    });
+    const execCommandSpy = vi.fn(() => true);
+    Object.defineProperty(document, "execCommand", {
+      configurable: true,
+      value: execCommandSpy,
+    });
+
+    render(<App api={fakeApi} />);
+    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(screen.getByRole("button", { name: "Mock select PDF text" }));
+
+    fireEvent.contextMenu(screen.getByTestId("pdf-reader"), { clientX: 140, clientY: 150 });
+    await user.click(screen.getByRole("menuitem", { name: "Copy" }));
+    expect(execCommandSpy).toHaveBeenCalledWith("copy");
+
+    fireEvent.contextMenu(screen.getByTestId("pdf-reader"), { clientX: 140, clientY: 150 });
+    await user.click(screen.getByRole("menuitem", { name: "Clear Selection" }));
+    expect(screen.queryByRole("toolbar", { name: "PDF highlight colors" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menu", { name: "Reader selection actions" })).not.toBeInTheDocument();
+  });
+
   it("creates a focus text box annotation from the toolbar tool", async () => {
     const user = userEvent.setup();
     const createAnnotationSpy = vi.spyOn(fakeApi, "createAnnotation");
