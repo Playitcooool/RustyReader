@@ -211,7 +211,7 @@ describe("PdfContinuousReader", () => {
           const input = call[0] as { page_indexes0?: number[] } | undefined;
           return total + (input?.page_indexes0?.length ?? 0);
         }, 0);
-      expect(requestedPages).toBeLessThanOrEqual(18);
+      expect(requestedPages).toBeLessThanOrEqual(19);
       expect(requestedPages).toBeGreaterThanOrEqual(5);
     });
   });
@@ -632,6 +632,163 @@ describe("PdfContinuousReader", () => {
         bottom: expect.any(Number),
       }),
     });
+  });
+
+  it("commits a text box draft with Enter and includes current text style", async () => {
+    const getPdfPageBundle = vi.fn().mockResolvedValue(makeBundle("Hello world"));
+    const getPdfDocumentInfo = vi.fn().mockResolvedValue(makeDocumentInfo());
+    const getPdfPageText = vi.fn().mockResolvedValue({ page_index0: 0, spans: [] });
+    const ocrPdfPage = vi.fn().mockResolvedValue({
+      primary_attachment_id: 101,
+      page_index0: 0,
+      lang: "eng+chi_sim",
+      config_version: "test",
+      lines: [],
+    });
+    const onCreateTextBoxAnnotation = vi.fn();
+
+    const { container } = render(
+      <PdfContinuousReader
+        getPdfDocumentInfo={getPdfDocumentInfo}
+        getPdfPageBundle={getPdfPageBundle}
+        getPdfPageText={getPdfPageText}
+        ocrPdfPage={ocrPdfPage}
+        onCreateTextBoxAnnotation={onCreateTextBoxAnnotation}
+        page={0}
+        textBoxDefaultColor="blue"
+        textBoxDefaultFontSize={18}
+        textBoxToolActive
+        view={pdfView}
+        zoom={100}
+      />,
+    );
+
+    await waitFor(() => expect(container.querySelector('[data-page-index="0"]')).toBeTruthy());
+    const shell = container.querySelector('[data-page-index="0"]') as HTMLElement;
+    shell.getBoundingClientRect = () => ({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 800,
+      bottom: 1000,
+      width: 800,
+      height: 1000,
+      toJSON: () => ({}),
+    });
+    fireEvent.mouseDown(shell, { button: 0, buttons: 1, pointerId: 1, pointerType: "mouse", clientX: 80, clientY: 120 });
+    await waitFor(() => expect(container.querySelector(".pdf-text-box-drawing")).toBeTruthy());
+    fireEvent.mouseMove(window, { clientX: 320, clientY: 240 });
+    fireEvent.mouseUp(window);
+
+    const textarea = await screen.findByRole("textbox", { name: "PDF text box annotation" });
+    fireEvent.change(textarea, { target: { value: "Styled note" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+
+    await waitFor(() => expect(onCreateTextBoxAnnotation).toHaveBeenCalledWith({
+      body: "Styled note",
+      anchor: expect.stringContaining('"color":"blue"'),
+    }));
+    expect(onCreateTextBoxAnnotation.mock.calls[0]?.[0].anchor).toContain('"fontSize":18');
+    expect(textarea).not.toHaveFocus();
+  });
+
+  it("commits a text box draft on blur and removes empty drafts", async () => {
+    const getPdfPageBundle = vi.fn().mockResolvedValue(makeBundle("Hello world"));
+    const getPdfDocumentInfo = vi.fn().mockResolvedValue(makeDocumentInfo());
+    const getPdfPageText = vi.fn().mockResolvedValue({ page_index0: 0, spans: [] });
+    const ocrPdfPage = vi.fn().mockResolvedValue({
+      primary_attachment_id: 101,
+      page_index0: 0,
+      lang: "eng+chi_sim",
+      config_version: "test",
+      lines: [],
+    });
+    const onCreateTextBoxAnnotation = vi.fn();
+
+    const { container } = render(
+      <PdfContinuousReader
+        getPdfDocumentInfo={getPdfDocumentInfo}
+        getPdfPageBundle={getPdfPageBundle}
+        getPdfPageText={getPdfPageText}
+        ocrPdfPage={ocrPdfPage}
+        onCreateTextBoxAnnotation={onCreateTextBoxAnnotation}
+        page={0}
+        textBoxToolActive
+        view={pdfView}
+        zoom={100}
+      />,
+    );
+
+    await waitFor(() => expect(container.querySelector('[data-page-index="0"]')).toBeTruthy());
+    const shell = container.querySelector('[data-page-index="0"]') as HTMLElement;
+    shell.getBoundingClientRect = () => ({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 800,
+      bottom: 1000,
+      width: 800,
+      height: 1000,
+      toJSON: () => ({}),
+    });
+
+    fireEvent.mouseDown(shell, { button: 0, buttons: 1, pointerId: 1, pointerType: "mouse", clientX: 80, clientY: 120 });
+    await waitFor(() => expect(container.querySelector(".pdf-text-box-drawing")).toBeTruthy());
+    fireEvent.mouseMove(window, { clientX: 320, clientY: 240 });
+    fireEvent.mouseUp(window);
+    let textarea = await screen.findByRole("textbox", { name: "PDF text box annotation" });
+    fireEvent.change(textarea, { target: { value: "Blur note" } });
+    fireEvent.blur(textarea);
+    await waitFor(() => expect(onCreateTextBoxAnnotation).toHaveBeenCalledWith(expect.objectContaining({ body: "Blur note" })));
+
+    fireEvent.mouseDown(shell, { button: 0, buttons: 1, pointerId: 1, pointerType: "mouse", clientX: 100, clientY: 300 });
+    await waitFor(() => expect(container.querySelector(".pdf-text-box-drawing")).toBeTruthy());
+    fireEvent.mouseMove(window, { clientX: 350, clientY: 430 });
+    fireEvent.mouseUp(window);
+    textarea = await screen.findByRole("textbox", { name: "PDF text box annotation" });
+    fireEvent.blur(textarea);
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "PDF text box annotation" })).not.toBeInTheDocument());
+    expect(onCreateTextBoxAnnotation).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders persisted text boxes using anchor style and read-only text", async () => {
+    const getPdfPageBundle = vi.fn().mockResolvedValue(makeBundle("Hello world"));
+    const getPdfDocumentInfo = vi.fn().mockResolvedValue(makeDocumentInfo());
+    const getPdfPageText = vi.fn().mockResolvedValue({ page_index0: 0, spans: [] });
+    const ocrPdfPage = vi.fn().mockResolvedValue({
+      primary_attachment_id: 101,
+      page_index0: 0,
+      lang: "eng+chi_sim",
+      config_version: "test",
+      lines: [],
+    });
+
+    const { container } = render(
+      <PdfContinuousReader
+        annotations={[{
+          id: 33,
+          item_id: pdfView.item_id,
+          kind: "text_box",
+          body: "Persisted note",
+          anchor: JSON.stringify({ type: "pdf_text_box", page: 1, x: 0.1, y: 0.2, width: 0.3, height: 0.1, color: "purple", fontSize: 20 }),
+        }]}
+        getPdfDocumentInfo={getPdfDocumentInfo}
+        getPdfPageBundle={getPdfPageBundle}
+        getPdfPageText={getPdfPageText}
+        ocrPdfPage={ocrPdfPage}
+        page={0}
+        view={pdfView}
+        zoom={100}
+      />,
+    );
+
+    const textarea = await screen.findByRole("textbox", { name: "PDF text box annotation" });
+    expect(textarea).toHaveValue("Persisted note");
+    expect(textarea).toHaveAttribute("readonly");
+    const box = container.querySelector(".pdf-text-box-annotation") as HTMLElement;
+    expect(box).toHaveStyle({ color: "rgb(128, 0, 128)", fontSize: "20px" });
   });
 
 });

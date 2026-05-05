@@ -286,18 +286,16 @@
 .pdf-text-box-annotation {
   position: absolute;
   z-index: 3;
-  border: 1px solid rgba(226, 139, 83, 0.72);
-  border-radius: 8px;
-  background: rgba(255, 248, 225, 0.12);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
 }
 
 .pdf-text-box-drawing {
   pointer-events: none;
+  border: 1px dashed rgba(226, 139, 83, 0.72);
+  border-radius: 4px;
+  background: rgba(226, 139, 83, 0.1);
 }
 
 .pdf-text-box-annotation {
-  padding: 4px;
   min-width: 24px;
   min-height: 24px;
 }
@@ -310,11 +308,11 @@
   resize: none;
   border: 0;
   outline: 0;
-  background: rgba(255, 252, 238, 0.92);
-  color: #171512;
-  border-radius: 5px;
-  padding: 6px 8px;
-  font-size: 13px;
+  background: transparent;
+  color: inherit;
+  border-radius: 0;
+  padding: 0;
+  font: inherit;
   line-height: 1.35;
 }
 
@@ -360,4 +358,3 @@
   padding: 24px;
   background: rgba(4, 5, 8, 0.56);
 }
-

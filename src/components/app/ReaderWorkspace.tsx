@@ -7,6 +7,15 @@ import { attachmentFormatLabel, formatItemMetadata, type ReaderFitMode } from ".
 import type { LibraryItem, ReaderView, Annotation } from "../../lib/contracts";
 import type { ActivePdfHighlight, PdfTextBoxAnnotationDraft, ReaderTextSelection, TranslationPopover, WorkspaceMode } from "../../hooks/useReaderState";
 import type { PdfHighlightColor, PdfTextSelection } from "../readers/pdfSelection";
+import {
+  DEFAULT_PDF_TEXT_BOX_COLOR,
+  DEFAULT_PDF_TEXT_BOX_FONT_SIZE,
+  MAX_PDF_TEXT_BOX_FONT_SIZE,
+  MIN_PDF_TEXT_BOX_FONT_SIZE,
+  clampPdfTextBoxFontSize,
+  pdfTextBoxColors,
+  type PdfTextBoxColor,
+} from "../readers/pdfTextBoxAnchor";
 import { useMemo, useState, type RefObject } from "react";
 
 const pdfHighlightColors = ["yellow", "red", "green", "blue", "purple"] as const satisfies readonly PdfHighlightColor[];
@@ -163,6 +172,8 @@ export function ReaderWorkspace(props: Props) {
   } = props.actions;
   const [readerContextMenu, setReaderContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [isPdfTextBoxToolActive, setIsPdfTextBoxToolActive] = useState(false);
+  const [pdfTextBoxColor, setPdfTextBoxColor] = useState<PdfTextBoxColor>(DEFAULT_PDF_TEXT_BOX_COLOR);
+  const [pdfTextBoxFontSize, setPdfTextBoxFontSize] = useState(DEFAULT_PDF_TEXT_BOX_FONT_SIZE);
 
   const showPdfFocusHighlightBar = Boolean(workspaceMode === "pdf_focus" && activePaper?.attachment_format === "pdf" && pdfSelection);
   const pdfFocusHighlightBarStyle = useMemo(() => {
@@ -266,6 +277,33 @@ export function ReaderWorkspace(props: Props) {
               >
                 T
               </button>
+              {isPdfTextBoxToolActive ? (
+                <>
+                  <div className="pdf-text-box-style-swatches" role="toolbar" aria-label="PDF text box text colors">
+                    {pdfTextBoxColors.map((color) => (
+                      <button
+                        key={color}
+                        type="button"
+                        className="pdf-focus-highlight-swatch pdf-text-box-color-swatch"
+                        data-color={color}
+                        aria-label={`Text box color ${color}`}
+                        aria-pressed={pdfTextBoxColor === color}
+                        onClick={() => setPdfTextBoxColor(color)}
+                      />
+                    ))}
+                  </div>
+                  <input
+                    aria-label="Text box font size"
+                    className="reader-page-input pdf-text-box-font-size-input"
+                    min={MIN_PDF_TEXT_BOX_FONT_SIZE}
+                    max={MAX_PDF_TEXT_BOX_FONT_SIZE}
+                    step={1}
+                    type="number"
+                    value={pdfTextBoxFontSize}
+                    onChange={(event) => setPdfTextBoxFontSize(clampPdfTextBoxFontSize(Number(event.target.value)))}
+                  />
+                </>
+              ) : null}
             </div>
           </div>
           {readerView ? (
@@ -294,6 +332,8 @@ export function ReaderWorkspace(props: Props) {
                   setIsPdfTextBoxToolActive(false);
                 }}
                 textBoxToolActive={isPdfTextBoxToolActive}
+                textBoxDefaultColor={pdfTextBoxColor}
+                textBoxDefaultFontSize={pdfTextBoxFontSize}
                 onActivePageChange={onReaderPageChange}
                 onNavigateToPage={onReaderPageChange}
                 onPageCountChange={setPdfPageCount}

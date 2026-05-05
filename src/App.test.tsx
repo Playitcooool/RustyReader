@@ -84,6 +84,8 @@ vi.mock("./components/readers/PdfContinuousReader", () => {
     onHighlightActivate,
     onCreateTextBoxAnnotation,
     textBoxToolActive,
+    textBoxDefaultColor,
+    textBoxDefaultFontSize,
     searchQuery,
     activeSearchMatchIndex = 0,
     onSearchMatchesChange,
@@ -96,6 +98,8 @@ vi.mock("./components/readers/PdfContinuousReader", () => {
     onHighlightActivate?: (highlight: unknown) => void;
     onCreateTextBoxAnnotation?: (draft: { anchor: string; body: string }) => void;
     textBoxToolActive?: boolean;
+    textBoxDefaultColor?: string;
+    textBoxDefaultFontSize?: number;
     activeSearchMatchIndex?: number;
     onSearchMatchesChange?: (state: { total: number; activeIndex: number }) => void;
   }) {
@@ -158,7 +162,16 @@ vi.mock("./components/readers/PdfContinuousReader", () => {
           disabled={!textBoxToolActive}
           onClick={() =>
             onCreateTextBoxAnnotation?.({
-              anchor: JSON.stringify({ type: "pdf_text_box", page: page + 1, x: 0.1, y: 0.2, width: 0.3, height: 0.12 }),
+              anchor: JSON.stringify({
+                type: "pdf_text_box",
+                page: page + 1,
+                x: 0.1,
+                y: 0.2,
+                width: 0.3,
+                height: 0.12,
+                color: textBoxDefaultColor,
+                fontSize: textBoxDefaultFontSize,
+              }),
               body: "Important note",
             })
           }
@@ -387,6 +400,25 @@ describe("App reading workspace", () => {
     expect((createAnnotationSpy.mock.calls[0]?.[0] as { anchor?: string } | undefined)?.anchor).toContain(
       '"type":"pdf_text_box"',
     );
+  });
+
+  it("uses focus text box toolbar style defaults for new annotations", async () => {
+    const user = userEvent.setup();
+    const createAnnotationSpy = vi.spyOn(fakeApi, "createAnnotation");
+
+    render(<App api={fakeApi} />);
+    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(screen.getByRole("button", { name: "Add text box annotation" }));
+    await user.click(screen.getByRole("button", { name: "Text box color purple" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Text box font size" }), { target: { value: "18" } });
+    await user.click(screen.getByRole("button", { name: "Mock draw text box annotation" }));
+
+    await waitFor(() => {
+      expect(createAnnotationSpy).toHaveBeenCalledWith(expect.objectContaining({ kind: "text_box" }));
+    });
+    const anchor = (createAnnotationSpy.mock.calls[0]?.[0] as { anchor?: string } | undefined)?.anchor ?? "";
+    expect(anchor).toContain('"color":"purple"');
+    expect(anchor).toContain('"fontSize":18');
   });
 
   it("leaves pdf focus when switching to a non-pdf tab", async () => {

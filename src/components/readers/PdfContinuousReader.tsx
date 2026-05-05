@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { CSSProperties } from "react";
 
 import type {
@@ -25,7 +25,15 @@ import {
 } from "./pdfSelection";
 import { installPdfJsTextLayerSelectionSupport } from "./pdfTextLayerSelectionSupport";
 import { buildRustPdfTextLayer, pageWidthAtScale1FromPoints } from "./pdfRustTextLayer";
-import { parsePdfTextBoxAnchor, type PdfTextBoxAnchor } from "./pdfTextBoxAnchor";
+import {
+  DEFAULT_PDF_TEXT_BOX_COLOR,
+  DEFAULT_PDF_TEXT_BOX_FONT_SIZE,
+  normalizePdfTextBoxColor,
+  normalizePdfTextBoxFontSize,
+  parsePdfTextBoxAnchor,
+  type PdfTextBoxAnchor,
+  type PdfTextBoxColor,
+} from "./pdfTextBoxAnchor";
 
 const escapeHtml = (value: string) =>
   value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -95,6 +103,8 @@ type PdfContinuousReaderProps = {
   onHighlightActivate?: (highlight: { annotationId: number; rect: PdfSelectionRect }) => void;
   onCreateTextBoxAnnotation?: (draft: { anchor: string; body: string }) => void;
   textBoxToolActive?: boolean;
+  textBoxDefaultColor?: PdfTextBoxColor;
+  textBoxDefaultFontSize?: number;
   onSearchMatchesChange?: (state: { total: number; activeIndex: number }) => void;
 };
 
@@ -210,6 +220,8 @@ export function PdfContinuousReader({
   onHighlightActivate,
   onCreateTextBoxAnnotation,
   textBoxToolActive = false,
+  textBoxDefaultColor = DEFAULT_PDF_TEXT_BOX_COLOR,
+  textBoxDefaultFontSize = DEFAULT_PDF_TEXT_BOX_FONT_SIZE,
   onSearchMatchesChange,
 }: PdfContinuousReaderProps) {
   const scrollRootRef = useRef<HTMLElement | null>(null);
@@ -1322,7 +1334,7 @@ export function PdfContinuousReader({
     if (!textBoxToolActive) setDrawingTextBox(null);
   }, [textBoxToolActive]);
 
-  const startTextBoxDraw = useCallback((event: ReactPointerEvent<HTMLDivElement>, pageIndex0: number) => {
+  const startTextBoxDraw = useCallback((event: ReactPointerEvent<HTMLDivElement> | ReactMouseEvent<HTMLDivElement>, pageIndex0: number) => {
     if (!textBoxToolActive) return;
     if (event.button !== 0) return;
     const shell = pageShellByIndexRef.current.get(pageIndex0);
@@ -1341,7 +1353,7 @@ export function PdfContinuousReader({
 
   useEffect(() => {
     if (!drawingTextBox) return;
-    const onMove = (event: PointerEvent) => {
+    const onMove = (event: PointerEvent | MouseEvent) => {
       const shell = pageShellByIndexRef.current.get(drawingTextBox.pageIndex0);
       if (!shell) return;
       const rect = shell.getBoundingClientRect();
@@ -1372,6 +1384,8 @@ export function PdfContinuousReader({
               y: top / Math.max(1, rect.height),
               width: width / Math.max(1, rect.width),
               height: height / Math.max(1, rect.height),
+              color: normalizePdfTextBoxColor(textBoxDefaultColor),
+              fontSize: normalizePdfTextBoxFontSize(textBoxDefaultFontSize),
             },
             body: "",
           }]);
@@ -1381,11 +1395,15 @@ export function PdfContinuousReader({
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp, { once: true });
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp, { once: true });
     return () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
     };
-  }, [drawingTextBox]);
+  }, [drawingTextBox, textBoxDefaultColor, textBoxDefaultFontSize]);
 
   const commitTextBoxDraft = useCallback((draft: TextBoxDraft) => {
     const body = draft.body.trim();
@@ -1670,6 +1688,7 @@ export function PdfContinuousReader({
                 minHeight: height ? `${height}px` : undefined,
               }}
               onPointerDown={(event) => startTextBoxDraw(event, index)}
+              onMouseDown={(event) => startTextBoxDraw(event, index)}
             >
               {shouldMountFullPage ? (
                 <div style={{ position: "relative" }}>
@@ -1719,6 +1738,8 @@ export function PdfContinuousReader({
                         top: `${textBox.anchor.y * 100}%`,
                         width: `${textBox.anchor.width * 100}%`,
                         height: `${textBox.anchor.height * 100}%`,
+                        color: textBox.anchor.color,
+                        fontSize: `${textBox.anchor.fontSize}px`,
                       }}
                       onPointerDown={(event) => event.stopPropagation()}
                     >
@@ -1735,6 +1756,12 @@ export function PdfContinuousReader({
                           if (textBox.persisted) return;
                           const nextBody = event.target.value;
                           setTextBoxDrafts((current) => current.map((entry) => entry.id === textBox.id ? { ...entry, body: nextBody } : entry));
+                        }}
+                        onKeyDown={(event) => {
+                          if (textBox.persisted) return;
+                          if (event.key !== "Enter") return;
+                          event.preventDefault();
+                          event.currentTarget.blur();
                         }}
                       />
                     </div>
