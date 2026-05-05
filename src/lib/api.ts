@@ -175,6 +175,7 @@ export async function createTauriApi(): Promise<AppApi> {
       ),
     listAnnotations: (itemId) => invoke("list_annotations", { itemId }),
     createAnnotation: (input) => invoke("create_annotation", { input }),
+    updateAnnotation: (input) => invoke("update_annotation", { input }),
     removeAnnotation: (input) => invoke("remove_annotation", { input }),
     getAiSettings: () => invoke("get_ai_settings"),
     updateAiSettings: (input) => invoke("update_ai_settings", { input }),

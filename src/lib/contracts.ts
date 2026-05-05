@@ -342,6 +342,11 @@ export type AppApi = {
     kind: string;
     body: string;
   }) => Promise<Annotation>;
+  updateAnnotation: (input: {
+    annotation_id: number;
+    anchor: string;
+    body?: string;
+  }) => Promise<Annotation>;
   removeAnnotation: (input: { annotation_id: number }) => Promise<void>;
   getAiSettings: () => Promise<AISettings>;
   updateAiSettings: (input: UpdateAISettingsInput) => Promise<AISettings>;

@@ -1043,6 +1043,19 @@ export const fakeApi: AppApi = {
     return annotation;
   },
 
+  async updateAnnotation(input) {
+    const index = state.annotations.findIndex((annotation) => annotation.id === input.annotation_id);
+    if (index < 0) throw new Error("annotation does not exist");
+    const current = state.annotations[index]!;
+    const annotation = {
+      ...current,
+      anchor: input.anchor,
+      body: input.body ?? current.body,
+    };
+    state.annotations[index] = annotation;
+    return annotation;
+  },
+
   async removeAnnotation(input) {
     state.annotations = state.annotations.filter((annotation) => annotation.id !== input.annotation_id);
   },

@@ -102,6 +102,7 @@ type PdfContinuousReaderProps = {
   onSelectionChange?: (selection: PdfTextSelection | null) => void;
   onHighlightActivate?: (highlight: { annotationId: number; rect: PdfSelectionRect }) => void;
   onCreateTextBoxAnnotation?: (draft: { anchor: string; body: string }) => void;
+  onUpdateTextBoxAnnotation?: (annotationId: number, anchor: string) => void | Promise<void>;
   textBoxToolActive?: boolean;
   textBoxDefaultColor?: PdfTextBoxColor;
   textBoxDefaultFontSize?: number;
@@ -145,6 +146,15 @@ type TextBoxDraft = {
   pageIndex0: number;
   anchor: PdfTextBoxAnchor;
   body: string;
+};
+type TextBoxResizeHandle = "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "nw";
+type TextBoxInteraction = {
+  annotationId: number;
+  pageIndex0: number;
+  handle: TextBoxResizeHandle | "move";
+  startClientX: number;
+  startClientY: number;
+  startAnchor: PdfTextBoxAnchor;
 };
 
 const supportsRequestIdleCallback = () =>
@@ -219,6 +229,7 @@ export function PdfContinuousReader({
   onSelectionChange,
   onHighlightActivate,
   onCreateTextBoxAnnotation,
+  onUpdateTextBoxAnnotation,
   textBoxToolActive = false,
   textBoxDefaultColor = DEFAULT_PDF_TEXT_BOX_COLOR,
   textBoxDefaultFontSize = DEFAULT_PDF_TEXT_BOX_FONT_SIZE,
@@ -268,6 +279,9 @@ export function PdfContinuousReader({
     currentY: number;
   } | null>(null);
   const [textBoxDrafts, setTextBoxDrafts] = useState<TextBoxDraft[]>([]);
+  const [selectedTextBoxAnnotationId, setSelectedTextBoxAnnotationId] = useState<number | null>(null);
+  const [textBoxAnchorOverrides, setTextBoxAnchorOverrides] = useState<Record<number, PdfTextBoxAnchor>>({});
+  const textBoxInteractionRef = useRef<TextBoxInteraction | null>(null);
   const newestTextBoxDraftIdRef = useRef<string | null>(null);
 
   const onPageCountChangeRef = useRef(onPageCountChange);
@@ -1272,14 +1286,14 @@ export function PdfContinuousReader({
   }, [annotations, textEnabled]);
 
   const textBoxesByPage = useMemo(() => {
-    const grouped = new Map<number, Array<{ id: string; anchor: PdfTextBoxAnchor; body: string; persisted: boolean }>>();
+    const grouped = new Map<number, Array<{ id: string; annotationId?: number; anchor: PdfTextBoxAnchor; body: string; persisted: boolean }>>();
     for (const annotation of annotations) {
       if (annotation.kind !== "text_box") continue;
       const anchor = parsePdfTextBoxAnchor(annotation.anchor);
       if (!anchor) continue;
       const pageIndex0 = anchor.page - 1;
       const current = grouped.get(pageIndex0) ?? [];
-      current.push({ id: `annotation-${annotation.id}`, anchor, body: annotation.body, persisted: true });
+      current.push({ id: `annotation-${annotation.id}`, annotationId: annotation.id, anchor: textBoxAnchorOverrides[annotation.id] ?? anchor, body: annotation.body, persisted: true });
       grouped.set(pageIndex0, current);
     }
     for (const draft of textBoxDrafts) {
@@ -1288,7 +1302,25 @@ export function PdfContinuousReader({
       grouped.set(draft.pageIndex0, current);
     }
     return grouped;
-  }, [annotations, textBoxDrafts]);
+  }, [annotations, textBoxAnchorOverrides, textBoxDrafts]);
+
+  useEffect(() => {
+    const ids = new Set(annotations.filter((annotation) => annotation.kind === "text_box").map((annotation) => annotation.id));
+    setTextBoxAnchorOverrides((current) => {
+      let changed = false;
+      const next: Record<number, PdfTextBoxAnchor> = {};
+      for (const [key, value] of Object.entries(current)) {
+        const annotationId = Number(key);
+        if (!ids.has(annotationId)) {
+          changed = true;
+          continue;
+        }
+        next[annotationId] = value;
+      }
+      return changed ? next : current;
+    });
+    setSelectedTextBoxAnnotationId((current) => current !== null && !ids.has(current) ? null : current);
+  }, [annotations]);
 
   const fullPageMountSet = useMemo(() => {
     const mounted = new Set<number>();
@@ -1414,6 +1446,101 @@ export function PdfContinuousReader({
     onCreateTextBoxAnnotation?.({ anchor: JSON.stringify(draft.anchor), body });
     setTextBoxDrafts((current) => current.filter((entry) => entry.id !== draft.id));
   }, [onCreateTextBoxAnnotation]);
+
+  const clampTextBoxAnchorToPage = useCallback((anchor: PdfTextBoxAnchor, pageIndex0: number, shellRect: DOMRect) => {
+    const minWidth = Math.min(1, 24 / Math.max(1, shellRect.width));
+    const minHeight = Math.min(1, 24 / Math.max(1, shellRect.height));
+    const width = clamp(anchor.width, minWidth, 1);
+    const height = clamp(anchor.height, minHeight, 1);
+    return {
+      ...anchor,
+      page: pageIndex0 + 1,
+      x: clamp(anchor.x, 0, Math.max(0, 1 - width)),
+      y: clamp(anchor.y, 0, Math.max(0, 1 - height)),
+      width,
+      height,
+    };
+  }, []);
+
+  const calculateTextBoxInteractionAnchor = useCallback((interaction: TextBoxInteraction, event: PointerEvent | MouseEvent) => {
+    const shell = pageShellByIndexRef.current.get(interaction.pageIndex0);
+    if (!shell) return interaction.startAnchor;
+    const rect = shell.getBoundingClientRect();
+    const dx = (event.clientX - interaction.startClientX) / Math.max(1, rect.width);
+    const dy = (event.clientY - interaction.startClientY) / Math.max(1, rect.height);
+    const start = interaction.startAnchor;
+    let next: PdfTextBoxAnchor = { ...start };
+    if (interaction.handle === "move") {
+      next = { ...next, x: start.x + dx, y: start.y + dy };
+    } else {
+      let left = start.x;
+      let top = start.y;
+      let right = start.x + start.width;
+      let bottom = start.y + start.height;
+      if (interaction.handle.includes("w")) left += dx;
+      if (interaction.handle.includes("e")) right += dx;
+      if (interaction.handle.includes("n")) top += dy;
+      if (interaction.handle.includes("s")) bottom += dy;
+      const minWidth = Math.min(1, 24 / Math.max(1, rect.width));
+      const minHeight = Math.min(1, 24 / Math.max(1, rect.height));
+      if (right - left < minWidth) {
+        if (interaction.handle.includes("w")) left = right - minWidth;
+        else right = left + minWidth;
+      }
+      if (bottom - top < minHeight) {
+        if (interaction.handle.includes("n")) top = bottom - minHeight;
+        else bottom = top + minHeight;
+      }
+      next = { ...next, x: left, y: top, width: right - left, height: bottom - top };
+    }
+    return clampTextBoxAnchorToPage(next, interaction.pageIndex0, rect);
+  }, [clampTextBoxAnchorToPage]);
+
+  const updateTextBoxInteractionPreview = useCallback((event: PointerEvent | MouseEvent) => {
+    const interaction = textBoxInteractionRef.current;
+    if (!interaction) return;
+    const clamped = calculateTextBoxInteractionAnchor(interaction, event);
+    setTextBoxAnchorOverrides((current) => ({ ...current, [interaction.annotationId]: clamped }));
+  }, [calculateTextBoxInteractionAnchor]);
+
+  const startTextBoxInteraction = useCallback((
+    event: ReactPointerEvent<HTMLDivElement> | ReactMouseEvent<HTMLDivElement>,
+    input: { annotationId: number; pageIndex0: number; anchor: PdfTextBoxAnchor; handle: TextBoxResizeHandle | "move" },
+  ) => {
+    if (event.button !== 0 && event.button !== -1) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setSelectedTextBoxAnnotationId(input.annotationId);
+    textBoxInteractionRef.current = {
+      annotationId: input.annotationId,
+      pageIndex0: input.pageIndex0,
+      handle: input.handle,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startAnchor: input.anchor,
+    };
+    const onMove = (moveEvent: PointerEvent | MouseEvent) => updateTextBoxInteractionPreview(moveEvent);
+    const onUp = async (upEvent: PointerEvent | MouseEvent) => {
+      const interaction = textBoxInteractionRef.current;
+      textBoxInteractionRef.current = null;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      if (!interaction) return;
+      const finalAnchor = calculateTextBoxInteractionAnchor(interaction, upEvent);
+      setTextBoxAnchorOverrides((current) => ({ ...current, [interaction.annotationId]: finalAnchor }));
+      try {
+        await onUpdateTextBoxAnnotation?.(interaction.annotationId, JSON.stringify(finalAnchor));
+      } catch {
+        setTextBoxAnchorOverrides((current) => ({ ...current, [interaction.annotationId]: interaction.startAnchor }));
+      }
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }, [calculateTextBoxInteractionAnchor, onUpdateTextBoxAnnotation, updateTextBoxInteractionPreview]);
 
   useEffect(() => {
     if (!textEnabled) return;
@@ -1728,44 +1855,103 @@ export function PdfContinuousReader({
                       WebkitUserSelect: textEnabled && textLayerReadyByPage[index] ? "text" : "none",
                     }}
                   />
-                  {textBoxesByPage.get(index)?.map((textBox) => (
-                    <div
-                      key={textBox.id}
-                      className={`pdf-text-box-annotation ${textBox.persisted ? "pdf-text-box-annotation-persisted" : "pdf-text-box-annotation-draft"}`}
-                      data-text-box-draft-id={textBox.persisted ? undefined : textBox.id}
-                      style={{
-                        left: `${textBox.anchor.x * 100}%`,
-                        top: `${textBox.anchor.y * 100}%`,
-                        width: `${textBox.anchor.width * 100}%`,
-                        height: `${textBox.anchor.height * 100}%`,
-                        color: textBox.anchor.color,
-                        fontSize: `${textBox.anchor.fontSize}px`,
-                      }}
-                      onPointerDown={(event) => event.stopPropagation()}
-                    >
-                      <textarea
-                        aria-label="PDF text box annotation"
-                        readOnly={textBox.persisted}
-                        value={textBox.body}
-                        onBlur={() => {
-                          if (textBox.persisted) return;
-                          const draft = textBoxDrafts.find((entry) => entry.id === textBox.id);
-                          if (draft) commitTextBoxDraft(draft);
+                  {textBoxesByPage.get(index)?.map((textBox) => {
+                    const selected = textBox.persisted && textBox.annotationId === selectedTextBoxAnnotationId;
+                    const resizeHandles: TextBoxResizeHandle[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
+                    return (
+                      <div
+                        key={textBox.id}
+                        className={`pdf-text-box-annotation ${textBox.persisted ? "pdf-text-box-annotation-persisted" : "pdf-text-box-annotation-draft"}${selected ? " pdf-text-box-annotation-selected" : ""}`}
+                        data-annotation-id={textBox.annotationId}
+                        data-text-box-draft-id={textBox.persisted ? undefined : textBox.id}
+                        style={{
+                          left: `${textBox.anchor.x * 100}%`,
+                          top: `${textBox.anchor.y * 100}%`,
+                          width: `${textBox.anchor.width * 100}%`,
+                          height: `${textBox.anchor.height * 100}%`,
+                          color: textBox.anchor.color,
+                          fontSize: `${textBox.anchor.fontSize}px`,
                         }}
-                        onChange={(event) => {
-                          if (textBox.persisted) return;
-                          const nextBody = event.target.value;
-                          setTextBoxDrafts((current) => current.map((entry) => entry.id === textBox.id ? { ...entry, body: nextBody } : entry));
-                        }}
-                        onKeyDown={(event) => {
-                          if (textBox.persisted) return;
-                          if (event.key !== "Enter") return;
+                        onContextMenu={(event) => {
+                          if (!textBox.persisted) return;
                           event.preventDefault();
-                          event.currentTarget.blur();
+                          event.stopPropagation();
                         }}
-                      />
-                    </div>
-                  ))}
+                        onPointerDown={(event) => {
+                          if (!textBox.persisted || textBox.annotationId === undefined) {
+                            event.stopPropagation();
+                            return;
+                          }
+                          startTextBoxInteraction(event, {
+                            annotationId: textBox.annotationId,
+                            pageIndex0: index,
+                            anchor: textBox.anchor,
+                            handle: "move",
+                          });
+                        }}
+                        onMouseDown={(event) => {
+                          if (!textBox.persisted || textBox.annotationId === undefined) {
+                            event.stopPropagation();
+                            return;
+                          }
+                          startTextBoxInteraction(event, {
+                            annotationId: textBox.annotationId,
+                            pageIndex0: index,
+                            anchor: textBox.anchor,
+                            handle: "move",
+                          });
+                        }}
+                      >
+                        <textarea
+                          aria-label="PDF text box annotation"
+                          readOnly={textBox.persisted}
+                          value={textBox.body}
+                          onPointerDown={(event) => {
+                            if (textBox.persisted) event.preventDefault();
+                          }}
+                          onBlur={() => {
+                            if (textBox.persisted) return;
+                            const draft = textBoxDrafts.find((entry) => entry.id === textBox.id);
+                            if (draft) commitTextBoxDraft(draft);
+                          }}
+                          onChange={(event) => {
+                            if (textBox.persisted) return;
+                            const nextBody = event.target.value;
+                            setTextBoxDrafts((current) => current.map((entry) => entry.id === textBox.id ? { ...entry, body: nextBody } : entry));
+                          }}
+                          onKeyDown={(event) => {
+                            if (textBox.persisted) return;
+                            if (event.key !== "Enter") return;
+                            event.preventDefault();
+                            event.currentTarget.blur();
+                          }}
+                        />
+                        {selected && textBox.annotationId !== undefined ? (
+                          <div aria-hidden="true" className="pdf-text-box-resize-handles">
+                            {resizeHandles.map((handle) => (
+                              <div
+                                key={handle}
+                                className="pdf-text-box-resize-handle"
+                                data-handle={handle}
+                                onPointerDown={(event) => startTextBoxInteraction(event, {
+                                  annotationId: textBox.annotationId!,
+                                  pageIndex0: index,
+                                  anchor: textBox.anchor,
+                                  handle,
+                                })}
+                                onMouseDown={(event) => startTextBoxInteraction(event, {
+                                  annotationId: textBox.annotationId!,
+                                  pageIndex0: index,
+                                  anchor: textBox.anchor,
+                                  handle,
+                                })}
+                              />
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
                   {drawingTextBox?.pageIndex0 === index ? (
                     <div
                       aria-hidden="true"

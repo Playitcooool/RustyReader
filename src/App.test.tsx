@@ -356,6 +356,16 @@ describe("App reading workspace", () => {
     );
   });
 
+  it("does not show the reader selection context menu without a pdf selection", async () => {
+    render(<App api={fakeApi} />);
+    await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i });
+    fireEvent.dblClick(screen.getByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+
+    fireEvent.contextMenu(await screen.findByTestId("pdf-reader"), { clientX: 140, clientY: 150 });
+
+    expect(screen.queryByRole("menu", { name: "Reader selection actions" })).not.toBeInTheDocument();
+  });
+
   it("clears selection from the context menu and falls back when clipboard is unavailable", async () => {
     const user = userEvent.setup();
     Object.defineProperty(navigator, "clipboard", {

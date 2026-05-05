@@ -361,6 +361,16 @@ export function useReaderState({
     setStatusMessage("Created annotation.");
   }, [activePaper, getApi, pdfTextToolsEnabled, setStatusMessage, workspaceMode]);
 
+  const handleUpdatePdfTextBoxAnnotationGeometry = useCallback(async (annotationId: number, anchor: string) => {
+    if (!pdfTextToolsEnabled || workspaceMode !== "pdf_focus") return;
+    const annotation = await (await getApi()).updateAnnotation({
+      annotation_id: annotationId,
+      anchor,
+    });
+    setAnnotations((current) => current.map((entry) => entry.id === annotation.id ? annotation : entry));
+    setStatusMessage("Updated annotation.");
+  }, [getApi, pdfTextToolsEnabled, setStatusMessage, workspaceMode]);
+
   const handleActivatePdfHighlight = useCallback((highlight: ActivePdfHighlight) => {
     dismissPdfSelection();
     setActivePdfHighlight(highlight);
@@ -431,6 +441,7 @@ export function useReaderState({
     handleActivatePdfHighlight,
     handleCreatePdfFocusHighlight,
     handleCreatePdfFocusTextBoxAnnotation,
+    handleUpdatePdfTextBoxAnnotationGeometry,
     handleRemoveActivePdfHighlight,
     highlightActionBarRef,
     isFindHudOpen,

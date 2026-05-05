@@ -74,6 +74,7 @@ type ReaderWorkspaceActions = {
   onCopyReaderSelection: () => void | Promise<void>;
   onCreatePdfFocusHighlight: (color: PdfHighlightColor) => void | Promise<void>;
   onCreatePdfFocusTextBoxAnnotation: (draft: PdfTextBoxAnnotationDraft) => void | Promise<void>;
+  onUpdatePdfTextBoxAnnotationGeometry: (annotationId: number, anchor: string) => void | Promise<void>;
   onExitFocus: () => void;
   onFindQueryChange: (value: string) => void;
   onMoveMatch: (direction: 1 | -1, source: "button" | "enter") => void;
@@ -152,6 +153,7 @@ export function ReaderWorkspace(props: Props) {
     onCopyReaderSelection,
     onCreatePdfFocusHighlight,
     onCreatePdfFocusTextBoxAnnotation,
+    onUpdatePdfTextBoxAnnotationGeometry,
     onExitFocus,
     onFindQueryChange,
     onMoveMatch,
@@ -193,6 +195,17 @@ export function ReaderWorkspace(props: Props) {
   }, [pdfSelection, showPdfFocusHighlightBar]);
   const selectionForActions = translationSelection ?? (pdfSelection ? { quote: pdfSelection.quote, rect: pdfSelection.rect } : null);
   const showPdfHighlightActions = workspaceMode === "pdf_focus" && Boolean(pdfSelection);
+  const readerContextMenuStyle = useMemo(() => {
+    if (!readerContextMenu) return {};
+    const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+    const WIDTH_PX = 220;
+    const HEIGHT_PX = showPdfHighlightActions ? 340 : 164;
+    const PADDING_PX = 8;
+    return {
+      left: `${clamp(readerContextMenu.x, PADDING_PX, window.innerWidth - WIDTH_PX - PADDING_PX)}px`,
+      top: `${clamp(readerContextMenu.y, PADDING_PX, window.innerHeight - HEIGHT_PX - PADDING_PX)}px`,
+    } as const;
+  }, [readerContextMenu, showPdfHighlightActions]);
   const translationPopoverStyle = useMemo(() => {
     if (!translationPopover) return {};
     const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -216,6 +229,11 @@ export function ReaderWorkspace(props: Props) {
       onClick={() => setReaderContextMenu(null)}
       onContextMenu={(event) => {
         if (!selectionForActions?.quote.trim()) return;
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+        const reader = target.closest(".pdf-reader, [data-testid='pdf-reader']");
+        if (!reader) return;
+        if (reader.querySelector(".textLayer") && !target.closest(".textLayer")) return;
         event.preventDefault();
         setReaderContextMenu({ x: event.clientX, y: event.clientY });
       }}
@@ -331,6 +349,7 @@ export function ReaderWorkspace(props: Props) {
                   void onCreatePdfFocusTextBoxAnnotation(draft);
                   setIsPdfTextBoxToolActive(false);
                 }}
+                onUpdateTextBoxAnnotation={(annotationId, anchor) => onUpdatePdfTextBoxAnnotationGeometry(annotationId, anchor)}
                 textBoxToolActive={isPdfTextBoxToolActive}
                 textBoxDefaultColor={pdfTextBoxColor}
                 textBoxDefaultFontSize={pdfTextBoxFontSize}
@@ -408,7 +427,7 @@ export function ReaderWorkspace(props: Props) {
 
       {isFindHudOpen ? <FindHud inputRef={readerSearchInputRef} query={readerSearchQuery} matchCount={readerSearchMatchCount} activeMatchIndex={reportedActiveSearchMatchIndex} onQueryChange={onFindQueryChange} onMoveMatch={onMoveMatch} onClose={onCloseFindHud} /> : null}
       {readerContextMenu && selectionForActions ? (
-        <div aria-label="Reader selection actions" className="floating-menu reader-selection-menu" role="menu" style={{ left: readerContextMenu.x, top: readerContextMenu.y }}>
+        <div aria-label="Reader selection actions" className="floating-menu reader-selection-menu" role="menu" style={readerContextMenuStyle}>
           <button
             className="nav-item"
             role="menuitem"

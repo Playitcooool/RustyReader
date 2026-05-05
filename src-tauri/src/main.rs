@@ -588,6 +588,7 @@ fn main() {
             commands::create_annotation,
             commands::list_annotations,
             commands::remove_annotation,
+            commands::update_annotation,
             commands::get_ai_settings,
             commands::update_ai_settings,
             commands::translate_selection,

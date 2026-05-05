@@ -23,6 +23,13 @@ pub(crate) struct RemoveAnnotationInput {
 }
 
 #[derive(Deserialize)]
+pub(crate) struct UpdateAnnotationInput {
+    annotation_id: i64,
+    anchor: String,
+    body: Option<String>,
+}
+
+#[derive(Deserialize)]
 pub(crate) struct UpdateNoteInput {
     note_id: i64,
     markdown: String,
@@ -143,6 +150,16 @@ pub(crate) fn remove_annotation(
 ) -> Result<(), String> {
     service(&state)
         .remove_annotation(input.annotation_id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) fn update_annotation(
+    state: State<'_, AppState>,
+    input: UpdateAnnotationInput,
+) -> Result<Annotation, String> {
+    service(&state)
+        .update_annotation(input.annotation_id, input.anchor, input.body)
         .map_err(|error| error.to_string())
 }
 

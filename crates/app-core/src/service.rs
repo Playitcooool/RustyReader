@@ -1353,6 +1353,41 @@ impl LibraryService {
         Ok(())
     }
 
+    pub fn update_annotation(
+        &self,
+        annotation_id: i64,
+        anchor: String,
+        body: Option<String>,
+    ) -> Result<Annotation> {
+        let conn = self.connect()?;
+        let existing = conn
+            .query_row(
+                "SELECT id, item_id, anchor, kind, body FROM annotations WHERE id = ?1",
+                [annotation_id],
+                |row| {
+                    Ok(Annotation {
+                        id: row.get(0)?,
+                        item_id: row.get(1)?,
+                        anchor: row.get(2)?,
+                        kind: row.get(3)?,
+                        body: row.get(4)?,
+                    })
+                },
+            )
+            .optional()?
+            .ok_or_else(|| anyhow!("annotation does not exist"))?;
+        let next_body = body.unwrap_or(existing.body);
+        conn.execute(
+            "UPDATE annotations SET anchor = ?1, body = ?2 WHERE id = ?3",
+            params![anchor, next_body, annotation_id],
+        )?;
+        Ok(Annotation {
+            anchor,
+            body: next_body,
+            ..existing
+        })
+    }
+
     pub fn get_ai_settings(&self) -> Result<AISettings> {
         let conn = self.connect()?;
         let stored = self.load_ai_settings(&conn)?;

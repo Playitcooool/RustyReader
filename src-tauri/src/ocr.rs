@@ -192,7 +192,9 @@ fn parse_tesseract_tsv_to_lines(
             });
         }
 
-        let agg = current.as_mut().expect("current agg");
+        let Some(agg) = current.as_mut() else {
+            continue;
+        };
         agg.left = agg.left.min(left);
         agg.top = agg.top.min(top);
         agg.right = agg.right.max(right);
@@ -334,5 +336,21 @@ mod tests {
         assert!((lines[0].bbox.width - 0.1).abs() < 1e-6);
         assert!((lines[0].bbox.height - 0.005).abs() < 1e-6);
         assert!((lines[0].confidence - 85.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn ignores_malformed_tsv_rows_without_panicking() {
+        let tsv = [
+            "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext",
+            "not-a-level\t1\t1\t1\t1\t1\t100\t200\t50\t10\t90\tignored",
+            "5\t1\t1\t1\t1\t1\t100\t200\t50\t10\t-1\tnegative-conf",
+            "5\t1\t1\t1\t1\t2\t100\t200\t50\t10\t90\t   ",
+            "5\t1\t1\t1\t1",
+            "2\t1\t1\t1\t1\t0\t100\t200\t50\t10\t90\tignored-level",
+        ]
+        .join("\n");
+
+        let lines = parse_tesseract_tsv_to_lines(&tsv, 1000, 2000);
+        assert!(lines.is_empty());
     }
 }

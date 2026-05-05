@@ -320,6 +320,83 @@
   cursor: default;
 }
 
+.pdf-text-box-annotation-persisted {
+  cursor: move;
+}
+
+.pdf-text-box-annotation-selected {
+  outline: 1px solid rgba(226, 139, 83, 0.82);
+  outline-offset: 2px;
+}
+
+.pdf-text-box-resize-handles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.pdf-text-box-resize-handle {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border: 1px solid rgba(7, 9, 12, 0.7);
+  border-radius: 999px;
+  background: #f7c08a;
+  pointer-events: auto;
+}
+
+.pdf-text-box-resize-handle[data-handle="n"] {
+  top: -7px;
+  left: 50%;
+  cursor: ns-resize;
+  transform: translateX(-50%);
+}
+
+.pdf-text-box-resize-handle[data-handle="ne"] {
+  top: -7px;
+  right: -7px;
+  cursor: nesw-resize;
+}
+
+.pdf-text-box-resize-handle[data-handle="e"] {
+  top: 50%;
+  right: -7px;
+  cursor: ew-resize;
+  transform: translateY(-50%);
+}
+
+.pdf-text-box-resize-handle[data-handle="se"] {
+  right: -7px;
+  bottom: -7px;
+  cursor: nwse-resize;
+}
+
+.pdf-text-box-resize-handle[data-handle="s"] {
+  bottom: -7px;
+  left: 50%;
+  cursor: ns-resize;
+  transform: translateX(-50%);
+}
+
+.pdf-text-box-resize-handle[data-handle="sw"] {
+  bottom: -7px;
+  left: -7px;
+  cursor: nesw-resize;
+}
+
+.pdf-text-box-resize-handle[data-handle="w"] {
+  top: 50%;
+  left: -7px;
+  cursor: ew-resize;
+  transform: translateY(-50%);
+}
+
+.pdf-text-box-resize-handle[data-handle="nw"] {
+  top: -7px;
+  left: -7px;
+  cursor: nwse-resize;
+}
+
 .pdf-focus-highlight-bar {
   position: fixed;
   z-index: 30;
