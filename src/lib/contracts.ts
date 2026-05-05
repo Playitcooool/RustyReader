@@ -248,6 +248,11 @@ export type PdfDocumentInfo = {
   pages: PdfPageInfo[];
 };
 
+export type PdfInitialPageBundle = {
+  document_info: PdfDocumentInfo;
+  bundle: PdfPageBundle;
+};
+
 export type PdfEngineGetPageBundleInput = {
   primary_attachment_id: number;
   page_index0: number;
@@ -387,6 +392,7 @@ export type AppApi = {
   writeExportFile: (input: { path: string; authorization_token: string; contents: string }) => Promise<void>;
   ocrPdfPage: (input: OcrPdfPageInput) => Promise<OcrPageResult>;
   pdfEngineGetDocumentInfo: (input: PdfEngineGetDocumentInfoInput) => Promise<PdfDocumentInfo>;
+  pdfEngineGetInitialPageBundle: (input: PdfEngineGetPageBundleInput) => Promise<PdfInitialPageBundle>;
   pdfEngineGetPageBundle: (input: PdfEngineGetPageBundleInput) => Promise<PdfPageBundle>;
   pdfEngineGetPageBundlesBatch: (input: PdfEngineGetPageBundlesBatchInput) => Promise<PdfPageBundle[]>;
   pdfEngineGetPageText: (input: PdfEngineGetPageTextInput) => Promise<PdfPageText>;

@@ -496,6 +496,7 @@ export default function App({ api }: { api: AppApi }) {
         }}
         pdfApi={{
           getPdfDocumentInfo: readerState.getPdfDocumentInfo,
+          getPdfInitialPageBundle: readerState.getPdfInitialPageBundle,
           getPdfPageBundle: readerState.getPdfPageBundle,
           getPdfPageBundlesBatch: readerState.getPdfPageBundlesBatch,
           getPdfPageText: readerState.getPdfPageText,

@@ -86,6 +86,15 @@ export async function createTauriApi(): Promise<AppApi> {
     };
   };
 
+  const toPdfInitialPageBundle = (value: unknown) => {
+    if (!value || typeof value !== "object") throw new Error("Unexpected PDF initial bundle response.");
+    const obj = value as Record<string, unknown>;
+    return {
+      document_info: toPdfDocumentInfo(obj.document_info),
+      bundle: toPdfPageBundle(obj.bundle),
+    };
+  };
+
   const toPdfSearchResult = (value: unknown) => {
     if (!value || typeof value !== "object") throw new Error("Unexpected PDF search response.");
     const obj = value as Record<string, unknown>;
@@ -234,6 +243,12 @@ export async function createTauriApi(): Promise<AppApi> {
     pdfEngineGetDocumentInfo: async (input) =>
       toPdfDocumentInfo(
         await invoke("pdf_engine_get_document_info", {
+          input,
+        }),
+      ),
+    pdfEngineGetInitialPageBundle: async (input) =>
+      toPdfInitialPageBundle(
+        await invoke("pdf_engine_get_initial_page_bundle", {
           input,
         }),
       ),

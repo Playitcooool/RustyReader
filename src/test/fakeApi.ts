@@ -19,6 +19,7 @@ import type {
   OcrPdfPageInput,
   PdfDocumentInfo,
   PdfEngineGetDocumentInfoInput,
+  PdfInitialPageBundle,
   PdfEngineGetPageBundleInput,
   PdfEngineGetPageTextInput,
   PdfEngineSearchInput,
@@ -1593,6 +1594,13 @@ export const fakeApi: AppApi = {
         { width_pt: 612, height_pt: 792 },
         { width_pt: 612, height_pt: 792 },
       ],
+    };
+  },
+
+  async pdfEngineGetInitialPageBundle(input: PdfEngineGetPageBundleInput): Promise<PdfInitialPageBundle> {
+    return {
+      document_info: await this.pdfEngineGetDocumentInfo({ primary_attachment_id: input.primary_attachment_id }),
+      bundle: await this.pdfEngineGetPageBundle(input),
     };
   },
 

@@ -6,6 +6,7 @@ import type {
   OcrPdfPageInput,
   PdfDocumentInfo,
   PdfEngineGetPageBundleInput,
+  PdfInitialPageBundle,
   PdfSearchMatch,
   PdfSearchResult,
   PdfPageText,
@@ -44,6 +45,8 @@ const SUSPICIOUS_CHAR_RE = /[\uFFFD\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-
 const MAX_INITIAL_RASTER_SCALE = 1;
 const MAX_RASTER_SCALE = 2;
 const OCR_CONCURRENCY = 1;
+const PAGE_GAP_PX = 12;
+const VIRTUAL_WINDOW_RADIUS = 8;
 
 type PdfContinuousReaderProps = {
   view: ReaderView;
@@ -51,6 +54,7 @@ type PdfContinuousReaderProps = {
   zoom: number;
   fitMode?: "manual" | "fit_width";
   getPdfDocumentInfo: (primaryAttachmentId: number) => Promise<PdfDocumentInfo>;
+  getPdfInitialPageBundle?: (input: PdfEngineGetPageBundleInput) => Promise<PdfInitialPageBundle>;
   getPdfPageBundle: (input: PdfEngineGetPageBundleInput) => Promise<{
     png_bytes: Uint8Array;
     width_px: number;
@@ -189,6 +193,7 @@ export function PdfContinuousReader({
   zoom,
   fitMode = "fit_width",
   getPdfDocumentInfo,
+  getPdfInitialPageBundle,
   getPdfPageBundle,
   getPdfPageBundlesBatch,
   getPdfPageText,
@@ -286,6 +291,15 @@ export function PdfContinuousReader({
     [desiredWidthCssPx, rasterScale],
   );
   const cssWidthBucketPx = useMemo(() => widthBucket(desiredWidthCssPx), [desiredWidthCssPx]);
+  const estimatedPageHeightCssPx = useMemo(() => {
+    const firstPage = pdfDocumentInfo?.pages[0];
+    if (firstPage?.width_pt && firstPage?.height_pt) {
+      const baseWidth = pageWidthAtScale1FromPoints(firstPage.width_pt);
+      const scale = desiredWidthCssPx / Math.max(1, baseWidth);
+      return Math.max(1, Math.round(firstPage.height_pt * (96 / 72) * scale));
+    }
+    return Math.max(1, Math.round(desiredWidthCssPx * 1.25));
+  }, [desiredWidthCssPx, pageWidthAtScale1, pdfDocumentInfo]);
 
   useEffect(() => {
     pagesRef.current = pages;
@@ -341,6 +355,36 @@ export function PdfContinuousReader({
     [rememberPageText],
   );
 
+  const pageLayout = useMemo(() => {
+    const offsets: number[] = [];
+    let cursor = 0;
+    for (let pageIndex0 = 0; pageIndex0 < pageCount; pageIndex0 += 1) {
+      offsets.push(cursor);
+      const shell = pageShells[pageIndex0];
+      cursor += (shell?.heightCssPx ?? estimatedPageHeightCssPx) + PAGE_GAP_PX;
+    }
+    return {
+      offsets,
+      totalHeight: Math.max(0, cursor - PAGE_GAP_PX),
+    };
+  }, [estimatedPageHeightCssPx, pageCount, pageShells]);
+
+  const pageIndexForOffset = useCallback((offset: number) => {
+    const offsets = pageLayout.offsets;
+    if (offsets.length === 0) return 0;
+    let low = 0;
+    let high = offsets.length - 1;
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2);
+      const start = offsets[mid] ?? 0;
+      const next = offsets[mid + 1] ?? Number.POSITIVE_INFINITY;
+      if (offset < start) high = mid - 1;
+      else if (offset >= next) low = mid + 1;
+      else return mid;
+    }
+    return clamp(low, 0, offsets.length - 1);
+  }, [pageLayout.offsets]);
+
   const releaseRenderedPage = useCallback((pageIndex0: number) => {
     textLayerSelectionCleanupByIndexRef.current.get(pageIndex0)?.();
     textLayerSelectionCleanupByIndexRef.current.delete(pageIndex0);
@@ -368,6 +412,19 @@ export function PdfContinuousReader({
       const root = scrollRootRef.current;
       if (!root) return;
       const scrollFallback = findScrollFallbackTarget(root);
+      const scrollTop = scrollFallback instanceof HTMLElement ? scrollFallback.scrollTop : root.scrollTop;
+      const viewportHeight = scrollFallback instanceof HTMLElement ? scrollFallback.clientHeight : window.innerHeight;
+      const offsetNext = pageIndexForOffset(scrollTop + viewportHeight * ACTIVE_PAGE_ANCHOR_RATIO);
+      if (pendingProgrammaticPageRef.current === offsetNext) pendingProgrammaticPageRef.current = null;
+      if (offsetNext !== dominantPageIndexRef.current) {
+        dominantPageIndexRef.current = offsetNext;
+        setDominantPageIndex(offsetNext);
+      }
+      if (offsetNext !== lastReportedActivePageRef.current) {
+        lastReportedActivePageRef.current = offsetNext;
+        onActivePageChangeRef.current?.(offsetNext);
+      }
+      if (reason === "scroll" || !pageShellByIndexRef.current.has(offsetNext)) return;
       const rootRect =
         scrollFallback instanceof HTMLElement
           ? scrollFallback.getBoundingClientRect()
@@ -412,7 +469,7 @@ export function PdfContinuousReader({
         onActivePageChangeRef.current?.(next);
       }
     },
-    [page, pageCount],
+    [page, pageCount, pageIndexForOffset],
   );
 
   useEffect(() => {
@@ -460,6 +517,52 @@ export function PdfContinuousReader({
 
     void (async () => {
       try {
+        if (getPdfInitialPageBundle) {
+          const initial = await getPdfInitialPageBundle({
+            primary_attachment_id: primaryAttachmentId,
+            page_index0: page,
+            target_width_px: targetRasterWidthPx,
+          });
+          if (cancelled) return;
+          const info = initial.document_info;
+          setPdfDocumentInfo(info);
+          const nextPageCount = Math.max(1, info.page_count || view.page_count || 1);
+          setPageCount(nextPageCount);
+          onPageCountChangeRef.current?.(nextPageCount);
+          const bundle = initial.bundle;
+          if (bundle.page_width_pt > 0) setPageWidthAtScale1(pageWidthAtScale1FromPoints(bundle.page_width_pt));
+          const baseWidth = pageWidthAtScale1FromPoints(bundle.page_width_pt || info.pages[0]?.width_pt || 600);
+          const cssWidthPx = desiredWidthCssPx;
+          const cssHeightPx = Math.max(1, Math.round((bundle.page_height_pt || info.pages[0]?.height_pt || 750) * (96 / 72) * (cssWidthPx / Math.max(1, baseWidth))));
+          const requestKey = `${page}:${cssWidthBucketPx}:${MAX_INITIAL_RASTER_SCALE}`;
+          latestRequestKeyByPageRef.current.set(page, requestKey);
+          requestedRenderKeysRef.current.add(requestKey);
+          const blobUrl = URL.createObjectURL(blobFromBytes(bundle.png_bytes, "image/png"));
+          imageUrlsByIndexRef.current.set(page, blobUrl);
+          const nextRenderedState: RenderedPageState = {
+            imageUrl: blobUrl,
+            cssWidthPx,
+            cssHeightPx,
+            rasterWidthPx: bundle.width_px,
+            rasterHeightPx: bundle.height_px,
+            rasterScale: MAX_INITIAL_RASTER_SCALE,
+            bucketWidthPx: widthBucket(cssWidthPx),
+            requestKey,
+            textSource: pickPageTextSource(bundle.spans.map((span) => span.text ?? "")),
+          };
+          pagesRef.current = { [page]: nextRenderedState };
+          setPages({ [page]: nextRenderedState });
+          rememberPageText(page, bundle.spans.map((span) => span.text ?? ""));
+          setPageShells({
+            [page]: {
+              widthCssPx: cssWidthPx,
+              heightCssPx: cssHeightPx,
+            },
+          });
+          setStatus("ready");
+          return;
+        }
+
         const info = await getPdfDocumentInfo(primaryAttachmentId);
         if (cancelled) return;
         setPdfDocumentInfo(info);
@@ -478,7 +581,7 @@ export function PdfContinuousReader({
     return () => {
       cancelled = true;
     };
-  }, [getPdfDocumentInfo, view.page_count, view.primary_attachment_id]);
+  }, [getPdfDocumentInfo, getPdfInitialPageBundle, view.page_count, view.primary_attachment_id]);
 
   useEffect(() => {
     if (!pdfDocumentInfo) return;
@@ -560,7 +663,7 @@ export function PdfContinuousReader({
 
     addRange(immediate, page, 1);
     addRange(immediate, dominantPageIndex, 1);
-    for (const visiblePageIndex of visiblePageIndexes) addRange(immediate, visiblePageIndex, 1);
+    for (const visiblePageIndex of visiblePageIndexes) addRange(immediate, visiblePageIndex, 0);
     addRange(immediate, activeSearchTargetPage, SEARCH_TARGET_RENDER_RADIUS);
 
     addRange(idle, page, PREFETCH_PAGE_RADIUS);
@@ -674,6 +777,17 @@ export function PdfContinuousReader({
         if (!pageWidthAtScale1 && bundle.page_width_pt > 0) {
           setPageWidthAtScale1(pageWidthAtScale1FromPoints(bundle.page_width_pt));
         }
+        if (bundle.page_width_pt > 0 && bundle.page_height_pt > 0) {
+          const baseWidth = pageWidthAtScale1FromPoints(bundle.page_width_pt);
+          const nextHeight = Math.max(1, Math.round(bundle.page_height_pt * (96 / 72) * (request.cssWidthPx / Math.max(1, baseWidth))));
+          setPageShells((current) => ({
+            ...current,
+            [request.pageIndex0]: {
+              widthCssPx: request.cssWidthPx,
+              heightCssPx: nextHeight,
+            },
+          }));
+        }
 
         const currentHost = textLayerHostByIndexRef.current.get(request.pageIndex0);
         if (!currentHost) return;
@@ -693,7 +807,7 @@ export function PdfContinuousReader({
 
         const ocrEligible =
           shouldFallbackToOcr(nativeLayer.strings) &&
-          (request.pageIndex0 === page || visiblePageSet.has(request.pageIndex0)) &&
+          (request.pageIndex0 === page || visiblePageIndexesRef.current.includes(request.pageIndex0)) &&
           !inFlightOcrPagesRef.current.has(request.pageIndex0) &&
           inFlightOcrPagesRef.current.size < OCR_CONCURRENCY;
         if (ocrEligible) {
@@ -776,6 +890,17 @@ export function PdfContinuousReader({
       }));
       if (!pageWidthAtScale1 && bundle.page_width_pt > 0) {
         setPageWidthAtScale1(pageWidthAtScale1FromPoints(bundle.page_width_pt));
+      }
+      if (bundle.page_width_pt > 0 && bundle.page_height_pt > 0) {
+        const baseWidth = pageWidthAtScale1FromPoints(bundle.page_width_pt);
+        const nextHeight = Math.max(1, Math.round(bundle.page_height_pt * (96 / 72) * (request.cssWidthPx / Math.max(1, baseWidth))));
+        setPageShells((current) => ({
+          ...current,
+          [request.pageIndex0]: {
+            widthCssPx: request.cssWidthPx,
+            heightCssPx: nextHeight,
+          },
+        }));
       }
 
       const currentHost = textLayerHostByIndexRef.current.get(request.pageIndex0);
@@ -908,7 +1033,9 @@ export function PdfContinuousReader({
       cancelled = true;
       idleRenderCancelRef.current?.();
       idleRenderCancelRef.current = null;
+      requestedRenderKeysRef.current.clear();
       inFlightRenderKeysRef.current.clear();
+      inFlightRenderPagesRef.current.clear();
     };
   }, [
     effectiveZoom,
@@ -920,7 +1047,6 @@ export function PdfContinuousReader({
     pdfDocumentInfo,
     renderRequests,
     setTextLayerForPage,
-    visiblePageSet,
     view.primary_attachment_id,
   ]);
 
@@ -961,6 +1087,13 @@ export function PdfContinuousReader({
       if (scrollSyncRafRef.current !== null) return;
       scrollSyncRafRef.current = window.requestAnimationFrame(() => {
         scrollSyncRafRef.current = null;
+        const scrollTop = fallbackTarget instanceof HTMLElement ? fallbackTarget.scrollTop : root.scrollTop;
+        const viewportHeight = fallbackTarget instanceof HTMLElement ? fallbackTarget.clientHeight : window.innerHeight;
+        const first = pageIndexForOffset(Math.max(0, scrollTop - viewportHeight));
+        const last = pageIndexForOffset(scrollTop + viewportHeight * 2);
+        const nextVisible: number[] = [];
+        for (let index = first; index <= last; index += 1) nextVisible.push(index);
+        setVisiblePageIndexes(nextVisible);
         syncActivePageFromViewport("scroll");
       });
     };
@@ -978,7 +1111,7 @@ export function PdfContinuousReader({
         scrollSyncRafRef.current = null;
       }
     };
-  }, [syncActivePageFromViewport]);
+  }, [pageIndexForOffset, syncActivePageFromViewport]);
 
   useEffect(() => {
     const root = scrollRootRef.current;
@@ -1014,16 +1147,28 @@ export function PdfContinuousReader({
 
   useEffect(() => {
     const shell = pageShellByIndexRef.current.get(page);
-    if (!shell) return;
     pendingProgrammaticPageRef.current = page;
-    if (dominantPageIndexRef.current !== page) safeScrollIntoView(shell, { block: "start" });
+    if (shell && dominantPageIndexRef.current !== page) {
+      safeScrollIntoView(shell, { block: "start" });
+    } else if (!shell) {
+      const root = scrollRootRef.current;
+      const fallbackTarget = findScrollFallbackTarget(root);
+      const targetTop = pageLayout.offsets[page] ?? 0;
+      if (fallbackTarget instanceof HTMLElement) fallbackTarget.scrollTop = targetTop;
+      else if (root) root.scrollTop = targetTop;
+      setVisiblePageIndexes((current) => {
+        const next = new Set(current);
+        for (let index = Math.max(0, page - VIRTUAL_WINDOW_RADIUS); index <= Math.min(pageCount - 1, page + VIRTUAL_WINDOW_RADIUS); index += 1) next.add(index);
+        return Array.from(next).sort((a, b) => a - b);
+      });
+    }
     if (programmaticPageClearRafRef.current !== null) window.cancelAnimationFrame(programmaticPageClearRafRef.current);
     window.requestAnimationFrame(() => syncActivePageFromViewport("page_effect"));
     programmaticPageClearRafRef.current = window.requestAnimationFrame(() => {
       pendingProgrammaticPageRef.current = null;
       programmaticPageClearRafRef.current = null;
     });
-  }, [page, syncActivePageFromViewport]);
+  }, [page, pageCount, pageLayout.offsets, syncActivePageFromViewport]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1149,6 +1294,20 @@ export function PdfContinuousReader({
     if (drawingTextBox) mounted.add(drawingTextBox.pageIndex0);
     return mounted;
   }, [activeSearchTargetPage, dominantPageIndex, drawingTextBox, page, pageCount, textBoxesByPage, visiblePageIndexes]);
+
+  const mountedPageIndexes = useMemo(() => {
+    const mounted = new Set<number>(fullPageMountSet);
+    const addRange = (center: number | null, radius: number) => {
+      if (center === null || center < 0) return;
+      for (let pageIndex0 = Math.max(0, center - radius); pageIndex0 <= Math.min(pageCount - 1, center + radius); pageIndex0 += 1) {
+        mounted.add(pageIndex0);
+      }
+    };
+    addRange(page, VIRTUAL_WINDOW_RADIUS);
+    addRange(dominantPageIndex, VIRTUAL_WINDOW_RADIUS);
+    for (const visiblePageIndex of visiblePageIndexes) addRange(visiblePageIndex, 2);
+    return Array.from(mounted).filter((index) => index >= 0 && index < pageCount).sort((left, right) => left - right);
+  }, [dominantPageIndex, fullPageMountSet, page, pageCount, visiblePageIndexes]);
 
   useEffect(() => {
     const id = newestTextBoxDraftIdRef.current;
@@ -1487,7 +1646,8 @@ export function PdfContinuousReader({
         {status === "loading" && !pages[page] ? <p className="pdf-reader-loading">Loading PDF...</p> : null}
         {status === "error" ? <p>Unable to load this PDF. {errorMessage}</p> : null}
 
-        {Array.from({ length: Math.max(1, pageCount) }).map((_, index) => {
+        {mountedPageIndexes[0] ? <div aria-hidden="true" style={{ height: `${pageLayout.offsets[mountedPageIndexes[0]] ?? 0}px`, width: "1px" }} /> : null}
+        {mountedPageIndexes.map((index) => {
           const rendered = pages[index];
           const shell = pageShells[index];
           const width = rendered?.cssWidthPx ?? shell?.widthCssPx ?? desiredWidthCssPx;
@@ -1596,6 +1756,15 @@ export function PdfContinuousReader({
             </div>
           );
         })}
+        {mountedPageIndexes.length > 0 ? (
+          <div
+            aria-hidden="true"
+            style={{
+              height: `${Math.max(0, pageLayout.totalHeight - ((pageLayout.offsets[mountedPageIndexes[mountedPageIndexes.length - 1]!] ?? 0) + (pageShells[mountedPageIndexes[mountedPageIndexes.length - 1]!]?.heightCssPx ?? estimatedPageHeightCssPx)))}px`,
+              width: "1px",
+            }}
+          />
+        ) : null}
       </div>
     </section>
   );

@@ -615,6 +615,7 @@ fn main() {
             export::write_export_file,
             ocr::ocr_pdf_page,
             pdf_engine::pdf_engine_get_document_info,
+            pdf_engine::pdf_engine_get_initial_page_bundle,
             pdf_engine::pdf_engine_get_page_bundle,
             pdf_engine::pdf_engine_get_page_bundles_batch,
             pdf_engine::pdf_engine_get_page_text,

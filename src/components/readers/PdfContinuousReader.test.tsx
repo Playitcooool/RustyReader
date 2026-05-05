@@ -211,7 +211,7 @@ describe("PdfContinuousReader", () => {
           const input = call[0] as { page_indexes0?: number[] } | undefined;
           return total + (input?.page_indexes0?.length ?? 0);
         }, 0);
-      expect(requestedPages).toBeLessThanOrEqual(12);
+      expect(requestedPages).toBeLessThanOrEqual(18);
       expect(requestedPages).toBeGreaterThanOrEqual(5);
     });
   });
@@ -244,10 +244,10 @@ describe("PdfContinuousReader", () => {
     );
 
     await waitFor(() => {
-      expect(container.querySelectorAll(".pdf-page-shell")).toHaveLength(80);
+      expect(container.querySelectorAll(".pdf-page-shell").length).toBeLessThanOrEqual(30);
     });
     expect(container.querySelectorAll(".pdf-text-layer").length).toBeLessThan(10);
-    expect(container.querySelector('[data-page-index="10"]')?.classList.contains("pdf-page-shell-spacer")).toBe(true);
+    expect(container.querySelector('[data-page-index="10"]')).toBeNull();
     expect(container.querySelector('[data-page-index="40"]')?.classList.contains("pdf-page-shell-spacer")).toBe(false);
   });
 
@@ -279,7 +279,7 @@ describe("PdfContinuousReader", () => {
     );
 
     await waitFor(() => {
-      expect(container.querySelectorAll(".pdf-page-shell")).toHaveLength(80);
+      expect(container.querySelectorAll(".pdf-page-shell").length).toBeLessThanOrEqual(30);
     });
 
     let shellRectReads = 0;

@@ -46,6 +46,12 @@ pub(crate) struct PdfDocumentInfo {
     pages: Vec<PdfPageInfo>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct PdfInitialPageBundle {
+    document_info: PdfDocumentInfo,
+    bundle: PdfPageBundle,
+}
+
 #[derive(Deserialize)]
 pub(crate) struct PdfEngineGetPageBundleInput {
     primary_attachment_id: i64,
@@ -289,6 +295,71 @@ fn document_info_from_document(doc: &OxidePdfDocument) -> Result<PdfDocumentInfo
     Ok(PdfDocumentInfo { page_count, pages })
 }
 
+fn quick_document_info_from_document(doc: &OxidePdfDocument, page_index: usize) -> Result<PdfDocumentInfo, String> {
+    let page_count = doc.page_count().map_err(|error| error.to_string())?;
+    if page_count == 0 {
+        return Ok(PdfDocumentInfo {
+            page_count,
+            pages: Vec::new(),
+        });
+    }
+    let bounded_page_index = page_index.min(page_count - 1);
+    let page_info = doc
+        .get_page_info(bounded_page_index)
+        .map_err(|error| error.to_string())?;
+    Ok(PdfDocumentInfo {
+        page_count,
+        pages: vec![PdfPageInfo {
+            width_pt: page_info.media_box.width,
+            height_pt: page_info.media_box.height,
+        }],
+    })
+}
+
+fn render_page_bundle_from_document(
+    doc: &mut OxidePdfDocument,
+    page_index: usize,
+    bucketed_width: u32,
+    spans: Option<Vec<PdfTextSpan>>,
+) -> Result<PdfPageBundle, String> {
+    let page_info = doc
+        .get_page_info(page_index)
+        .map_err(|error| error.to_string())?;
+
+    let page_width_pt = page_info.media_box.width;
+    let page_height_pt = page_info.media_box.height;
+    if !(page_width_pt.is_finite()
+        && page_height_pt.is_finite()
+        && page_width_pt > 0.0
+        && page_height_pt > 0.0)
+    {
+        return Err("invalid page size".to_string());
+    }
+
+    let dpi = ((bucketed_width as f32) * 72.0 / page_width_pt)
+        .clamp(36.0, 600.0)
+        .round() as u32;
+    let opts = RenderOptions {
+        dpi,
+        format: ImageFormat::Png,
+        ..Default::default()
+    };
+    let rendered = render_page(doc, page_index, &opts).map_err(|error| error.to_string())?;
+    let spans = match spans {
+        Some(spans) => spans,
+        None => spans_from_document(doc, page_index)?,
+    };
+
+    Ok(PdfPageBundle {
+        png_bytes: rendered.data,
+        width_px: rendered.width,
+        height_px: rendered.height,
+        page_width_pt,
+        page_height_pt,
+        spans,
+    })
+}
+
 #[tauri::command]
 pub(crate) async fn pdf_engine_get_document_info(
     state: State<'_, AppState>,
@@ -312,7 +383,7 @@ pub(crate) async fn pdf_engine_get_document_info(
             .read_primary_attachment_bytes(input.primary_attachment_id)
             .map_err(|error| error.to_string())?;
         let doc = OxidePdfDocument::from_bytes(bytes).map_err(|error| error.to_string())?;
-        let info = document_info_from_document(&doc)?;
+        let info = quick_document_info_from_document(&doc, 0)?;
         pdf_cache
             .lock()
             .map_err(|_| "pdf cache poisoned".to_string())?
@@ -374,6 +445,106 @@ pub(crate) async fn pdf_engine_get_page_text(
 }
 
 #[tauri::command]
+pub(crate) async fn pdf_engine_get_initial_page_bundle(
+    state: State<'_, AppState>,
+    input: PdfEngineGetPageBundleInput,
+) -> Result<PdfInitialPageBundle, String> {
+    if input.page_index0 < 0 {
+        return Err("invalid page index".to_string());
+    }
+    let target_width_px = input.target_width_px.clamp(1, 8192);
+    let bucketed_width = width_bucket(target_width_px);
+
+    let cached_bundle = {
+        let cache = state
+            .pdf_cache
+            .lock()
+            .map_err(|_| "pdf cache poisoned".to_string())?;
+        cache
+            .bundle_by_key
+            .get(&(
+                input.primary_attachment_id,
+                input.page_index0,
+                bucketed_width,
+            ))
+            .cloned()
+            .and_then(|bundle| {
+                cache
+                    .document_info_by_attachment
+                    .get(&input.primary_attachment_id)
+                    .cloned()
+                    .map(|document_info| PdfInitialPageBundle {
+                        document_info,
+                        bundle,
+                    })
+            })
+    };
+    if let Some(cached) = cached_bundle {
+        return Ok(cached);
+    }
+
+    let semaphore = PDF_RENDER_SEMAPHORE
+        .get_or_init(|| Arc::new(Semaphore::new(2)))
+        .clone();
+    let permit = semaphore
+        .acquire_owned()
+        .await
+        .map_err(|error| error.to_string())?;
+    let library_root = state.library_root.clone();
+    let pdf_cache = state.pdf_cache.clone();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let _permit = permit;
+        let bytes = service_for_root(&library_root)?
+            .read_primary_attachment_bytes(input.primary_attachment_id)
+            .map_err(|error| error.to_string())?;
+        let mut doc = OxidePdfDocument::from_bytes(bytes).map_err(|error| error.to_string())?;
+        let page_index: usize =
+            usize::try_from(input.page_index0).map_err(|_| "invalid page index")?;
+        let document_info = quick_document_info_from_document(&doc, page_index)?;
+
+        let cached_spans = {
+            let cache = pdf_cache
+                .lock()
+                .map_err(|_| "pdf cache poisoned".to_string())?;
+            cache
+                .text_spans_by_page
+                .get(&(input.primary_attachment_id, input.page_index0))
+                .cloned()
+        };
+        let bundle = render_page_bundle_from_document(&mut doc, page_index, bucketed_width, cached_spans)?;
+
+        let mut cache = pdf_cache
+            .lock()
+            .map_err(|_| "pdf cache poisoned".to_string())?;
+        cache
+            .document_info_by_attachment
+            .insert(input.primary_attachment_id, document_info.clone());
+        remember_text_spans(
+            &mut cache,
+            (input.primary_attachment_id, input.page_index0),
+            bundle.spans.clone(),
+        );
+        remember_page_bundle(
+            &mut cache,
+            (
+                input.primary_attachment_id,
+                input.page_index0,
+                bucketed_width,
+            ),
+            bundle.clone(),
+        );
+
+        Ok(PdfInitialPageBundle {
+            document_info,
+            bundle,
+        })
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
 pub(crate) async fn pdf_engine_get_page_bundle(
     state: State<'_, AppState>,
     input: PdfEngineGetPageBundleInput,
@@ -418,31 +589,6 @@ pub(crate) async fn pdf_engine_get_page_bundle(
         let page_index: usize =
             usize::try_from(input.page_index0).map_err(|_| "invalid page index")?;
 
-        let page_info = doc
-            .get_page_info(page_index)
-            .map_err(|error| error.to_string())?;
-
-        let page_width_pt = page_info.media_box.width;
-        let page_height_pt = page_info.media_box.height;
-        if !(page_width_pt.is_finite()
-            && page_height_pt.is_finite()
-            && page_width_pt > 0.0
-            && page_height_pt > 0.0)
-        {
-            return Err("invalid page size".to_string());
-        }
-
-        let dpi = ((bucketed_width as f32) * 72.0 / page_width_pt)
-            .clamp(36.0, 600.0)
-            .round() as u32;
-        let opts = RenderOptions {
-            dpi,
-            format: ImageFormat::Png,
-            ..Default::default()
-        };
-        let rendered =
-            render_page(&mut doc, page_index, &opts).map_err(|error| error.to_string())?;
-
         let spans = if let Some(cached) = pdf_cache
             .lock()
             .map_err(|_| "pdf cache poisoned".to_string())?
@@ -454,15 +600,7 @@ pub(crate) async fn pdf_engine_get_page_bundle(
         } else {
             spans_from_document(&doc, page_index)?
         };
-
-        let bundle = PdfPageBundle {
-            png_bytes: rendered.data,
-            width_px: rendered.width,
-            height_px: rendered.height,
-            page_width_pt,
-            page_height_pt,
-            spans: spans.clone(),
-        };
+        let bundle = render_page_bundle_from_document(&mut doc, page_index, bucketed_width, Some(spans.clone()))?;
 
         let mut cache = pdf_cache
             .lock()
