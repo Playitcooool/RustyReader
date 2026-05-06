@@ -717,6 +717,8 @@ describe("App reading workspace", () => {
     };
     const user = userEvent.setup();
     const getAiSettingsSpy = vi.spyOn(fakeApi, "getAiSettings");
+    const getConnectorSettingsSpy = vi.spyOn(fakeApi, "getConnectorSettings");
+    const regenerateConnectorTokenSpy = vi.spyOn(fakeApi, "regenerateConnectorToken");
     const updateAiSettingsSpy = vi.spyOn(fakeApi, "updateAiSettings");
     render(<App api={fakeApi} />);
 
@@ -725,7 +727,15 @@ describe("App reading workspace", () => {
 
     expect(await screen.findByRole("dialog", { name: "Settings" })).toBeInTheDocument();
     expect(getAiSettingsSpy).toHaveBeenCalled();
+    expect(getConnectorSettingsSpy).toHaveBeenCalled();
     expect(screen.getByRole("heading", { name: "General" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Connector URL")).toHaveValue("http://127.0.0.1:17654");
+    expect(screen.getByLabelText("Connector token")).toHaveValue("mock-connector-token");
+    await user.click(screen.getByRole("button", { name: "Regenerate token" }));
+    await waitFor(() => {
+      expect(regenerateConnectorTokenSpy).toHaveBeenCalled();
+      expect(screen.getByLabelText("Connector token")).not.toHaveValue("mock-connector-token");
+    });
     expect(screen.getByText("AI Providers")).toBeInTheDocument();
     expect(screen.getByLabelText("Translation OpenAI model")).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("Translation provider"), "anthropic");

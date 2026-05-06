@@ -1,6 +1,6 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 
-import type { AIProvider, AISettings, TranslationProvider, UpdateAISettingsInput } from "../../lib/contracts";
+import type { AIProvider, AISettings, ConnectorSettings, TranslationProvider, UpdateAISettingsInput } from "../../lib/contracts";
 import type { AttachmentFilter, ItemSort, ReaderFitMode } from "../../lib/appView";
 
 export type GeneralSettingsDraft = {
@@ -14,6 +14,7 @@ export type GeneralSettingsDraft = {
 export function SettingsDialog({
   generalSettingsDraft,
   aiSettings,
+  connectorSettings,
   aiSettingsDraft,
   openAiApiKeyDraft,
   anthropicApiKeyDraft,
@@ -29,11 +30,13 @@ export function SettingsDialog({
   onClampReaderZoom,
   onResetLayoutWidths,
   onClearSavedKey,
+  onRegenerateConnectorToken,
   onCancel,
   onSave,
 }: {
   generalSettingsDraft: GeneralSettingsDraft;
   aiSettings: AISettings | null;
+  connectorSettings: ConnectorSettings | null;
   aiSettingsDraft: UpdateAISettingsInput;
   openAiApiKeyDraft: string;
   anthropicApiKeyDraft: string;
@@ -49,6 +52,7 @@ export function SettingsDialog({
   onClampReaderZoom: (value: number) => number;
   onResetLayoutWidths: () => void;
   onClearSavedKey: (provider: AIProvider | "deepl") => void;
+  onRegenerateConnectorToken: () => void;
   onCancel: () => void;
   onSave: () => void;
 }) {
@@ -291,6 +295,50 @@ export function SettingsDialog({
             <div className="settings-provider-actions settings-provider-actions-inline">
               <span className="settings-inline-note">OpenAI and Anthropic reuse their saved provider keys; DeepL uses its own key.</span>
               {renderClearKeyButton("deepl", "Clear DeepL key")}
+            </div>
+          </section>
+
+          <section className="settings-section-card" aria-labelledby="settings-connector-heading">
+            <div className="settings-section-heading">
+              <p className="eyebrow">Chrome Connector</p>
+              <h3 id="settings-connector-heading">Local Import</h3>
+            </div>
+            <div className="settings-form-grid">
+              <label className="settings-field">
+                <span>Connector URL</span>
+                <input
+                  aria-label="Connector URL"
+                  className="settings-input"
+                  readOnly
+                  value={connectorSettings?.connector_url ?? ""}
+                />
+              </label>
+              <label className="settings-field">
+                <span>Status</span>
+                <input
+                  aria-label="Connector status"
+                  className="settings-input"
+                  readOnly
+                  value={connectorSettings?.status ?? "error"}
+                />
+              </label>
+              <label className="settings-field settings-field-full">
+                <span>Connector token</span>
+                <input
+                  aria-label="Connector token"
+                  className="settings-input"
+                  readOnly
+                  value={connectorSettings?.token ?? ""}
+                />
+              </label>
+            </div>
+            <div className="settings-provider-actions settings-provider-actions-inline">
+              <span className="settings-inline-note">
+                Paste this token into the Chrome extension popup to enable local imports.
+              </span>
+              <button className="ghost-button" type="button" onClick={onRegenerateConnectorToken}>
+                Regenerate token
+              </button>
             </div>
           </section>
 

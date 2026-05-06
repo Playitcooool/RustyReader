@@ -11,7 +11,7 @@ import { SettingsDialog, type GeneralSettingsDraft } from "./components/app/Sett
 import { clamp, collectionDeleteSummary, readStoredBoolean, readStoredNumber, readStoredString, type AttachmentFilter, type ItemSort, type ReaderFitMode } from "./lib/appView";
 import { isTauriRuntime } from "./lib/api";
 import { getRuntimePolyfillDiagnostics } from "./lib/runtimePolyfills";
-import type { AIProvider, AISettings, AppApi, Collection, UpdateAISettingsInput } from "./lib/contracts";
+import type { AIProvider, AISettings, AppApi, Collection, ConnectorSettings, UpdateAISettingsInput } from "./lib/contracts";
 import { useAiSessionState } from "./hooks/useAiSessionState";
 import { useLibraryState } from "./hooks/useLibraryState";
 import { useReaderState } from "./hooks/useReaderState";
@@ -83,6 +83,7 @@ export default function App({ api }: { api: AppApi }) {
   const [openAiApiKeyDraft, setOpenAiApiKeyDraft] = useState("");
   const [anthropicApiKeyDraft, setAnthropicApiKeyDraft] = useState("");
   const [deeplApiKeyDraft, setDeeplApiKeyDraft] = useState("");
+  const [connectorSettings, setConnectorSettings] = useState<ConnectorSettings | null>(null);
   const appShellRef = useRef<HTMLDivElement | null>(null);
 
   const library = useLibraryState({
@@ -175,8 +176,13 @@ export default function App({ api }: { api: AppApi }) {
   }, [activePaper, isSidebarVisible, readerState.openPapers.length, readerState.workspaceMode]);
 
   const openSettingsDialog = useCallback(async () => {
-    const settings = await (await getApi()).getAiSettings();
+    const runtimeApi = await getApi();
+    const [settings, connector] = await Promise.all([
+      runtimeApi.getAiSettings(),
+      runtimeApi.getConnectorSettings(),
+    ]);
     setAiSettings(settings);
+    setConnectorSettings(connector);
     setAiSettingsDraft(draftFromAiSettings(settings));
     setGeneralSettingsDraft({
       resourcesSidebarOpen: readStoredBoolean(SIDEBAR_OPEN_KEY, true),
@@ -233,6 +239,12 @@ export default function App({ api }: { api: AppApi }) {
     else setDeeplApiKeyDraft("");
     setStatusMessage(`${provider === "openai" ? "OpenAI" : provider === "anthropic" ? "Anthropic" : "DeepL"} API key cleared.`);
   }, [aiSettingsDraft, getApi]);
+
+  const handleRegenerateConnectorToken = useCallback(async () => {
+    const next = await (await getApi()).regenerateConnectorToken();
+    setConnectorSettings(next);
+    setStatusMessage("Regenerated connector token.");
+  }, [getApi]);
 
   useEffect(() => {
     if (!isTauriRuntime() || !(globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) return;
@@ -659,6 +671,7 @@ export default function App({ api }: { api: AppApi }) {
         <SettingsDialog
           generalSettingsDraft={generalSettingsDraft}
           aiSettings={aiSettings}
+          connectorSettings={connectorSettings}
           aiSettingsDraft={aiSettingsDraft}
           openAiApiKeyDraft={openAiApiKeyDraft}
           anthropicApiKeyDraft={anthropicApiKeyDraft}
@@ -677,6 +690,7 @@ export default function App({ api }: { api: AppApi }) {
             setAiPanelWidth(DEFAULT_AI_PANEL_WIDTH);
           }}
           onClearSavedKey={(provider) => void handleClearSavedKey(provider)}
+          onRegenerateConnectorToken={() => void handleRegenerateConnectorToken()}
           onCancel={closeSettingsDialog}
           onSave={() => void handleSaveAiSettings()}
         />

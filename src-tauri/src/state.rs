@@ -7,6 +7,7 @@ use std::{
 use app_core::service::LibraryService;
 use tauri::{AppHandle, Manager};
 
+use crate::connector::SharedConnectorStatus;
 use crate::pdf_engine::PdfEngineCache;
 
 pub(crate) struct AppState {
@@ -14,6 +15,7 @@ pub(crate) struct AppState {
     pub(crate) library_service: Arc<LibraryService>,
     pub(crate) pdf_cache: Arc<Mutex<PdfEngineCache>>,
     pub(crate) export_authorizations: Arc<Mutex<HashMap<String, PathBuf>>>,
+    pub(crate) connector_status: SharedConnectorStatus,
 }
 
 pub(crate) fn service(state: &AppState) -> Arc<LibraryService> {
@@ -25,10 +27,8 @@ pub(crate) fn service_for_root(library_root: &Path) -> Result<LibraryService, St
 }
 
 pub(crate) fn root_dir(app: &AppHandle) -> PathBuf {
-    app.path()
-        .app_data_dir()
-        .unwrap_or_else(|error| {
-            eprintln!("failed to resolve app data directory; using temp dir: {error}");
-            std::env::temp_dir().join("paper-reader-dev")
-        })
+    app.path().app_data_dir().unwrap_or_else(|error| {
+        eprintln!("failed to resolve app data directory; using temp dir: {error}");
+        std::env::temp_dir().join("paper-reader-dev")
+    })
 }

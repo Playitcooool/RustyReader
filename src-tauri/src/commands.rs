@@ -223,6 +223,23 @@ pub(crate) fn import_files(
 }
 
 #[tauri::command]
+pub(crate) fn get_connector_settings(
+    state: State<'_, AppState>,
+) -> Result<crate::connector::ConnectorRuntimeSettings, String> {
+    crate::connector::runtime_settings(&service(&state), &state.connector_status)
+}
+
+#[tauri::command]
+pub(crate) fn regenerate_connector_token(
+    state: State<'_, AppState>,
+) -> Result<crate::connector::ConnectorRuntimeSettings, String> {
+    service(&state)
+        .regenerate_connector_token()
+        .map_err(|error| error.to_string())?;
+    crate::connector::runtime_settings(&service(&state), &state.connector_status)
+}
+
+#[tauri::command]
 pub(crate) fn import_citations(
     state: State<'_, AppState>,
     input: ImportCitationsInput,

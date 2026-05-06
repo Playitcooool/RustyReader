@@ -147,6 +147,14 @@ export type AISettings = {
   has_deepl_api_key: boolean;
 };
 
+export type ConnectorSettings = {
+  connector_url: string;
+  port: number;
+  token: string;
+  status: "running" | "error";
+  error?: string;
+};
+
 export type UpdateAISettingsInput = {
   active_provider: AIProvider;
   openai_model: string;
@@ -350,6 +358,8 @@ export type AppApi = {
   removeAnnotation: (input: { annotation_id: number }) => Promise<void>;
   getAiSettings: () => Promise<AISettings>;
   updateAiSettings: (input: UpdateAISettingsInput) => Promise<AISettings>;
+  getConnectorSettings: () => Promise<ConnectorSettings>;
+  regenerateConnectorToken: () => Promise<ConnectorSettings>;
   translateSelection: (input: TranslateSelectionInput) => Promise<TranslateSelectionResult>;
   listAiSessions: () => Promise<AISession[]>;
   createAiSession: () => Promise<AISession>;

@@ -7,6 +7,7 @@ use std::{
 use app_core::service::{Collection, LibraryService, ReaderView};
 mod ai_stream;
 mod commands;
+mod connector;
 mod export;
 mod menu;
 mod ocr;
@@ -556,11 +557,14 @@ fn main() {
                 LibraryService::new(&library_root)
                     .map_err(|error| tauri::Error::Anyhow(error.into()))?,
             );
+            let connector_status = connector::new_status();
+            connector::start(library_service.clone(), connector_status.clone());
             app.manage(AppState {
                 library_root,
                 library_service,
                 pdf_cache: Arc::new(Mutex::new(PdfEngineCache::default())),
                 export_authorizations: Arc::new(Mutex::new(HashMap::new())),
+                connector_status,
             });
 
             menu::install_menu(app)?;
@@ -579,6 +583,8 @@ fn main() {
             commands::list_items,
             commands::search_items,
             commands::import_files,
+            commands::get_connector_settings,
+            commands::regenerate_connector_token,
             commands::import_citations,
             commands::refresh_attachment_statuses,
             commands::relink_attachment,

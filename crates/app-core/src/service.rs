@@ -45,6 +45,11 @@ pub struct Collection {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectorSettings {
+    pub token: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tag {
     pub id: i64,
     pub name: String,
@@ -787,6 +792,19 @@ impl LibraryService {
             .map_err(Into::into)
     }
 
+    pub fn collection_exists(&self, collection_id: i64) -> Result<bool> {
+        let conn = self.connect()?;
+        let exists = conn
+            .query_row(
+                "SELECT id FROM collections WHERE id = ?1",
+                [collection_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()?
+            .is_some();
+        Ok(exists)
+    }
+
     pub fn list_tags(&self, collection_id: Option<i64>) -> Result<Vec<Tag>> {
         let conn = self.connect()?;
         let query = if collection_id.is_some() {
@@ -873,6 +891,10 @@ impl LibraryService {
         paths: &[PathBuf],
         mode: ImportMode,
     ) -> Result<ImportBatchResult> {
+        if !self.collection_exists(collection_id)? {
+            return Err(anyhow!("collection does not exist"));
+        }
+
         let mut imported = Vec::new();
         let mut duplicates = Vec::new();
         let mut failed = Vec::new();
@@ -2443,6 +2465,21 @@ impl LibraryService {
         Ok(())
     }
 
+    pub fn get_connector_settings(&self) -> Result<ConnectorSettings> {
+        let conn = self.connect()?;
+        ensure_connector_settings_row(&conn)
+    }
+
+    pub fn regenerate_connector_token(&self) -> Result<ConnectorSettings> {
+        let conn = self.connect()?;
+        let token = generate_connector_token();
+        conn.execute(
+            "UPDATE connector_settings SET token = ?1 WHERE id = 1",
+            [token.as_str()],
+        )?;
+        Ok(ConnectorSettings { token })
+    }
+
     pub fn relink_attachment(&self, attachment_id: i64, replacement: PathBuf) -> Result<()> {
         if !replacement.exists() {
             return Err(anyhow!("replacement file does not exist"));
@@ -2618,6 +2655,11 @@ impl LibraryService {
                 anthropic_api_key TEXT NOT NULL DEFAULT ''
             );
 
+            CREATE TABLE IF NOT EXISTS connector_settings(
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                token TEXT NOT NULL DEFAULT ''
+            );
+
             CREATE VIRTUAL TABLE IF NOT EXISTS search_index USING fts5(
                 item_id UNINDEXED,
                 title,
@@ -2704,8 +2746,50 @@ impl LibraryService {
             "TEXT NOT NULL DEFAULT ''",
         )?;
         conn.execute("INSERT OR IGNORE INTO ai_settings(id) VALUES (1)", [])?;
+        conn.execute(
+            "INSERT OR IGNORE INTO connector_settings(id) VALUES (1)",
+            [],
+        )?;
+        ensure_connector_settings_row(&conn)?;
         Ok(())
     }
+}
+
+fn ensure_connector_settings_row(conn: &Connection) -> Result<ConnectorSettings> {
+    let token = conn
+        .query_row(
+            "SELECT token FROM connector_settings WHERE id = 1",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?
+        .unwrap_or_default();
+    if token.trim().is_empty() {
+        let token = generate_connector_token();
+        conn.execute(
+            "INSERT INTO connector_settings(id, token) VALUES (1, ?1)
+             ON CONFLICT(id) DO UPDATE SET token = excluded.token",
+            [token.as_str()],
+        )?;
+        return Ok(ConnectorSettings { token });
+    }
+    Ok(ConnectorSettings { token })
+}
+
+fn generate_connector_token() -> String {
+    let mut bytes = [0_u8; 32];
+    if fs::File::open("/dev/urandom")
+        .and_then(|mut file| file.read_exact(&mut bytes))
+        .is_err()
+    {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or_default();
+        let digest = Sha256::digest(nanos.to_string().as_bytes());
+        bytes.copy_from_slice(&digest[..32]);
+    }
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 fn to_public_ai_settings(settings: &StoredAISettings) -> AISettings {

@@ -60,6 +60,13 @@ type MockState = {
     anthropic_api_key: string;
     deepl_api_key: string;
   };
+  connectorSettings: {
+    connector_url: string;
+    port: number;
+    token: string;
+    status: "running" | "error";
+    error?: string;
+  };
   nextId: number;
   importFileResults?: ImportBatchResult | null;
   importCitationResults?: ImportBatchResult | null;
@@ -229,6 +236,12 @@ const initialState = (): MockState => ({
     deepl_base_url: "https://api-free.deepl.com",
     has_deepl_api_key: false,
     deepl_api_key: "",
+  },
+  connectorSettings: {
+    connector_url: "http://127.0.0.1:17654",
+    port: 17654,
+    token: "mock-connector-token",
+    status: "running",
   },
   nextId: 1000,
   importFileResults: null,
@@ -1087,6 +1100,18 @@ export const fakeApi: AppApi = {
     state.aiSettings.has_anthropic_api_key = Boolean(state.aiSettings.anthropic_api_key);
     state.aiSettings.has_deepl_api_key = Boolean(state.aiSettings.deepl_api_key);
     return publicAiSettings();
+  },
+
+  async getConnectorSettings() {
+    return { ...state.connectorSettings };
+  },
+
+  async regenerateConnectorToken() {
+    state.connectorSettings = {
+      ...state.connectorSettings,
+      token: `mock-connector-token-${state.nextId++}`,
+    };
+    return { ...state.connectorSettings };
   },
 
   async translateSelection(input) {
