@@ -414,6 +414,11 @@ export default function App({ api }: { api: AppApi }) {
       className={`app-shell ${readerState.workspaceMode === "pdf_focus" ? "app-shell-focus" : "app-shell-workspace"} ${ai.isAiPanelOpen ? "app-shell-ai-open" : ""}`}
       style={{ "--sidebar-width": `${clamp(sidebarWidth, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH)}px`, "--ai-panel-width": `${clamp(aiPanelWidth, AI_PANEL_MIN_WIDTH, AI_PANEL_MAX_WIDTH)}px` } as CSSProperties}
     >
+      {!ai.isAiPanelOpen ? (
+        <div className="status-pill app-status" role="status">
+          {statusMessage}
+        </div>
+      ) : null}
       {library.resourceContextMenu && (library.contextMenuCollection || library.contextMenuItem) ? (
         <div ref={library.resourceContextMenuRef} aria-label="Resource actions" className="floating-menu resource-context-menu" role="menu" style={{ left: library.resourceContextMenu.x, top: library.resourceContextMenu.y }}>
           {library.contextMenuCollection ? (
@@ -620,7 +625,6 @@ export default function App({ api }: { api: AppApi }) {
               areQuickActionsDisabled={ai.areQuickActionsDisabled}
               collections={library.collections}
               compareEnabled={ai.compareEnabled}
-              isAiPanelOpen={ai.isAiPanelOpen}
               isAiSessionHistoryOpen={ai.isAiSessionHistoryOpen}
               isReferencePickerOpen={ai.isReferencePickerOpen}
               libraryItems={library.libraryItems}

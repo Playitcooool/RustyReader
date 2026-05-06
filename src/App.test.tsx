@@ -296,6 +296,23 @@ describe("App reading workspace", () => {
     expect(await screen.findByTestId("pdf-reader")).toBeInTheDocument();
   });
 
+  it("shows reader load failures instead of swallowing them", async () => {
+    const apiWithFailure = {
+      ...fakeApi,
+      getReaderView: vi.fn(async () => {
+        throw new Error("Reader view exploded");
+      }),
+    } as typeof fakeApi;
+
+    const user = userEvent.setup();
+    render(<App api={apiWithFailure} />);
+
+    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+
+    expect(await screen.findByText("Reader view exploded")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Transformer Scaling Laws/i })).toBeInTheDocument();
+  });
+
   it("shows a focus highlight color bar and persists color into the anchor", async () => {
     const user = userEvent.setup();
     const createAnnotationSpy = vi.spyOn(fakeApi, "createAnnotation");
@@ -756,6 +773,12 @@ describe("App reading workspace", () => {
     menuListeners.get("menu:open-settings")?.();
     expect(await screen.findByRole("dialog", { name: "Settings" })).toBeInTheDocument();
     await user.click(screen.getAllByRole("button", { name: "Clear saved key" })[0]);
+    expect(updateAiSettingsSpy).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        clear_openai_api_key: true,
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Confirm clear key" }));
 
     await waitFor(() => {
       expect(updateAiSettingsSpy).toHaveBeenCalledWith(

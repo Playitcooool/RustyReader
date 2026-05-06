@@ -146,7 +146,9 @@ fn get_reader_view(state: State<'_, AppState>, item_id: i64) -> Result<ReaderVie
         .map_err(|error| error.to_string())?;
     let repair_service = state.library_service.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let _ = repair_service.repair_item_content_if_needed(item_id);
+        if let Err(error) = repair_service.repair_item_content_if_needed(item_id) {
+            eprintln!("background content repair failed for item {item_id}: {error}");
+        }
     });
     Ok(view)
 }

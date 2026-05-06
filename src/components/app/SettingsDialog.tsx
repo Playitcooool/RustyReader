@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from "react";
+import { useState, type Dispatch, type SetStateAction } from "react";
 
 import type { AIProvider, AISettings, TranslationProvider, UpdateAISettingsInput } from "../../lib/contracts";
 import type { AttachmentFilter, ItemSort, ReaderFitMode } from "../../lib/appView";
@@ -52,6 +52,32 @@ export function SettingsDialog({
   onCancel: () => void;
   onSave: () => void;
 }) {
+  const [pendingClearKeyProvider, setPendingClearKeyProvider] = useState<AIProvider | "deepl" | null>(null);
+  const cancelSettings = () => {
+    setPendingClearKeyProvider(null);
+    onCancel();
+  };
+  const updateAiSettingsDraft: Dispatch<SetStateAction<UpdateAISettingsInput>> = (value) => {
+    setPendingClearKeyProvider(null);
+    onAiSettingsDraftChange(value);
+  };
+  const renderClearKeyButton = (provider: AIProvider | "deepl", label: string) => (
+    <button
+      className="ghost-button"
+      type="button"
+      onClick={() => {
+        if (pendingClearKeyProvider === provider) {
+          setPendingClearKeyProvider(null);
+          onClearSavedKey(provider);
+          return;
+        }
+        setPendingClearKeyProvider(provider);
+      }}
+    >
+      {pendingClearKeyProvider === provider ? "Confirm clear key" : label}
+    </button>
+  );
+
   return (
     <div className="modal-scrim" role="presentation">
       <section className="settings-dialog" role="dialog" aria-label="Settings">
@@ -63,7 +89,7 @@ export function SettingsDialog({
               Tune the library workspace and keep one AI provider ready without exposing more controls than needed.
             </p>
           </div>
-          <button className="ghost-button" type="button" onClick={onCancel}>
+          <button className="ghost-button" type="button" onClick={cancelSettings}>
             Cancel
           </button>
         </div>
@@ -184,7 +210,7 @@ export function SettingsDialog({
                   className="settings-input"
                   value={aiSettingsDraft.translation_provider}
                   onChange={(event) =>
-                    onAiSettingsDraftChange((current) => ({
+                    updateAiSettingsDraft((current) => ({
                       ...current,
                       translation_provider: event.target.value as TranslationProvider,
                     }))
@@ -202,7 +228,7 @@ export function SettingsDialog({
                   className="settings-input"
                   value={aiSettingsDraft.translation_target_lang}
                   onChange={(event) =>
-                    onAiSettingsDraftChange((current) => ({ ...current, translation_target_lang: event.target.value }))
+                    updateAiSettingsDraft((current) => ({ ...current, translation_target_lang: event.target.value }))
                   }
                 />
               </label>
@@ -215,7 +241,7 @@ export function SettingsDialog({
                     placeholder={aiSettingsDraft.openai_model || "Fallback to OpenAI model"}
                     value={aiSettingsDraft.translation_openai_model}
                     onChange={(event) =>
-                      onAiSettingsDraftChange((current) => ({ ...current, translation_openai_model: event.target.value }))
+                      updateAiSettingsDraft((current) => ({ ...current, translation_openai_model: event.target.value }))
                     }
                   />
                 </label>
@@ -229,7 +255,7 @@ export function SettingsDialog({
                     placeholder={aiSettingsDraft.anthropic_model || "Fallback to Anthropic model"}
                     value={aiSettingsDraft.translation_anthropic_model}
                     onChange={(event) =>
-                      onAiSettingsDraftChange((current) => ({ ...current, translation_anthropic_model: event.target.value }))
+                      updateAiSettingsDraft((current) => ({ ...current, translation_anthropic_model: event.target.value }))
                     }
                   />
                 </label>
@@ -244,7 +270,7 @@ export function SettingsDialog({
                       placeholder="https://api-free.deepl.com"
                       value={aiSettingsDraft.deepl_base_url}
                       onChange={(event) =>
-                        onAiSettingsDraftChange((current) => ({ ...current, deepl_base_url: event.target.value }))
+                        updateAiSettingsDraft((current) => ({ ...current, deepl_base_url: event.target.value }))
                       }
                     />
                   </label>
@@ -264,9 +290,7 @@ export function SettingsDialog({
             </div>
             <div className="settings-provider-actions settings-provider-actions-inline">
               <span className="settings-inline-note">OpenAI and Anthropic reuse their saved provider keys; DeepL uses its own key.</span>
-              <button className="ghost-button" type="button" onClick={() => onClearSavedKey("deepl")}>
-                Clear DeepL key
-              </button>
+              {renderClearKeyButton("deepl", "Clear DeepL key")}
             </div>
           </section>
 
@@ -285,7 +309,7 @@ export function SettingsDialog({
                   }`}
                   role="tab"
                   type="button"
-                  onClick={() => onAiSettingsDraftChange((current) => ({ ...current, active_provider: provider }))}
+                  onClick={() => updateAiSettingsDraft((current) => ({ ...current, active_provider: provider }))}
                 >
                   {provider === "openai" ? "OpenAI" : "Anthropic"}
                 </button>
@@ -309,7 +333,7 @@ export function SettingsDialog({
                       className="settings-input"
                       value={aiSettingsDraft.openai_model}
                       onChange={(event) =>
-                        onAiSettingsDraftChange((current) => ({ ...current, openai_model: event.target.value }))
+                        updateAiSettingsDraft((current) => ({ ...current, openai_model: event.target.value }))
                       }
                     />
                   </label>
@@ -321,7 +345,7 @@ export function SettingsDialog({
                       placeholder="https://api.openai.com/v1"
                       value={aiSettingsDraft.openai_base_url}
                       onChange={(event) =>
-                        onAiSettingsDraftChange((current) => ({ ...current, openai_base_url: event.target.value }))
+                        updateAiSettingsDraft((current) => ({ ...current, openai_base_url: event.target.value }))
                       }
                     />
                   </label>
@@ -339,9 +363,7 @@ export function SettingsDialog({
                 </div>
                 <div className="settings-provider-actions settings-provider-actions-inline">
                   <span className="settings-inline-note">The key stays in secure storage and never reappears in plain text.</span>
-                  <button className="ghost-button" type="button" onClick={() => onClearSavedKey("openai")}>
-                    Clear saved key
-                  </button>
+                  {renderClearKeyButton("openai", "Clear saved key")}
                 </div>
               </div>
             ) : (
@@ -361,7 +383,7 @@ export function SettingsDialog({
                       className="settings-input"
                       value={aiSettingsDraft.anthropic_model}
                       onChange={(event) =>
-                        onAiSettingsDraftChange((current) => ({ ...current, anthropic_model: event.target.value }))
+                        updateAiSettingsDraft((current) => ({ ...current, anthropic_model: event.target.value }))
                       }
                     />
                   </label>
@@ -373,7 +395,7 @@ export function SettingsDialog({
                       placeholder="https://api.anthropic.com/v1"
                       value={aiSettingsDraft.anthropic_base_url}
                       onChange={(event) =>
-                        onAiSettingsDraftChange((current) => ({ ...current, anthropic_base_url: event.target.value }))
+                        updateAiSettingsDraft((current) => ({ ...current, anthropic_base_url: event.target.value }))
                       }
                     />
                   </label>
@@ -391,9 +413,7 @@ export function SettingsDialog({
                 </div>
                 <div className="settings-provider-actions settings-provider-actions-inline">
                   <span className="settings-inline-note">The key stays in secure storage and never reappears in plain text.</span>
-                  <button className="ghost-button" type="button" onClick={() => onClearSavedKey("anthropic")}>
-                    Clear saved key
-                  </button>
+                  {renderClearKeyButton("anthropic", "Clear saved key")}
                 </div>
               </div>
             )}
@@ -401,7 +421,7 @@ export function SettingsDialog({
         </div>
 
         <div className="settings-dialog-actions">
-          <button className="ghost-button" type="button" onClick={onCancel}>
+          <button className="ghost-button" type="button" onClick={cancelSettings}>
             Cancel
           </button>
           <button className="primary-button" type="button" onClick={onSave}>

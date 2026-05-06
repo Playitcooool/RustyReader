@@ -141,7 +141,6 @@ type Props = {
   areQuickActionsDisabled: boolean;
   collections: Collection[];
   compareEnabled: boolean;
-  isAiPanelOpen: boolean;
   isAiSessionHistoryOpen: boolean;
   isReferencePickerOpen: boolean;
   libraryItems: LibraryItem[];

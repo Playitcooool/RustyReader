@@ -16,7 +16,7 @@ import {
   pdfTextBoxColors,
   type PdfTextBoxColor,
 } from "../readers/pdfTextBoxAnchor";
-import { useMemo, useState, type RefObject } from "react";
+import { useEffect, useMemo, useState, type RefObject } from "react";
 
 const pdfHighlightColors = ["yellow", "red", "green", "blue", "purple"] as const satisfies readonly PdfHighlightColor[];
 
@@ -178,6 +178,16 @@ export function ReaderWorkspace(props: Props) {
   const [isPdfTextBoxToolActive, setIsPdfTextBoxToolActive] = useState(false);
   const [pdfTextBoxColor, setPdfTextBoxColor] = useState<PdfTextBoxColor>(DEFAULT_PDF_TEXT_BOX_COLOR);
   const [pdfTextBoxFontSize, setPdfTextBoxFontSize] = useState(DEFAULT_PDF_TEXT_BOX_FONT_SIZE);
+  const [viewportSize, setViewportSize] = useState(() => ({
+    width: window.innerWidth,
+    height: window.innerHeight,
+  }));
+
+  useEffect(() => {
+    const handleResize = () => setViewportSize({ width: window.innerWidth, height: window.innerHeight });
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   const showPdfFocusHighlightBar = Boolean(workspaceMode === "pdf_focus" && activePaper?.attachment_format === "pdf" && pdfSelection);
   const pdfFocusHighlightBarStyle = useMemo(() => {
@@ -191,10 +201,10 @@ export function ReaderWorkspace(props: Props) {
     let left = rect.right + GAP_PX;
     let top = rect.top - BAR_HEIGHT_PX - GAP_PX;
     if (top < PADDING_PX) top = rect.bottom + GAP_PX;
-    left = clamp(left, PADDING_PX, window.innerWidth - BAR_WIDTH_PX - PADDING_PX);
-    top = clamp(top, PADDING_PX, window.innerHeight - BAR_HEIGHT_PX - PADDING_PX);
+    left = clamp(left, PADDING_PX, viewportSize.width - BAR_WIDTH_PX - PADDING_PX);
+    top = clamp(top, PADDING_PX, viewportSize.height - BAR_HEIGHT_PX - PADDING_PX);
     return { left: `${left}px`, top: `${top}px` } as const;
-  }, [pdfSelection, showPdfFocusHighlightBar]);
+  }, [pdfSelection, showPdfFocusHighlightBar, viewportSize.height, viewportSize.width]);
   const selectionForActions = translationSelection ?? (pdfSelection ? { quote: pdfSelection.quote, rect: pdfSelection.rect } : null);
   const showPdfHighlightActions = workspaceMode === "pdf_focus" && Boolean(pdfSelection);
   const readerContextMenuStyle = useMemo(() => {
@@ -204,10 +214,10 @@ export function ReaderWorkspace(props: Props) {
     const HEIGHT_PX = showPdfHighlightActions ? 340 : 164;
     const PADDING_PX = 8;
     return {
-      left: `${clamp(readerContextMenu.x, PADDING_PX, window.innerWidth - WIDTH_PX - PADDING_PX)}px`,
-      top: `${clamp(readerContextMenu.y, PADDING_PX, window.innerHeight - HEIGHT_PX - PADDING_PX)}px`,
+      left: `${clamp(readerContextMenu.x, PADDING_PX, viewportSize.width - WIDTH_PX - PADDING_PX)}px`,
+      top: `${clamp(readerContextMenu.y, PADDING_PX, viewportSize.height - HEIGHT_PX - PADDING_PX)}px`,
     } as const;
-  }, [readerContextMenu, showPdfHighlightActions]);
+  }, [readerContextMenu, showPdfHighlightActions, viewportSize.height, viewportSize.width]);
   const translationPopoverStyle = useMemo(() => {
     if (!translationPopover) return {};
     const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -218,12 +228,12 @@ export function ReaderWorkspace(props: Props) {
     const rect = translationPopover.rect;
     let left = rect.right + GAP_PX;
     let top = rect.top - GAP_PX;
-    if (left + WIDTH_PX + PADDING_PX > window.innerWidth) left = rect.left - WIDTH_PX - GAP_PX;
-    if (top + HEIGHT_PX + PADDING_PX > window.innerHeight) top = rect.bottom - HEIGHT_PX;
-    left = clamp(left, PADDING_PX, window.innerWidth - WIDTH_PX - PADDING_PX);
-    top = clamp(top, PADDING_PX, window.innerHeight - HEIGHT_PX - PADDING_PX);
+    if (left + WIDTH_PX + PADDING_PX > viewportSize.width) left = rect.left - WIDTH_PX - GAP_PX;
+    if (top + HEIGHT_PX + PADDING_PX > viewportSize.height) top = rect.bottom - HEIGHT_PX;
+    left = clamp(left, PADDING_PX, viewportSize.width - WIDTH_PX - PADDING_PX);
+    top = clamp(top, PADDING_PX, viewportSize.height - HEIGHT_PX - PADDING_PX);
     return { left: `${left}px`, top: `${top}px` } as const;
-  }, [translationPopover]);
+  }, [translationPopover, viewportSize.height, viewportSize.width]);
 
   return (
     <main

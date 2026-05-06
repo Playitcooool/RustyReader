@@ -299,7 +299,8 @@ pub(crate) async fn ocr_pdf_page(
         .map_err(|_| "tesseract recognition failed")?;
 
     let tsv = results.get_tsv_text(0);
-    let tsv_str = std::str::from_utf8(tsv.as_c_str().to_bytes()).unwrap_or("");
+    let tsv_str = std::str::from_utf8(tsv.as_c_str().to_bytes())
+        .map_err(|_| "tesseract TSV output was not valid UTF-8")?;
     let out_lines = parse_tesseract_tsv_to_lines(tsv_str, width, height);
 
     let result = OcrPageResult {

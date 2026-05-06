@@ -2466,13 +2466,15 @@ impl LibraryService {
     }
 
     fn connect(&self) -> Result<PooledConnection> {
-        let conn = self
+        let conn = match self
             .connection_pool
             .lock()
-            .ok()
-            .and_then(|mut pool| pool.pop())
-            .map(Ok)
-            .unwrap_or_else(|| self.open_connection())?;
+            .map_err(|_| anyhow!("database connection pool lock poisoned"))?
+            .pop()
+        {
+            Some(conn) => conn,
+            None => self.open_connection()?,
+        };
         Ok(PooledConnection {
             conn: ManuallyDrop::new(conn),
             pool: self.connection_pool.clone(),

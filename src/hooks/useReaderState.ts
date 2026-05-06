@@ -129,11 +129,20 @@ export function useReaderState({
         setTranslationPopover(null);
         setTranslationError(null);
         void (async () => {
-          const annotationsResult = await runtimeApi.listAnnotations(itemId);
-          if (!cancelled && readerLoadRequestIdRef.current === requestId) setAnnotations(annotationsResult);
+          try {
+            const annotationsResult = await runtimeApi.listAnnotations(itemId);
+            if (!cancelled && readerLoadRequestIdRef.current === requestId) setAnnotations(annotationsResult);
+          } catch (error) {
+            if (cancelled || readerLoadRequestIdRef.current !== requestId) return;
+            setAnnotations([]);
+            setStatusMessage(error instanceof Error ? error.message : "Failed to load annotations.");
+          }
         })();
-      } catch {
-        // Ignore.
+      } catch (error) {
+        if (cancelled || readerLoadRequestIdRef.current !== requestId) return;
+        setReaderView(null);
+        setAnnotations([]);
+        setStatusMessage(error instanceof Error ? error.message : "Failed to load reader view.");
       }
     })();
     return () => {

@@ -730,7 +730,7 @@ pub(crate) async fn pdf_engine_get_page_bundles_batch(
                 let rendered =
                     render_page(&mut doc, page_index, &opts).map_err(|error| error.to_string())?;
 
-                let spans = {
+                let cached_spans = {
                     let cache = pdf_cache
                         .lock()
                         .map_err(|_| "pdf cache poisoned".to_string())?;
@@ -738,8 +738,12 @@ pub(crate) async fn pdf_engine_get_page_bundles_batch(
                         .text_spans_by_page
                         .get(&(input.primary_attachment_id, *page_index0))
                         .cloned()
-                }
-                .unwrap_or_else(|| spans_from_document(&doc, page_index).unwrap_or_default());
+                };
+                let spans = match cached_spans {
+                    Some(spans) => spans,
+                    None => spans_from_document(&doc, page_index)
+                        .map_err(|error| format!("failed to extract PDF text spans: {error}"))?,
+                };
 
                 let bundle = PdfPageBundle {
                     png_bytes: rendered.data,
