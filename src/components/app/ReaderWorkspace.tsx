@@ -74,7 +74,8 @@ type ReaderWorkspaceActions = {
   onCopyReaderSelection: () => void | Promise<void>;
   onCreatePdfFocusHighlight: (color: PdfHighlightColor) => void | Promise<void>;
   onCreatePdfFocusTextBoxAnnotation: (draft: PdfTextBoxAnnotationDraft) => void | Promise<void>;
-  onUpdatePdfTextBoxAnnotationGeometry: (annotationId: number, anchor: string) => void | Promise<void>;
+  onUpdatePdfTextBoxAnnotation: (annotationId: number, anchor: string, body?: string) => void | Promise<void>;
+  onRemovePdfTextBoxAnnotation: (annotationId: number) => void | Promise<void>;
   onExitFocus: () => void;
   onFindQueryChange: (value: string) => void;
   onMoveMatch: (direction: 1 | -1, source: "button" | "enter") => void;
@@ -153,7 +154,8 @@ export function ReaderWorkspace(props: Props) {
     onCopyReaderSelection,
     onCreatePdfFocusHighlight,
     onCreatePdfFocusTextBoxAnnotation,
-    onUpdatePdfTextBoxAnnotationGeometry,
+    onUpdatePdfTextBoxAnnotation,
+    onRemovePdfTextBoxAnnotation,
     onExitFocus,
     onFindQueryChange,
     onMoveMatch,
@@ -349,7 +351,8 @@ export function ReaderWorkspace(props: Props) {
                   void onCreatePdfFocusTextBoxAnnotation(draft);
                   setIsPdfTextBoxToolActive(false);
                 }}
-                onUpdateTextBoxAnnotation={(annotationId, anchor) => onUpdatePdfTextBoxAnnotationGeometry(annotationId, anchor)}
+                onUpdateTextBoxAnnotation={(annotationId, anchor, body) => onUpdatePdfTextBoxAnnotation(annotationId, anchor, body)}
+                onRemoveTextBoxAnnotation={(annotationId) => onRemovePdfTextBoxAnnotation(annotationId)}
                 textBoxToolActive={isPdfTextBoxToolActive}
                 textBoxDefaultColor={pdfTextBoxColor}
                 textBoxDefaultFontSize={pdfTextBoxFontSize}

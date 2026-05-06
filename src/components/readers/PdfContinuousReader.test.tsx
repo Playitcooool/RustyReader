@@ -862,6 +862,232 @@ describe("PdfContinuousReader", () => {
     expect(anchor.height).toBeCloseTo(0.15);
   });
 
+  it("edits persisted text box body on double click and saves on blur", async () => {
+    const getPdfPageBundle = vi.fn().mockResolvedValue(makeBundle("Hello world"));
+    const getPdfDocumentInfo = vi.fn().mockResolvedValue(makeDocumentInfo());
+    const getPdfPageText = vi.fn().mockResolvedValue({ page_index0: 0, spans: [] });
+    const ocrPdfPage = vi.fn().mockResolvedValue({
+      primary_attachment_id: 101,
+      page_index0: 0,
+      lang: "eng+chi_sim",
+      config_version: "test",
+      lines: [],
+    });
+    const onUpdateTextBoxAnnotation = vi.fn().mockResolvedValue(undefined);
+    const anchor = { type: "pdf_text_box", page: 1, x: 0.1, y: 0.2, width: 0.3, height: 0.1 };
+
+    const { container } = render(
+      <PdfContinuousReader
+        annotations={[{
+          id: 33,
+          item_id: pdfView.item_id,
+          kind: "text_box",
+          body: "Persisted note",
+          anchor: JSON.stringify(anchor),
+        }]}
+        getPdfDocumentInfo={getPdfDocumentInfo}
+        getPdfPageBundle={getPdfPageBundle}
+        getPdfPageText={getPdfPageText}
+        ocrPdfPage={ocrPdfPage}
+        onUpdateTextBoxAnnotation={onUpdateTextBoxAnnotation}
+        page={0}
+        view={pdfView}
+        zoom={100}
+      />,
+    );
+
+    const textarea = await screen.findByRole("textbox", { name: "PDF text box annotation" });
+    const box = container.querySelector(".pdf-text-box-annotation") as HTMLElement;
+
+    fireEvent.doubleClick(box);
+
+    await waitFor(() => expect(textarea).not.toHaveAttribute("readonly"));
+    expect(container.querySelector(".pdf-text-box-resize-handle")).toBeNull();
+
+    fireEvent.change(textarea, { target: { value: "Updated\nnote" } });
+    fireEvent.blur(textarea);
+
+    await waitFor(() => expect(onUpdateTextBoxAnnotation).toHaveBeenCalledTimes(1));
+    expect(onUpdateTextBoxAnnotation.mock.calls[0]?.[0]).toBe(33);
+    expect(JSON.parse(onUpdateTextBoxAnnotation.mock.calls[0]?.[1] as string)).toMatchObject(anchor);
+    expect(onUpdateTextBoxAnnotation.mock.calls[0]?.[2]).toBe("Updated\nnote");
+  });
+
+  it("hides persisted text box resize handles when clicking outside", async () => {
+    const getPdfPageBundle = vi.fn().mockResolvedValue(makeBundle("Hello world"));
+    const getPdfDocumentInfo = vi.fn().mockResolvedValue(makeDocumentInfo());
+    const getPdfPageText = vi.fn().mockResolvedValue({ page_index0: 0, spans: [] });
+    const ocrPdfPage = vi.fn().mockResolvedValue({
+      primary_attachment_id: 101,
+      page_index0: 0,
+      lang: "eng+chi_sim",
+      config_version: "test",
+      lines: [],
+    });
+
+    const { container } = render(
+      <PdfContinuousReader
+        annotations={[{
+          id: 33,
+          item_id: pdfView.item_id,
+          kind: "text_box",
+          body: "Persisted note",
+          anchor: JSON.stringify({ type: "pdf_text_box", page: 1, x: 0.1, y: 0.2, width: 0.3, height: 0.1 }),
+        }]}
+        getPdfDocumentInfo={getPdfDocumentInfo}
+        getPdfPageBundle={getPdfPageBundle}
+        getPdfPageText={getPdfPageText}
+        ocrPdfPage={ocrPdfPage}
+        page={0}
+        view={pdfView}
+        zoom={100}
+      />,
+    );
+
+    await screen.findByRole("textbox", { name: "PDF text box annotation" });
+    const box = container.querySelector(".pdf-text-box-annotation") as HTMLElement;
+    const reader = container.querySelector(".pdf-reader") as HTMLElement;
+
+    fireEvent.mouseDown(box, { button: 0, buttons: 1, clientX: 80, clientY: 200 });
+    fireEvent.mouseUp(window, { clientX: 80, clientY: 200 });
+    await waitFor(() => expect(container.querySelector(".pdf-text-box-resize-handle")).toBeTruthy());
+
+    fireEvent.pointerDown(reader, { button: 0, pointerId: 1, pointerType: "mouse", clientX: 4, clientY: 4 });
+    await waitFor(() => expect(container.querySelector(".pdf-text-box-resize-handle")).toBeNull());
+  });
+
+  it("selects persisted text boxes by clicking body text and removes selected boxes with Delete", async () => {
+    const getPdfPageBundle = vi.fn().mockResolvedValue(makeBundle("Hello world"));
+    const getPdfDocumentInfo = vi.fn().mockResolvedValue(makeDocumentInfo());
+    const getPdfPageText = vi.fn().mockResolvedValue({ page_index0: 0, spans: [] });
+    const ocrPdfPage = vi.fn().mockResolvedValue({
+      primary_attachment_id: 101,
+      page_index0: 0,
+      lang: "eng+chi_sim",
+      config_version: "test",
+      lines: [],
+    });
+    const onRemoveTextBoxAnnotation = vi.fn().mockResolvedValue(undefined);
+
+    const { container } = render(
+      <PdfContinuousReader
+        annotations={[{
+          id: 33,
+          item_id: pdfView.item_id,
+          kind: "text_box",
+          body: "Persisted note",
+          anchor: JSON.stringify({ type: "pdf_text_box", page: 1, x: 0.1, y: 0.2, width: 0.3, height: 0.1 }),
+        }]}
+        getPdfDocumentInfo={getPdfDocumentInfo}
+        getPdfPageBundle={getPdfPageBundle}
+        getPdfPageText={getPdfPageText}
+        ocrPdfPage={ocrPdfPage}
+        onRemoveTextBoxAnnotation={onRemoveTextBoxAnnotation}
+        page={0}
+        view={pdfView}
+        zoom={100}
+      />,
+    );
+
+    const textarea = await screen.findByRole("textbox", { name: "PDF text box annotation" });
+    fireEvent.mouseDown(textarea, { button: 0, buttons: 1, clientX: 80, clientY: 200 });
+    fireEvent.mouseUp(window, { clientX: 80, clientY: 200 });
+
+    await waitFor(() => expect(container.querySelector(".pdf-text-box-resize-handle")).toBeTruthy());
+
+    fireEvent.keyDown(window, { key: "Delete" });
+
+    await waitFor(() => expect(onRemoveTextBoxAnnotation).toHaveBeenCalledWith(33));
+  });
+
+  it("does not remove a text box when Delete is pressed while editing its body", async () => {
+    const getPdfPageBundle = vi.fn().mockResolvedValue(makeBundle("Hello world"));
+    const getPdfDocumentInfo = vi.fn().mockResolvedValue(makeDocumentInfo());
+    const getPdfPageText = vi.fn().mockResolvedValue({ page_index0: 0, spans: [] });
+    const ocrPdfPage = vi.fn().mockResolvedValue({
+      primary_attachment_id: 101,
+      page_index0: 0,
+      lang: "eng+chi_sim",
+      config_version: "test",
+      lines: [],
+    });
+    const onRemoveTextBoxAnnotation = vi.fn().mockResolvedValue(undefined);
+
+    const { container } = render(
+      <PdfContinuousReader
+        annotations={[{
+          id: 33,
+          item_id: pdfView.item_id,
+          kind: "text_box",
+          body: "Persisted note",
+          anchor: JSON.stringify({ type: "pdf_text_box", page: 1, x: 0.1, y: 0.2, width: 0.3, height: 0.1 }),
+        }]}
+        getPdfDocumentInfo={getPdfDocumentInfo}
+        getPdfPageBundle={getPdfPageBundle}
+        getPdfPageText={getPdfPageText}
+        ocrPdfPage={ocrPdfPage}
+        onRemoveTextBoxAnnotation={onRemoveTextBoxAnnotation}
+        page={0}
+        view={pdfView}
+        zoom={100}
+      />,
+    );
+
+    const textarea = await screen.findByRole("textbox", { name: "PDF text box annotation" });
+    const box = container.querySelector(".pdf-text-box-annotation") as HTMLElement;
+    fireEvent.doubleClick(box);
+    await waitFor(() => expect(textarea).not.toHaveAttribute("readonly"));
+
+    fireEvent.keyDown(textarea, { key: "Delete" });
+
+    expect(onRemoveTextBoxAnnotation).not.toHaveBeenCalled();
+  });
+
+  it("rolls back persisted text box body when saving fails", async () => {
+    const getPdfPageBundle = vi.fn().mockResolvedValue(makeBundle("Hello world"));
+    const getPdfDocumentInfo = vi.fn().mockResolvedValue(makeDocumentInfo());
+    const getPdfPageText = vi.fn().mockResolvedValue({ page_index0: 0, spans: [] });
+    const ocrPdfPage = vi.fn().mockResolvedValue({
+      primary_attachment_id: 101,
+      page_index0: 0,
+      lang: "eng+chi_sim",
+      config_version: "test",
+      lines: [],
+    });
+    const onUpdateTextBoxAnnotation = vi.fn().mockRejectedValue(new Error("update failed"));
+
+    const { container } = render(
+      <PdfContinuousReader
+        annotations={[{
+          id: 33,
+          item_id: pdfView.item_id,
+          kind: "text_box",
+          body: "Persisted note",
+          anchor: JSON.stringify({ type: "pdf_text_box", page: 1, x: 0.1, y: 0.2, width: 0.3, height: 0.1 }),
+        }]}
+        getPdfDocumentInfo={getPdfDocumentInfo}
+        getPdfPageBundle={getPdfPageBundle}
+        getPdfPageText={getPdfPageText}
+        ocrPdfPage={ocrPdfPage}
+        onUpdateTextBoxAnnotation={onUpdateTextBoxAnnotation}
+        page={0}
+        view={pdfView}
+        zoom={100}
+      />,
+    );
+
+    const textarea = await screen.findByRole("textbox", { name: "PDF text box annotation" });
+    const box = container.querySelector(".pdf-text-box-annotation") as HTMLElement;
+
+    fireEvent.doubleClick(box);
+    fireEvent.change(textarea, { target: { value: "Unsaved note" } });
+    fireEvent.blur(textarea);
+
+    await waitFor(() => expect(onUpdateTextBoxAnnotation).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(textarea).toHaveValue("Persisted note"));
+    expect(textarea).toHaveAttribute("readonly");
+  });
+
   it("clamps and rolls back persisted text box annotation geometry when persistence fails", async () => {
     const getPdfPageBundle = vi.fn().mockResolvedValue(makeBundle("Hello world"));
     const getPdfDocumentInfo = vi.fn().mockResolvedValue(makeDocumentInfo());

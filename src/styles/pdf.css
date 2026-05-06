@@ -320,8 +320,16 @@
   cursor: default;
 }
 
+.pdf-text-box-annotation-editing textarea {
+  cursor: text;
+}
+
 .pdf-text-box-annotation-persisted {
   cursor: move;
+}
+
+.pdf-text-box-annotation-editing {
+  cursor: text;
 }
 
 .pdf-text-box-annotation-selected {
