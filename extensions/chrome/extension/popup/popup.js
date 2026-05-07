@@ -16,15 +16,20 @@ const emptyState = document.querySelector("#emptyState");
 const collectionCount = document.querySelector("#collectionCount");
 const retryButton = document.querySelector("#retryButton");
 
+const CONNECTOR_RETRY_DELAY_MS = 2000;
+
 const state = {
   config: null,
   collections: [],
+  collectionsLoaded: false,
   activeTabId: null,
   pageUrl: "",
   candidates: [],
   selectedCandidate: null,
   lastImportCandidate: null,
   busy: false,
+  connectorTimer: null,
+  connectorCycleRunning: false,
   importModeLabel: "Download then import"
 };
 
@@ -50,6 +55,16 @@ function setBusy(isBusy) {
   for (const button of document.querySelectorAll("button")) {
     button.disabled = isBusy;
   }
+  updateActionAvailability();
+}
+
+function updateActionAvailability() {
+  const hasCollection = state.collectionsLoaded && Number(collectionSelect.value) > 0;
+  collectionSelect.disabled = state.busy || !state.collectionsLoaded || state.collections.length === 0;
+  for (const button of candidateList.querySelectorAll("button")) {
+    button.disabled = state.busy || !hasCollection;
+    button.title = hasCollection ? "" : "Paper Reader collections are still loading.";
+  }
 }
 
 async function sendMessage(message) {
@@ -67,10 +82,9 @@ async function initialize() {
   const config = await sendMessage({ type: "paper-reader:get-state" });
   state.config = config;
   state.importModeLabel = await detectImportModeLabel();
+  renderCollectionPlaceholder("Waiting for Paper Reader");
 
-  await discoverConnector();
-  await loadCollections();
-  await scanPage();
+  scheduleConnectorRetry(0);
 }
 
 async function detectImportModeLabel() {
@@ -112,8 +126,19 @@ async function loadCollections() {
   const response = await sendMessage({ type: "paper-reader:load-collections" });
   state.collections = response.collections;
   state.config = response.config;
+  state.collectionsLoaded = true;
   renderCollections();
   setConnection("Paper Reader connected", `Loaded ${response.collections.length} collections.`, "success");
+}
+
+function renderCollectionPlaceholder(label) {
+  collectionSelect.innerHTML = "";
+  const option = document.createElement("option");
+  option.textContent = label;
+  option.value = "";
+  collectionSelect.append(option);
+  collectionCount.textContent = "0";
+  updateActionAvailability();
 }
 
 function renderCollections() {
@@ -125,6 +150,7 @@ function renderCollections() {
     option.textContent = "No collections found";
     option.value = "";
     collectionSelect.append(option);
+    updateActionAvailability();
     return;
   }
 
@@ -135,10 +161,44 @@ function renderCollections() {
     if (row.id === state.config?.lastCollectionId) option.selected = true;
     collectionSelect.append(option);
   }
+  updateActionAvailability();
+}
+
+function scheduleConnectorRetry(delayMs = CONNECTOR_RETRY_DELAY_MS) {
+  if (state.connectorTimer) clearTimeout(state.connectorTimer);
+  state.connectorTimer = setTimeout(() => {
+    state.connectorTimer = null;
+    void runConnectorCycle();
+  }, delayMs);
+}
+
+async function runConnectorCycle() {
+  if (state.connectorCycleRunning) return;
+
+  state.connectorCycleRunning = true;
+  try {
+    setResult("Waiting for Paper Reader", "Start Paper Reader; collections will load automatically.", "error");
+    await discoverConnector();
+    await loadCollections();
+    await scanPage();
+  } catch (error) {
+    state.collectionsLoaded = false;
+    state.collections = [];
+    renderCollectionPlaceholder("Waiting for Paper Reader");
+    setConnection("Waiting for Paper Reader", error.message, "error");
+    setResult("Waiting for Paper Reader", "Start Paper Reader; this popup will reconnect automatically.", "error");
+    scheduleConnectorRetry();
+  } finally {
+    state.connectorCycleRunning = false;
+  }
 }
 
 async function scanPage() {
   if (!state.activeTabId) return;
+  if (!state.collectionsLoaded) {
+    setResult("Waiting for Paper Reader", "Collections will load automatically when Paper Reader is reachable.", "error");
+    return;
+  }
   setBusy(true);
   setResult("Scanning page", "Looking for PDFs, documents, and readable page content.");
   try {
@@ -203,6 +263,7 @@ function renderCandidates() {
     button.className = "primary-button";
     button.type = "button";
     button.textContent = "Import";
+    button.disabled = state.busy || !state.collectionsLoaded || Number(collectionSelect.value) <= 0;
     button.addEventListener("click", () => {
       state.selectedCandidate = candidate;
       renderCandidates();
@@ -212,6 +273,7 @@ function renderCandidates() {
     item.append(meta, button);
     candidateList.append(item);
   }
+  updateActionAvailability();
 }
 
 async function importCandidate(candidate) {
@@ -254,7 +316,7 @@ async function importCandidate(candidate) {
 }
 
 document.querySelector("#refreshButton").addEventListener("click", () => {
-  void loadCollections().then(scanPage).catch((error) => setResult("Refresh failed", error.message, "error"));
+  scheduleConnectorRetry(0);
 });
 document.querySelector("#scanButton").addEventListener("click", () => {
   void scanPage();
@@ -264,10 +326,11 @@ document.querySelector("#rescanButton").addEventListener("click", () => {
 });
 retryButton.addEventListener("click", () => {
   if (state.lastImportCandidate) void importCandidate(state.lastImportCandidate);
-  else void scanPage();
+  else scheduleConnectorRetry(0);
 });
 collectionSelect.addEventListener("change", () => {
   state.config = { ...(state.config || {}), lastCollectionId: Number(collectionSelect.value) || null };
+  updateActionAvailability();
   void saveConfig({ quiet: true }).catch((error) => setConnection("Save failed", error.message, "error"));
 });
 

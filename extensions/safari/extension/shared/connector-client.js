@@ -1,6 +1,5 @@
 import { DEFAULT_CONNECTOR_URL } from "./constants.js";
 
-const CONNECTOR_CANDIDATES = [DEFAULT_CONNECTOR_URL, "http://localhost:17654"];
 const REQUEST_TIMEOUT_MS = 8000;
 
 function normalizeBaseUrl(baseUrl = DEFAULT_CONNECTOR_URL) {
@@ -73,27 +72,15 @@ export async function checkHealth(baseUrl) {
 }
 
 export async function discoverConnectorUrl(preferredUrl = DEFAULT_CONNECTOR_URL) {
-  const candidates = [preferredUrl, ...CONNECTOR_CANDIDATES]
-    .filter(Boolean)
-    .map(normalizeBaseUrl)
-    .filter((value, index, rows) => rows.indexOf(value) === index);
-
-  let lastError = null;
-  for (const candidate of candidates) {
-    try {
-      const health = await checkHealth(candidate);
-      if (health?.ok) {
-        if (!health.auth_modes?.includes("browser_extension_origin")) {
-          throw new Error("Paper Reader needs an update before this extension can connect without a token.");
-        }
-        return { connectorUrl: candidate, health };
-      }
-      lastError = new Error("Connector health check returned an unexpected response.");
-    } catch (error) {
-      lastError = error;
+  const connectorUrl = normalizeBaseUrl(preferredUrl || DEFAULT_CONNECTOR_URL);
+  const health = await checkHealth(connectorUrl);
+  if (health?.ok) {
+    if (!health.auth_modes?.includes("browser_extension_origin")) {
+      throw new Error("Paper Reader needs an update before this extension can connect without a token.");
     }
+    return { connectorUrl, health };
   }
-  throw lastError || new Error("Paper Reader desktop connector is unreachable. Start or update Paper Reader.");
+  throw new Error("Connector health check returned an unexpected response.");
 }
 
 export async function fetchCollections(baseUrl = DEFAULT_CONNECTOR_URL, token) {

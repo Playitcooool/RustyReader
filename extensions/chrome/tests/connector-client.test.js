@@ -95,13 +95,10 @@ test("importFile calls import-file endpoint with uploaded bytes", async () => {
   assert.equal(body.content_base64, "JVBERi0=");
 });
 
-test("discoverConnectorUrl falls back to localhost candidate", async () => {
+test("discoverConnectorUrl checks only the default connector URL", async () => {
   const calls = [];
   global.fetch = async (url) => {
     calls.push(url);
-    if (url.startsWith("http://127.0.0.1")) {
-      throw new TypeError("unreachable");
-    }
     return new Response(JSON.stringify({
       ok: true,
       app_name: "Paper Reader",
@@ -112,11 +109,23 @@ test("discoverConnectorUrl falls back to localhost candidate", async () => {
 
   const result = await discoverConnectorUrl("http://127.0.0.1:17654");
 
-  assert.equal(result.connectorUrl, "http://localhost:17654");
-  assert.deepEqual(calls, [
-    "http://127.0.0.1:17654/v1/health",
-    "http://localhost:17654/v1/health"
-  ]);
+  assert.equal(result.connectorUrl, "http://127.0.0.1:17654");
+  assert.deepEqual(calls, ["http://127.0.0.1:17654/v1/health"]);
+});
+
+test("discoverConnectorUrl does not fall back to localhost", async () => {
+  const calls = [];
+  global.fetch = async (url) => {
+    calls.push(url);
+    throw new TypeError("unreachable");
+  };
+
+  await assert.rejects(
+    () => discoverConnectorUrl("http://127.0.0.1:17654"),
+    /unreachable/
+  );
+
+  assert.deepEqual(calls, ["http://127.0.0.1:17654/v1/health"]);
 });
 
 test("unsupported file errors use an actionable message", async () => {

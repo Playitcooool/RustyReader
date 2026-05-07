@@ -59,13 +59,38 @@ test("popup discovers connector and requests import capabilities", () => {
   assert.match(source, /Download then import/);
 });
 
-test("popup discovers default connector before loading collections", () => {
+test("popup starts connector polling after initial setup", () => {
   const source = readFileSync(join(testDir, "../extension/popup/popup.js"), "utf8");
   const initialize = extractFunctionSource(source, "initialize");
-  const discoverConnector = extractFunctionSource(source, "discoverConnector");
 
-  assert.match(initialize, /await discoverConnector\(\);\s*await loadCollections\(\);/);
+  assert.match(initialize, /scheduleConnectorRetry\(0\)/);
+  assert.doesNotMatch(initialize, /await discoverConnector\(\);\s*await loadCollections\(\);/);
+  assert.match(source, /CONNECTOR_RETRY_DELAY_MS = 2000/);
+  assert.match(source, /function scheduleConnectorRetry/);
+  assert.match(source, /async function runConnectorCycle/);
+});
+
+test("popup retries connector failures and scans after collections load", () => {
+  const source = readFileSync(join(testDir, "../extension/popup/popup.js"), "utf8");
+  const discoverConnector = extractFunctionSource(source, "discoverConnector");
+  const runConnectorCycle = extractFunctionSource(source, "runConnectorCycle");
+  const scanPage = extractFunctionSource(source, "scanPage");
+
   assert.match(discoverConnector, /discoverConnectorUrl\(\)/);
+  assert.match(runConnectorCycle, /await discoverConnector\(\);\s*await loadCollections\(\);\s*await scanPage\(\);/);
+  assert.match(runConnectorCycle, /scheduleConnectorRetry\(\)/);
+  assert.match(runConnectorCycle, /Waiting for Paper Reader/);
+  assert.match(scanPage, /!state\.collectionsLoaded/);
   assert.doesNotMatch(discoverConnector, /saveConfig/);
   assert.doesNotMatch(source, /connectorUrlInput/);
+});
+
+test("popup disables imports until collections are loaded", () => {
+  const source = readFileSync(join(testDir, "../extension/popup/popup.js"), "utf8");
+  const updateActionAvailability = extractFunctionSource(source, "updateActionAvailability");
+  const renderCandidates = extractFunctionSource(source, "renderCandidates");
+
+  assert.match(updateActionAvailability, /state\.collectionsLoaded && Number\(collectionSelect\.value\) > 0/);
+  assert.match(updateActionAvailability, /button\.disabled = state\.busy \|\| !hasCollection/);
+  assert.match(renderCandidates, /button\.disabled = state\.busy \|\| !state\.collectionsLoaded/);
 });
