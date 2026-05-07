@@ -13,6 +13,7 @@
     "verify": "bash scripts/verify.sh",
     "extension:test": "npm --prefix extensions/chrome test",
     "extension:smoke": "npm --prefix extensions/chrome run smoke",
+    "extension:build": "node scripts/build-browser-extensions.js",
     "extension:package": "npm --prefix extensions/chrome run package",
     "extension:safari:build": "npm --prefix extensions/safari run build",
     "extension:safari:package": "npm --prefix extensions/safari run package",

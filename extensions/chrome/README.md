@@ -21,10 +21,18 @@ Chrome MV3 extension for saving PDFs and readable web pages from the current tab
 
 ## Load the extension
 
+For the clean generated build, run from the repo root:
+
+```bash
+rtk npm run extension:package
+```
+
 1. Open `chrome://extensions`.
 2. Enable Developer mode.
 3. Click `Load unpacked`.
-4. Select `/Volumes/Samsung/Projects/paper-reader/extensions/chrome`.
+4. Select `/Volumes/Samsung/Projects/paper-reader/extensions/chrome/dist/paper-reader-connector`.
+
+The same command also writes `/Volumes/Samsung/Projects/paper-reader/extensions/chrome/dist/paper-reader-connector-v0.1.0.zip`.
 
 ## Configure it
 

@@ -8,5 +8,11 @@ Safari does not use Chrome's `downloads` API. File imports fetch the selected PD
 
 - `npm run extension:safari:build` copies the shared Chrome extension runtime into `extensions/safari/build/extension` and applies the Safari manifest.
 - `npm run extension:safari:package` runs Apple's `safari-web-extension-packager` and writes the generated Xcode project under `extensions/safari/build/PaperReaderSafari`.
+- `npm run extension:build` from the repo root builds both Chrome outputs and the Safari project in one command.
+
+Outputs:
+
+- `extensions/safari/build/extension` is the Safari Web Extension input directory.
+- `extensions/safari/build/PaperReaderSafari` is the generated Safari Extension App Xcode project to run and enable in Safari settings.
 
 Packaging requires full Xcode to be installed and selected with `xcode-select`. Command Line Tools alone do not include `xcrun safari-web-extension-packager`.
