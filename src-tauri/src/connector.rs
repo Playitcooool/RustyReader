@@ -10,6 +10,7 @@ use std::{
 use app_core::service::{ImportBatchResult, ImportMode, LibraryService};
 use base64::Engine;
 use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Emitter};
 
 pub(crate) const CONNECTOR_PORT: u16 = 17654;
 pub(crate) const CONNECTOR_URL: &str = "http://127.0.0.1:17654";
@@ -65,6 +66,17 @@ struct ImportFileRequest {
     content_type: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct LibraryChangedEvent {
+    source: String,
+    collection_id: i64,
+    imported_count: usize,
+    duplicate_count: usize,
+    failed_count: usize,
+    imported_item_ids: Vec<i64>,
+    duplicate_item_ids: Vec<i64>,
+}
+
 pub(crate) fn new_status() -> SharedConnectorStatus {
     Arc::new(Mutex::new(ConnectorStatus::default()))
 }
@@ -87,7 +99,11 @@ pub(crate) fn runtime_settings(
     })
 }
 
-pub(crate) fn start(service: Arc<LibraryService>, status: SharedConnectorStatus) {
+pub(crate) fn start(
+    service: Arc<LibraryService>,
+    status: SharedConnectorStatus,
+    app_handle: AppHandle,
+) {
     thread::spawn(move || {
         let listener = match TcpListener::bind(("127.0.0.1", CONNECTOR_PORT)) {
             Ok(listener) => listener,
@@ -102,8 +118,9 @@ pub(crate) fn start(service: Arc<LibraryService>, status: SharedConnectorStatus)
             match stream {
                 Ok(stream) => {
                     let service = service.clone();
+                    let app_handle = app_handle.clone();
                     thread::spawn(move || {
-                        if let Err(error) = handle_connection(stream, service) {
+                        if let Err(error) = handle_connection(stream, service, app_handle) {
                             eprintln!("connector request failed: {error}");
                         }
                     });
@@ -123,6 +140,7 @@ fn set_error(status: &SharedConnectorStatus, error: String) {
 fn handle_connection(
     mut stream: TcpStream,
     service: Arc<LibraryService>,
+    app_handle: AppHandle,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut reader = BufReader::new(stream.try_clone()?);
     let mut request_line = String::new();
@@ -153,7 +171,7 @@ fn handle_connection(
         reader.read_exact(&mut body)?;
     }
 
-    let response = route_request(method, path, &headers, &body, &service);
+    let response = route_request_with_app(method, path, &headers, &body, &service, Some(&app_handle));
     stream.write_all(&response.into_bytes())?;
     Ok(())
 }
@@ -164,6 +182,17 @@ fn route_request(
     headers: &HashMap<String, String>,
     body: &[u8],
     service: &LibraryService,
+) -> HttpResponse {
+    route_request_with_app(method, path, headers, body, service, None)
+}
+
+fn route_request_with_app(
+    method: &str,
+    path: &str,
+    headers: &HashMap<String, String>,
+    body: &[u8],
+    service: &LibraryService,
+    app_handle: Option<&AppHandle>,
 ) -> HttpResponse {
     let cors_origin = cors_origin(headers);
 
@@ -185,9 +214,9 @@ fn route_request(
             Ok(collections) => json_response(200, collections),
             Err(error) => json_response(500, error_body(error.to_string())),
         },
-        ("POST", "/v1/import-path") => import_path(body, service),
-        ("POST", "/v1/import-file") => import_file(body, service),
-        ("POST", "/v1/import-markdown") => import_markdown(body, service),
+        ("POST", "/v1/import-path") => import_path(body, service, app_handle),
+        ("POST", "/v1/import-file") => import_file(body, service, app_handle),
+        ("POST", "/v1/import-markdown") => import_markdown(body, service, app_handle),
         _ => json_response(404, error_body("not found")),
     };
     response.with_cors_origin(cors_origin)
@@ -238,7 +267,7 @@ fn cors_origin(headers: &HashMap<String, String>) -> Option<String> {
     }
 }
 
-fn import_path(body: &[u8], service: &LibraryService) -> HttpResponse {
+fn import_path(body: &[u8], service: &LibraryService, app_handle: Option<&AppHandle>) -> HttpResponse {
     let input = match serde_json::from_slice::<ImportPathRequest>(body) {
         Ok(input) => input,
         Err(error) => return json_response(400, error_body(error.to_string())),
@@ -254,12 +283,19 @@ fn import_path(body: &[u8], service: &LibraryService) -> HttpResponse {
     }
 
     match service.import_files(input.collection_id, &[path], ImportMode::ManagedCopy) {
-        Ok(result) => json_response::<ImportBatchResult>(200, result),
+        Ok(result) => {
+            emit_library_changed(app_handle, input.collection_id, &result);
+            json_response::<ImportBatchResult>(200, result)
+        }
         Err(error) => json_response(500, error_body(error.to_string())),
     }
 }
 
-fn import_markdown(body: &[u8], service: &LibraryService) -> HttpResponse {
+fn import_markdown(
+    body: &[u8],
+    service: &LibraryService,
+    app_handle: Option<&AppHandle>,
+) -> HttpResponse {
     let input = match serde_json::from_slice::<ImportMarkdownRequest>(body) {
         Ok(input) => input,
         Err(error) => return json_response(400, error_body(error.to_string())),
@@ -276,12 +312,15 @@ fn import_markdown(body: &[u8], service: &LibraryService) -> HttpResponse {
         &input.markdown,
         input.source_url.as_deref(),
     ) {
-        Ok(result) => json_response::<ImportBatchResult>(200, result),
+        Ok(result) => {
+            emit_library_changed(app_handle, input.collection_id, &result);
+            json_response::<ImportBatchResult>(200, result)
+        }
         Err(error) => json_response(400, error_body(error.to_string())),
     }
 }
 
-fn import_file(body: &[u8], service: &LibraryService) -> HttpResponse {
+fn import_file(body: &[u8], service: &LibraryService, app_handle: Option<&AppHandle>) -> HttpResponse {
     let input = match serde_json::from_slice::<ImportFileRequest>(body) {
         Ok(input) => input,
         Err(error) => return json_response(400, error_body(error.to_string())),
@@ -314,9 +353,41 @@ fn import_file(body: &[u8], service: &LibraryService) -> HttpResponse {
     let result_path = input.source_url.as_deref().unwrap_or(filename);
 
     match service.import_file_bytes(input.collection_id, filename, bytes, result_path) {
-        Ok(result) => json_response::<ImportBatchResult>(200, result),
+        Ok(result) => {
+            emit_library_changed(app_handle, input.collection_id, &result);
+            json_response::<ImportBatchResult>(200, result)
+        }
         Err(error) => json_response(400, error_body(error.to_string())),
     }
+}
+
+fn emit_library_changed(
+    app_handle: Option<&AppHandle>,
+    collection_id: i64,
+    result: &ImportBatchResult,
+) {
+    let Some(app_handle) = app_handle else {
+        return;
+    };
+    if result.imported.is_empty() && result.duplicates.is_empty() {
+        return;
+    }
+    let _ = app_handle.emit(
+        "library:changed",
+        LibraryChangedEvent {
+            source: "connector".into(),
+            collection_id,
+            imported_count: result.imported.len(),
+            duplicate_count: result.duplicates.len(),
+            failed_count: result.failed.len(),
+            imported_item_ids: result.imported.iter().map(|item| item.id).collect(),
+            duplicate_item_ids: result
+                .duplicates
+                .iter()
+                .filter_map(|duplicate| duplicate.item.as_ref().map(|item| item.id))
+                .collect(),
+        },
+    );
 }
 
 #[derive(Debug)]

@@ -558,7 +558,11 @@ fn main() {
                     .map_err(|error| tauri::Error::Anyhow(error.into()))?,
             );
             let connector_status = connector::new_status();
-            connector::start(library_service.clone(), connector_status.clone());
+            connector::start(
+                library_service.clone(),
+                connector_status.clone(),
+                app.handle().clone(),
+            );
             app.manage(AppState {
                 library_root,
                 library_service,

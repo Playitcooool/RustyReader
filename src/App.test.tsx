@@ -186,7 +186,7 @@ vi.mock("./components/readers/PdfContinuousReader", () => {
 });
 
 import App from "./App";
-import { failNextFakeAiStream, fakeApi, replaceFakeApiState, resetFakeApi } from "./test/fakeApi";
+import { emitFakeLibraryChanged, failNextFakeAiStream, fakeApi, replaceFakeApiState, resetFakeApi } from "./test/fakeApi";
 
 beforeEach(() => {
   resetFakeApi();
@@ -1467,6 +1467,30 @@ describe("App reading workspace", () => {
         paths: ["/Users/test/absolute.pdf"],
       });
     });
+  });
+
+  it("refreshes the library when the browser connector imports a document", async () => {
+    render(<App api={fakeApi} />);
+
+    expect(await screen.findByRole("tree", { name: "Library resources" })).toBeInTheDocument();
+    expect(screen.queryByRole("treeitem", { name: /External Paper/i })).not.toBeInTheDocument();
+
+    const result = await fakeApi.importFiles({
+      collection_id: 2,
+      paths: ["/Users/test/external-paper.pdf"],
+    });
+    emitFakeLibraryChanged({
+      source: "connector",
+      collection_id: 2,
+      imported_count: result.imported.length,
+      duplicate_count: result.duplicates.length,
+      failed_count: result.failed.length,
+      imported_item_ids: result.imported.map((item) => item.id),
+      duplicate_item_ids: [],
+    });
+
+    expect(await screen.findByRole("treeitem", { name: /External Paper/i })).toBeInTheDocument();
+    expect(screen.getByText("Library updated from browser extension.")).toBeInTheDocument();
   });
 
   it("filters the resource tree from the sidebar search", async () => {

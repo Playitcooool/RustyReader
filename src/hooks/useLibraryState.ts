@@ -121,6 +121,36 @@ export function useLibraryState({
   }, [loadLibrary, refreshCollections]);
 
   useEffect(() => {
+    let disposed = false;
+    let dispose: null | (() => void) = null;
+
+    void (async () => {
+      const runtimeApi = await getApi();
+      dispose = await runtimeApi.listenLibraryChanged((event) => {
+        if (disposed) return;
+        void (async () => {
+          const loadedItems = await loadLibrary();
+          const duplicateItem = loadedItems.find((item) => event.duplicate_item_ids?.includes(item.id));
+          const importedItem = loadedItems.find((item) => event.imported_item_ids?.includes(item.id));
+          const preferredCollectionId = importedItem?.collection_id ?? duplicateItem?.collection_id ?? event.collection_id ?? selectedCollectionId;
+          await refreshCollections(preferredCollectionId);
+          if ((event.imported_count ?? 0) > 0) {
+            setStatusMessage("Library updated from browser extension.");
+          } else if ((event.duplicate_count ?? 0) > 0) {
+            setStatusMessage("Browser extension found an item that is already in the library.");
+          }
+        })();
+      });
+      if (disposed) dispose();
+    })();
+
+    return () => {
+      disposed = true;
+      dispose?.();
+    };
+  }, [getApi, loadLibrary, refreshCollections, selectedCollectionId, setStatusMessage]);
+
+  useEffect(() => {
     if (selectedCollectionId === null) {
       setTags([]);
       setSelectedTagId(null);

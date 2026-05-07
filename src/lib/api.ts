@@ -1,4 +1,4 @@
-import type { AITaskStreamEvent, AppApi } from "./contracts";
+import type { AITaskStreamEvent, AppApi, LibraryChangedEvent } from "./contracts";
 
 export const isTauriRuntime = () =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -218,6 +218,14 @@ export async function createTauriApi(): Promise<AppApi> {
     runCollectionTask: (input) => invoke("run_collection_task", { input }),
     listenAiTaskStream: async (handler) => {
       const unlisten = await listen<AITaskStreamEvent>("ai-task-stream", (event) => {
+        handler(event.payload);
+      });
+      return () => {
+        void unlisten();
+      };
+    },
+    listenLibraryChanged: async (handler) => {
+      const unlisten = await listen<LibraryChangedEvent>("library:changed", (event) => {
         handler(event.payload);
       });
       return () => {

@@ -14,6 +14,7 @@ import type {
   CitationFormat,
   Collection,
   ImportBatchResult,
+  LibraryChangedEvent,
   LibraryItem,
   OcrPageResult,
   OcrPdfPageInput,
@@ -251,11 +252,18 @@ const initialState = (): MockState => ({
 });
 
 const aiStreamListeners = new Set<(event: AITaskStreamEvent) => void>();
+const libraryChangedListeners = new Set<(event: LibraryChangedEvent) => void>();
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const emitAiTaskStream = (event: AITaskStreamEvent) => {
   for (const listener of aiStreamListeners) {
+    listener(event);
+  }
+};
+
+export const emitFakeLibraryChanged = (event: LibraryChangedEvent) => {
+  for (const listener of libraryChangedListeners) {
     listener(event);
   }
 };
@@ -584,6 +592,7 @@ export function resetFakeApi() {
   state = initialState();
   exportWrites.length = 0;
   aiStreamListeners.clear();
+  libraryChangedListeners.clear();
 }
 
 export function replaceFakeApiState(nextState: Partial<MockState>) {
@@ -592,6 +601,7 @@ export function replaceFakeApiState(nextState: Partial<MockState>) {
     ...nextState,
   };
   exportWrites.length = 0;
+  libraryChangedListeners.clear();
 }
 
 export function failNextFakeAiStream(message = "Mock AI stream failed.") {
@@ -1181,6 +1191,13 @@ export const fakeApi: AppApi = {
     aiStreamListeners.add(handler);
     return () => {
       aiStreamListeners.delete(handler);
+    };
+  },
+
+  async listenLibraryChanged(handler) {
+    libraryChangedListeners.add(handler);
+    return () => {
+      libraryChangedListeners.delete(handler);
     };
   },
 

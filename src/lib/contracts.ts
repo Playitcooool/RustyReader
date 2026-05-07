@@ -310,6 +310,16 @@ export type PdfEngineSearchInput = {
   max_matches?: number;
 };
 
+export type LibraryChangedEvent = {
+  source: "connector" | string;
+  collection_id?: number | null;
+  imported_count?: number;
+  duplicate_count?: number;
+  failed_count?: number;
+  imported_item_ids?: number[];
+  duplicate_item_ids?: number[];
+};
+
 export type AppApi = {
   listCollections: () => Promise<Collection[]>;
   createCollection: (input: { name: string; parent_id?: number | null }) => Promise<Collection>;
@@ -391,6 +401,7 @@ export type AppApi = {
   }) => Promise<void>;
   listTaskRuns: (input: { item_id?: number; collection_id?: number }) => Promise<AITask[]>;
   listenAiTaskStream: (handler: (event: AITaskStreamEvent) => void) => Promise<() => void>;
+  listenLibraryChanged: (handler: (event: LibraryChangedEvent) => void) => Promise<() => void>;
   getArtifact: (input: {
     item_id?: number;
     collection_id?: number;
