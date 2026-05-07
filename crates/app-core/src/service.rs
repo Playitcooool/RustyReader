@@ -1070,6 +1070,114 @@ impl LibraryService {
         })
     }
 
+    pub fn import_markdown_item(
+        &self,
+        collection_id: i64,
+        title: &str,
+        markdown: &str,
+        source_url: Option<&str>,
+    ) -> Result<ImportBatchResult> {
+        if !self.collection_exists(collection_id)? {
+            return Err(anyhow!("collection does not exist"));
+        }
+        let title = title.trim();
+        if title.is_empty() {
+            return Err(anyhow!("title must not be empty"));
+        }
+        if markdown.trim().is_empty() {
+            return Err(anyhow!("markdown must not be empty"));
+        }
+
+        let path_label = source_url.unwrap_or(title).to_string();
+        let source_bytes = markdown.as_bytes();
+        let fingerprint = digest_bytes(source_bytes);
+        let mut conn = self.connect()?;
+        let existing = conn
+            .query_row(
+                "SELECT attachments.item_id, attachments.id, items.title FROM attachments
+                 JOIN items ON items.id = attachments.item_id
+                 WHERE fingerprint = ?1 LIMIT 1",
+                params![fingerprint],
+                |row| {
+                    Ok(ImportedItem {
+                        id: row.get(0)?,
+                        primary_attachment_id: row.get(1)?,
+                        title: row.get(2)?,
+                    })
+                },
+            )
+            .optional()?;
+
+        if let Some(item) = existing {
+            let result = ImportPathResult {
+                path: path_label,
+                status: "duplicate".into(),
+                message: format!("Duplicate of existing library item {}.", item.title),
+                item: Some(item),
+            };
+            return Ok(ImportBatchResult {
+                imported: vec![],
+                duplicates: vec![result.clone()],
+                failed: vec![],
+                results: vec![result],
+            });
+        }
+
+        let storage_path = self.files_dir.join(format!("{fingerprint}.md"));
+        fs::write(&storage_path, source_bytes)?;
+        let plain_text = markdown_to_plain_text(markdown);
+        let normalized_html = markdown_to_safe_html(title, markdown);
+        let source = source_url
+            .and_then(source_label_from_url)
+            .unwrap_or_else(|| source_url.unwrap_or("Imported Web").to_string());
+
+        let tx = conn.transaction()?;
+        tx.execute(
+            "INSERT INTO items(collection_id, title, attachment_status, authors, publication_year, source, doi)
+             VALUES (?1, ?2, 'ready', 'Imported Web', NULL, ?3, NULL)",
+            params![collection_id, title, source],
+        )?;
+        let item_id = tx.last_insert_rowid();
+        tx.execute(
+            "INSERT INTO attachments(item_id, path, import_mode, status, fingerprint, is_primary)
+             VALUES (?1, ?2, 'managed_copy', 'ready', ?3, 1)",
+            params![
+                item_id,
+                storage_path.to_string_lossy().to_string(),
+                fingerprint
+            ],
+        )?;
+        let attachment_id = tx.last_insert_rowid();
+        tx.execute(
+            "INSERT INTO extracted_content(item_id, plain_text, normalized_html, page_count, content_status, content_notice, extractor_version)
+             VALUES (?1, ?2, ?3, NULL, 'ready', NULL, ?4)",
+            params![item_id, plain_text, normalized_html, EXTRACTOR_VERSION],
+        )?;
+        tx.execute(
+            "INSERT INTO search_index(item_id, title, plain_text) VALUES (?1, ?2, ?3)",
+            params![item_id, title, plain_text],
+        )?;
+        tx.commit()?;
+
+        let item = ImportedItem {
+            id: item_id,
+            title: title.to_string(),
+            primary_attachment_id: attachment_id,
+        };
+        let result = ImportPathResult {
+            path: path_label,
+            status: "imported".into(),
+            message: "Imported Markdown successfully.".into(),
+            item: Some(item.clone()),
+        };
+        Ok(ImportBatchResult {
+            imported: vec![item],
+            duplicates: vec![],
+            failed: vec![],
+            results: vec![result],
+        })
+    }
+
     pub fn import_citations(
         &self,
         collection_id: i64,
@@ -3728,9 +3836,167 @@ fn infer_attachment_format(path: &str) -> &'static str {
         "docx"
     } else if lower.ends_with(".epub") {
         "epub"
+    } else if lower.ends_with(".md") || lower.ends_with(".markdown") {
+        "md"
     } else {
         "unknown"
     }
+}
+
+fn source_label_from_url(value: &str) -> Option<String> {
+    let without_scheme = value
+        .split_once("://")
+        .map(|(_, rest)| rest)
+        .unwrap_or(value);
+    let host = without_scheme.split('/').next()?.trim();
+    if host.is_empty() {
+        None
+    } else {
+        Some(host.to_string())
+    }
+}
+
+fn markdown_to_plain_text(markdown: &str) -> String {
+    let mut text = String::new();
+    let mut in_fence = false;
+    for line in markdown.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("```") {
+            in_fence = !in_fence;
+            continue;
+        }
+        let mut line = trimmed
+            .trim_start_matches('#')
+            .trim_start_matches('>')
+            .trim_start_matches("- ")
+            .trim_start_matches("* ")
+            .to_string();
+        if !in_fence {
+            line = Regex::new(r"!\[([^\]]*)\]\([^)]+\)")
+                .unwrap()
+                .replace_all(&line, "$1")
+                .to_string();
+            line = Regex::new(r"\[([^\]]+)\]\([^)]+\)")
+                .unwrap()
+                .replace_all(&line, "$1")
+                .to_string();
+            line = line
+                .replace("**", "")
+                .replace("__", "")
+                .replace('`', "")
+                .replace('*', "");
+        }
+        if !line.trim().is_empty() {
+            text.push_str(line.trim());
+            text.push('\n');
+        }
+    }
+    text.trim().to_string()
+}
+
+fn markdown_to_safe_html(title: &str, markdown: &str) -> String {
+    let mut html = format!("<article><h1>{}</h1>", encode_safe(title));
+    let mut paragraph = Vec::new();
+    let mut list_items = Vec::new();
+    let mut in_code = false;
+    let mut code = String::new();
+
+    let flush_paragraph = |html: &mut String, paragraph: &mut Vec<String>| {
+        if !paragraph.is_empty() {
+            html.push_str("<p>");
+            html.push_str(&render_inline_markdown(&paragraph.join(" ")));
+            html.push_str("</p>");
+            paragraph.clear();
+        }
+    };
+    let flush_list = |html: &mut String, list_items: &mut Vec<String>| {
+        if !list_items.is_empty() {
+            html.push_str("<ul>");
+            for item in list_items.drain(..) {
+                html.push_str("<li>");
+                html.push_str(&render_inline_markdown(&item));
+                html.push_str("</li>");
+            }
+            html.push_str("</ul>");
+        }
+    };
+
+    for line in markdown.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("```") {
+            if in_code {
+                html.push_str("<pre><code>");
+                html.push_str(&encode_safe(&code));
+                html.push_str("</code></pre>");
+                code.clear();
+                in_code = false;
+            } else {
+                flush_paragraph(&mut html, &mut paragraph);
+                flush_list(&mut html, &mut list_items);
+                in_code = true;
+            }
+            continue;
+        }
+        if in_code {
+            code.push_str(line);
+            code.push('\n');
+            continue;
+        }
+        if trimmed.is_empty() {
+            flush_paragraph(&mut html, &mut paragraph);
+            flush_list(&mut html, &mut list_items);
+        } else if trimmed.starts_with('#') {
+            flush_paragraph(&mut html, &mut paragraph);
+            flush_list(&mut html, &mut list_items);
+            let level = trimmed
+                .chars()
+                .take_while(|ch| *ch == '#')
+                .count()
+                .clamp(1, 3);
+            let heading = trimmed.trim_start_matches('#').trim();
+            html.push_str(&format!("<h{level}>{}</h{level}>", encode_safe(heading)));
+        } else if let Some(item) = trimmed
+            .strip_prefix("- ")
+            .or_else(|| trimmed.strip_prefix("* "))
+        {
+            flush_paragraph(&mut html, &mut paragraph);
+            list_items.push(item.to_string());
+        } else if let Some(quote) = trimmed.strip_prefix('>') {
+            flush_paragraph(&mut html, &mut paragraph);
+            flush_list(&mut html, &mut list_items);
+            html.push_str("<blockquote>");
+            html.push_str(&render_inline_markdown(quote.trim()));
+            html.push_str("</blockquote>");
+        } else {
+            flush_list(&mut html, &mut list_items);
+            paragraph.push(trimmed.to_string());
+        }
+    }
+    flush_paragraph(&mut html, &mut paragraph);
+    flush_list(&mut html, &mut list_items);
+    if in_code {
+        html.push_str("<pre><code>");
+        html.push_str(&encode_safe(&code));
+        html.push_str("</code></pre>");
+    }
+    html.push_str("</article>");
+    html
+}
+
+fn render_inline_markdown(value: &str) -> String {
+    let mut rendered = encode_safe(value).to_string();
+    rendered = Regex::new(r"!\[([^\]]*)\]\([^)]+\)")
+        .unwrap()
+        .replace_all(&rendered, "$1")
+        .to_string();
+    rendered = Regex::new(r"\[([^\]]+)\]\([^)]+\)")
+        .unwrap()
+        .replace_all(&rendered, "$1")
+        .to_string();
+    rendered
+        .replace("**", "")
+        .replace("__", "")
+        .replace('`', "")
 }
 
 fn ensure_column(conn: &Connection, table: &str, column: &str, definition: &str) -> Result<()> {

@@ -484,6 +484,87 @@ fn imports_docx_and_epub_as_real_text_readers() {
 }
 
 #[test]
+fn imports_markdown_web_page_as_normalized_reader() {
+    let root = tempdir().unwrap();
+    let service = LibraryService::new(root.path()).unwrap();
+    let collection = service.create_collection("Web", None).unwrap();
+
+    let result = service
+        .import_markdown_item(
+            collection.id,
+            "Example Article",
+            "# Example Article\n\nA [safe link](https://example.com).\n\n<script>alert(1)</script>\n\n![Chart](https://example.com/chart.png)",
+            Some("https://example.com/article"),
+        )
+        .unwrap();
+
+    assert_eq!(result.imported.len(), 1);
+    assert_eq!(result.results[0].path, "https://example.com/article");
+    let items = service.list_items(Some(collection.id)).unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].attachment_format, "md");
+    assert_eq!(items[0].authors, "Imported Web");
+    assert_eq!(items[0].source, "example.com");
+
+    let reader = service.get_reader_view(result.imported[0].id).unwrap();
+    assert_eq!(reader.reader_kind, "normalized");
+    assert_eq!(reader.attachment_format, "md");
+    assert_eq!(reader.content_status, "ready");
+    assert!(reader.plain_text.contains("safe link"));
+    assert!(reader.normalized_html.contains("<article>"));
+    assert!(reader.normalized_html.contains("&lt;script&gt;alert(1)"));
+    assert!(!reader.normalized_html.contains("<script>"));
+    assert!(!reader.normalized_html.contains("onclick="));
+}
+
+#[test]
+fn duplicate_markdown_imports_report_duplicate_without_creating_new_items() {
+    let root = tempdir().unwrap();
+    let service = LibraryService::new(root.path()).unwrap();
+    let collection = service.create_collection("Web", None).unwrap();
+
+    let first = service
+        .import_markdown_item(
+            collection.id,
+            "One",
+            "same markdown",
+            Some("https://one.test"),
+        )
+        .unwrap();
+    let second = service
+        .import_markdown_item(
+            collection.id,
+            "Two",
+            "same markdown",
+            Some("https://two.test"),
+        )
+        .unwrap();
+
+    assert_eq!(first.imported.len(), 1);
+    assert_eq!(second.imported.len(), 0);
+    assert_eq!(second.duplicates.len(), 1);
+    assert_eq!(second.results[0].path, "https://two.test");
+    assert_eq!(service.list_items(Some(collection.id)).unwrap().len(), 1);
+}
+
+#[test]
+fn markdown_import_rejects_missing_collection_and_empty_fields() {
+    let root = tempdir().unwrap();
+    let service = LibraryService::new(root.path()).unwrap();
+    let collection = service.create_collection("Web", None).unwrap();
+
+    assert!(service
+        .import_markdown_item(99_999, "Title", "Body", None)
+        .is_err());
+    assert!(service
+        .import_markdown_item(collection.id, "   ", "Body", None)
+        .is_err());
+    assert!(service
+        .import_markdown_item(collection.id, "Title", "   ", None)
+        .is_err());
+}
+
+#[test]
 fn duplicate_imports_report_duplicate_without_creating_new_items() {
     let root = tempdir().unwrap();
     let service = LibraryService::new(root.path()).unwrap();

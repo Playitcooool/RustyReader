@@ -12,7 +12,7 @@ export type Tag = {
 
 export type CitationFormat = "apa7" | "bibtex" | "ris";
 export type ReaderKind = "pdf" | "normalized";
-export type AttachmentFormat = "pdf" | "docx" | "epub" | "unknown";
+export type AttachmentFormat = "pdf" | "docx" | "epub" | "md" | "unknown";
 
 export type ImportedItem = {
   id: number;

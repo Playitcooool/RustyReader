@@ -42,6 +42,16 @@ struct ImportPathRequest {
     download_id: Option<i64>,
 }
 
+#[derive(Debug, Deserialize)]
+struct ImportMarkdownRequest {
+    collection_id: i64,
+    title: String,
+    markdown: String,
+    source_url: Option<String>,
+    #[allow(dead_code)]
+    page_url: Option<String>,
+}
+
 pub(crate) fn new_status() -> SharedConnectorStatus {
     Arc::new(Mutex::new(ConnectorStatus::default()))
 }
@@ -157,6 +167,7 @@ fn route_request(
             Err(error) => json_response(500, error_body(error.to_string())),
         },
         ("POST", "/v1/import-path") => import_path(body, service),
+        ("POST", "/v1/import-markdown") => import_markdown(body, service),
         _ => json_response(404, error_body("not found")),
     }
 }
@@ -198,6 +209,28 @@ fn import_path(body: &[u8], service: &LibraryService) -> HttpResponse {
     match service.import_files(input.collection_id, &[path], ImportMode::ManagedCopy) {
         Ok(result) => json_response::<ImportBatchResult>(200, result),
         Err(error) => json_response(500, error_body(error.to_string())),
+    }
+}
+
+fn import_markdown(body: &[u8], service: &LibraryService) -> HttpResponse {
+    let input = match serde_json::from_slice::<ImportMarkdownRequest>(body) {
+        Ok(input) => input,
+        Err(error) => return json_response(400, error_body(error.to_string())),
+    };
+    match service.collection_exists(input.collection_id) {
+        Ok(true) => {}
+        Ok(false) => return json_response(400, error_body("collection does not exist")),
+        Err(error) => return json_response(500, error_body(error.to_string())),
+    }
+
+    match service.import_markdown_item(
+        input.collection_id,
+        &input.title,
+        &input.markdown,
+        input.source_url.as_deref(),
+    ) {
+        Ok(result) => json_response::<ImportBatchResult>(200, result),
+        Err(error) => json_response(400, error_body(error.to_string())),
     }
 }
 
