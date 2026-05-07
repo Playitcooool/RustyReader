@@ -165,20 +165,22 @@ fn route_request(
     body: &[u8],
     service: &LibraryService,
 ) -> HttpResponse {
+    let cors_origin = cors_origin(headers);
+
     if method == "GET" && path == "/v1/health" {
-        return json_response(200, health_body());
+        return json_response(200, health_body()).with_cors_origin(cors_origin);
     }
 
     if method == "OPTIONS" {
-        return json_response(200, serde_json::json!({ "ok": true }));
+        return json_response(200, serde_json::json!({ "ok": true })).with_cors_origin(cors_origin);
     }
 
     match authorize(headers, service) {
         Ok(()) => {}
-        Err(response) => return response,
+        Err(response) => return response.with_cors_origin(cors_origin),
     }
 
-    match (method, path) {
+    let response = match (method, path) {
         ("GET", "/v1/collections") => match service.list_collections() {
             Ok(collections) => json_response(200, collections),
             Err(error) => json_response(500, error_body(error.to_string())),
@@ -187,13 +189,21 @@ fn route_request(
         ("POST", "/v1/import-file") => import_file(body, service),
         ("POST", "/v1/import-markdown") => import_markdown(body, service),
         _ => json_response(404, error_body("not found")),
-    }
+    };
+    response.with_cors_origin(cors_origin)
 }
 
 fn authorize(
     headers: &HashMap<String, String>,
     service: &LibraryService,
 ) -> Result<(), HttpResponse> {
+    if headers
+        .get("origin")
+        .is_some_and(|origin| is_trusted_browser_extension_origin(origin))
+    {
+        return Ok(());
+    }
+
     let expected = service
         .get_connector_settings()
         .map_err(|error| json_response(500, error_body(error.to_string())))?
@@ -206,6 +216,21 @@ fn authorize(
         Ok(())
     } else {
         Err(json_response(401, error_body("unauthorized")))
+    }
+}
+
+fn is_trusted_browser_extension_origin(origin: &str) -> bool {
+    let normalized = origin.trim().to_ascii_lowercase();
+    normalized.starts_with("chrome-extension://")
+        || normalized.starts_with("safari-web-extension://")
+        || normalized.starts_with("moz-extension://")
+}
+
+fn cors_origin(headers: &HashMap<String, String>) -> Option<String> {
+    match headers.get("origin") {
+        Some(origin) if is_trusted_browser_extension_origin(origin) => Some(origin.clone()),
+        Some(_) => None,
+        None => Some("*".to_string()),
     }
 }
 
@@ -278,7 +303,9 @@ fn import_file(body: &[u8], service: &LibraryService) -> HttpResponse {
     {
         Ok(bytes) if !bytes.is_empty() => bytes,
         Ok(_) => return json_response(400, error_body("content must not be empty")),
-        Err(error) => return json_response(400, error_body(format!("invalid base64 content: {error}"))),
+        Err(error) => {
+            return json_response(400, error_body(format!("invalid base64 content: {error}")))
+        }
     };
     let result_path = input.source_url.as_deref().unwrap_or(filename);
 
@@ -292,9 +319,15 @@ fn import_file(body: &[u8], service: &LibraryService) -> HttpResponse {
 struct HttpResponse {
     status: u16,
     body: String,
+    cors_origin: Option<String>,
 }
 
 impl HttpResponse {
+    fn with_cors_origin(mut self, cors_origin: Option<String>) -> Self {
+        self.cors_origin = cors_origin;
+        self
+    }
+
     fn into_bytes(self) -> Vec<u8> {
         let reason = match self.status {
             200 => "OK",
@@ -303,10 +336,15 @@ impl HttpResponse {
             404 => "Not Found",
             _ => "Internal Server Error",
         };
+        let cors_header = self
+            .cors_origin
+            .map(|origin| format!("Access-Control-Allow-Origin: {origin}\r\n"))
+            .unwrap_or_default();
         format!(
-            "HTTP/1.1 {} {}\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Headers: Authorization, Content-Type\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            "HTTP/1.1 {} {}\r\nContent-Type: application/json\r\n{}Access-Control-Allow-Headers: Authorization, Content-Type\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
             self.status,
             reason,
+            cors_header,
             self.body.as_bytes().len(),
             self.body
         )
@@ -319,6 +357,7 @@ fn json_response<T: Serialize>(status: u16, body: T) -> HttpResponse {
         status,
         body: serde_json::to_string(&body)
             .unwrap_or_else(|_| "{\"error\":\"serialization failed\"}".into()),
+        cors_origin: None,
     }
 }
 
@@ -331,6 +370,7 @@ fn health_body() -> serde_json::Value {
         "ok": true,
         "app_name": "Paper Reader",
         "connector_version": 1,
+        "auth_modes": ["browser_extension_origin", "bearer"],
         "supported_file_types": ["pdf", "docx", "epub"],
         "capabilities": ["collections", "import_path", "import_file", "import_markdown"]
     })
@@ -338,7 +378,13 @@ fn health_body() -> serde_json::Value {
 
 #[cfg(test)]
 mod tests {
-    use super::health_body;
+    use std::collections::HashMap;
+
+    use app_core::service::LibraryService;
+    use serde_json::Value;
+    use tempfile::tempdir;
+
+    use super::{health_body, route_request};
 
     #[test]
     fn health_body_advertises_connector_capabilities() {
@@ -357,5 +403,114 @@ mod tests {
             .unwrap()
             .iter()
             .any(|value| value == "import_file"));
+        assert!(body["auth_modes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value == "browser_extension_origin"));
+    }
+
+    #[test]
+    fn collections_allow_trusted_extension_origin_without_token() {
+        let root = tempdir().unwrap();
+        let service = LibraryService::new(root.path()).unwrap();
+        service.create_collection("Inbox", None).unwrap();
+        let headers = headers_with_origin("chrome-extension://abcdef");
+
+        let response = route_request("GET", "/v1/collections", &headers, &[], &service);
+
+        assert_eq!(response.status, 200);
+        assert_eq!(
+            response.cors_origin.as_deref(),
+            Some("chrome-extension://abcdef")
+        );
+        let collections: Vec<Value> = serde_json::from_str(&response.body).unwrap();
+        assert_eq!(collections.len(), 1);
+    }
+
+    #[test]
+    fn import_file_allows_trusted_extension_origin_without_token() {
+        let root = tempdir().unwrap();
+        let service = LibraryService::new(root.path()).unwrap();
+        let collection = service.create_collection("Inbox", None).unwrap();
+        let headers = headers_with_origin("safari-web-extension://com.example.paper-reader");
+        let body = serde_json::json!({
+            "collection_id": collection.id,
+            "filename": "paper.pdf",
+            "content_base64": "JVBERi0xLjQK",
+            "source_url": "https://example.com/paper.pdf"
+        })
+        .to_string();
+
+        let response = route_request(
+            "POST",
+            "/v1/import-file",
+            &headers,
+            body.as_bytes(),
+            &service,
+        );
+
+        assert_eq!(response.status, 200);
+        assert_eq!(
+            response.cors_origin.as_deref(),
+            Some("safari-web-extension://com.example.paper-reader")
+        );
+    }
+
+    #[test]
+    fn ordinary_web_origin_without_token_is_rejected_without_cors_grant() {
+        let root = tempdir().unwrap();
+        let service = LibraryService::new(root.path()).unwrap();
+        let headers = headers_with_origin("https://example.com");
+
+        let response = route_request("GET", "/v1/collections", &headers, &[], &service);
+
+        assert_eq!(response.status, 401);
+        assert_eq!(response.cors_origin, None);
+    }
+
+    #[test]
+    fn bearer_token_still_authorizes_requests() {
+        let root = tempdir().unwrap();
+        let service = LibraryService::new(root.path()).unwrap();
+        service.create_collection("Inbox", None).unwrap();
+        let token = service.get_connector_settings().unwrap().token;
+        let mut headers = HashMap::new();
+        headers.insert("authorization".to_string(), format!("Bearer {token}"));
+
+        let response = route_request("GET", "/v1/collections", &headers, &[], &service);
+
+        assert_eq!(response.status, 200);
+        assert_eq!(response.cors_origin.as_deref(), Some("*"));
+    }
+
+    #[test]
+    fn options_only_grants_cors_to_trusted_or_originless_requests() {
+        let root = tempdir().unwrap();
+        let service = LibraryService::new(root.path()).unwrap();
+        let trusted = headers_with_origin("chrome-extension://abcdef");
+        let web = headers_with_origin("https://example.com");
+        let none = HashMap::new();
+
+        assert_eq!(
+            route_request("OPTIONS", "/v1/collections", &trusted, &[], &service)
+                .cors_origin
+                .as_deref(),
+            Some("chrome-extension://abcdef")
+        );
+        assert_eq!(
+            route_request("OPTIONS", "/v1/collections", &web, &[], &service).cors_origin,
+            None
+        );
+        assert_eq!(
+            route_request("OPTIONS", "/v1/collections", &none, &[], &service)
+                .cors_origin
+                .as_deref(),
+            Some("*")
+        );
+    }
+
+    fn headers_with_origin(origin: &str) -> HashMap<String, String> {
+        HashMap::from([("origin".to_string(), origin.to_string())])
     }
 }

@@ -176,6 +176,18 @@ test("background falls back to upload mode when downloads API is unavailable", (
   assert.match(source, /fetch\(url, \{ credentials: "include" \}\)/);
 });
 
+test("background no longer blocks collection load or import on connector token", () => {
+  const testDir = dirname(fileURLToPath(import.meta.url));
+  const source = readFileSync(join(testDir, "../extension/background.js"), "utf8");
+  const saveConfig = extractFunctionSource(source, "saveConfig");
+
+  assert.doesNotMatch(source, /Connector token is required/);
+  assert.match(source, /fetchCollections\(config\.connectorUrl, config\.connectorToken\)/);
+  assert.match(source, /importPath\(config\.connectorUrl, config\.connectorToken,/);
+  assert.match(saveConfig, /api\.storage\.sync\.remove\(STORAGE_KEYS\.connectorToken\)/);
+  assert.doesNotMatch(saveConfig, /api\.storage\.local\.set/);
+});
+
 test("Safari upload filenames preserve detected file type", () => {
   const testDir = dirname(fileURLToPath(import.meta.url));
   const source = readFileSync(join(testDir, "../extension/background.js"), "utf8");

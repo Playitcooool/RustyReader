@@ -4,7 +4,6 @@ import { buildCollectionTree, collectionLabel, flattenCollectionTree } from "../
 const api = globalThis.browser || globalThis.chrome;
 
 const connectorUrlInput = document.querySelector("#connectorUrl");
-const connectorTokenInput = document.querySelector("#connectorToken");
 const collectionSelect = document.querySelector("#collectionSelect");
 const connectionDot = document.querySelector("#connectionDot");
 const connectionTitle = document.querySelector("#connectionTitle");
@@ -71,18 +70,11 @@ async function initialize() {
   const config = await sendMessage({ type: "paper-reader:get-state" });
   state.config = config;
   connectorUrlInput.value = config.connectorUrl;
-  connectorTokenInput.value = config.connectorToken;
   state.importModeLabel = await detectImportModeLabel();
 
   await discoverConnector();
-  if (connectorTokenInput.value.trim()) {
-    await loadCollections();
-    await scanPage();
-  } else {
-    expandConfig(true);
-    setConnection("Token required", "Paste the connector token from Paper Reader settings.", "error");
-    setResult("Setup needed", "Save the Paper Reader connector token before importing.", "error");
-  }
+  await loadCollections();
+  await scanPage();
 }
 
 async function detectImportModeLabel() {
@@ -100,7 +92,6 @@ async function saveConfig({ quiet = false } = {}) {
     type: "paper-reader:save-config",
     payload: {
       connectorUrl: connectorUrlInput.value,
-      connectorToken: connectorTokenInput.value,
       lastCollectionId: Number(collectionSelect.value) || state.config?.lastCollectionId || null
     }
   });
@@ -108,7 +99,6 @@ async function saveConfig({ quiet = false } = {}) {
   state.config = {
     ...(state.config || {}),
     connectorUrl: connectorUrlInput.value,
-    connectorToken: connectorTokenInput.value,
     lastCollectionId: Number(collectionSelect.value) || state.config?.lastCollectionId || null
   };
 

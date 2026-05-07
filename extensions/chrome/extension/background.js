@@ -85,16 +85,11 @@ async function getConfig() {
 }
 
 async function saveConfig(payload) {
-  await Promise.all([
-    api.storage.sync.set({
-      [STORAGE_KEYS.connectorUrl]: payload.connectorUrl?.trim() || DEFAULT_CONNECTOR_URL,
-      [STORAGE_KEYS.lastCollectionId]: payload.lastCollectionId ?? null
-    }),
-    api.storage.local.set({
-      [STORAGE_KEYS.connectorToken]: payload.connectorToken?.trim() || ""
-    }),
-    api.storage.sync.remove(STORAGE_KEYS.connectorToken)
-  ]);
+  await api.storage.sync.set({
+    [STORAGE_KEYS.connectorUrl]: payload.connectorUrl?.trim() || DEFAULT_CONNECTOR_URL,
+    [STORAGE_KEYS.lastCollectionId]: payload.lastCollectionId ?? null
+  });
+  await api.storage.sync.remove(STORAGE_KEYS.connectorToken);
   return { ok: true };
 }
 
@@ -104,10 +99,6 @@ async function getState() {
 
 async function loadCollections() {
   const config = await getConfig();
-  if (!config.connectorToken) {
-    throw new Error("Connector token is required.");
-  }
-
   const collections = await fetchCollections(config.connectorUrl, config.connectorToken);
   return {
     collections,
@@ -146,10 +137,6 @@ async function detectDirectCandidate(url) {
 
 async function importCandidate(payload, tabId) {
   const config = await getConfig();
-  if (!config.connectorToken) {
-    throw new Error("Connector token is required.");
-  }
-
   if (payload.candidate.fileType === "html" || payload.candidate.importType === "markdown") {
     return importHtmlCandidate(payload, config, tabId);
   }

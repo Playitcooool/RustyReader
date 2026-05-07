@@ -46,7 +46,7 @@ function userMessageForError(status, statusText, data) {
   const normalized = serverMessage.toLowerCase();
 
   if (status === 401 || status === 403 || normalized.includes("unauthorized")) {
-    return "Connector token was rejected. Check that the pasted token matches Paper Reader.";
+    return "Paper Reader rejected the connector request. Update Paper Reader and try again.";
   }
 
   if (normalized.includes("collection")) {
@@ -82,7 +82,12 @@ export async function discoverConnectorUrl(preferredUrl = DEFAULT_CONNECTOR_URL)
   for (const candidate of candidates) {
     try {
       const health = await checkHealth(candidate);
-      if (health?.ok) return { connectorUrl: candidate, health };
+      if (health?.ok) {
+        if (!health.auth_modes?.includes("browser_extension_origin")) {
+          throw new Error("Paper Reader needs an update before this extension can connect without a token.");
+        }
+        return { connectorUrl: candidate, health };
+      }
       lastError = new Error("Connector health check returned an unexpected response.");
     } catch (error) {
       lastError = error;
@@ -95,7 +100,13 @@ export async function fetchCollections(baseUrl, token) {
   return request(baseUrl, "/v1/collections", { token });
 }
 
-export async function importPath(baseUrl, token, payload) {
+function legacyArgs(tokenOrPayload, maybePayload) {
+  if (maybePayload === undefined) return { token: undefined, payload: tokenOrPayload };
+  return { token: tokenOrPayload, payload: maybePayload };
+}
+
+export async function importPath(baseUrl, tokenOrPayload, maybePayload) {
+  const { token, payload } = legacyArgs(tokenOrPayload, maybePayload);
   return request(baseUrl, "/v1/import-path", {
     method: "POST",
     token,
@@ -103,7 +114,8 @@ export async function importPath(baseUrl, token, payload) {
   });
 }
 
-export async function importFile(baseUrl, token, payload) {
+export async function importFile(baseUrl, tokenOrPayload, maybePayload) {
+  const { token, payload } = legacyArgs(tokenOrPayload, maybePayload);
   return request(baseUrl, "/v1/import-file", {
     method: "POST",
     token,
@@ -111,7 +123,8 @@ export async function importFile(baseUrl, token, payload) {
   });
 }
 
-export async function importMarkdown(baseUrl, token, payload) {
+export async function importMarkdown(baseUrl, tokenOrPayload, maybePayload) {
+  const { token, payload } = legacyArgs(tokenOrPayload, maybePayload);
   return request(baseUrl, "/v1/import-markdown", {
     method: "POST",
     token,

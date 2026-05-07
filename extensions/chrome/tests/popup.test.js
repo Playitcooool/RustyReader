@@ -28,6 +28,16 @@ test("popup exposes retry, rescan, and collapsible connector settings", () => {
   assert.match(html, /config-card is-collapsed/);
 });
 
+test("popup does not expose connector token setup", () => {
+  const html = readFileSync(join(testDir, "../extension/popup/popup.html"), "utf8");
+  const source = readFileSync(join(testDir, "../extension/popup/popup.js"), "utf8");
+
+  assert.doesNotMatch(html, /connectorToken/);
+  assert.doesNotMatch(html, /Token/);
+  assert.doesNotMatch(source, /Token required/);
+  assert.doesNotMatch(source, /connectorTokenInput/);
+});
+
 test("popup no longer auto-imports a single detected file", () => {
   const source = readFileSync(join(testDir, "../extension/popup/popup.js"), "utf8");
   const scanPage = extractFunctionSource(source, "scanPage");
