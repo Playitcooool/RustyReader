@@ -283,6 +283,14 @@ pub struct LibraryService {
     connection_pool: Arc<Mutex<Vec<Connection>>>,
 }
 
+struct PendingImport {
+    label: String,
+    filename: String,
+    source_path: PathBuf,
+    bytes: std::result::Result<Vec<u8>, String>,
+    mode: ImportMode,
+}
+
 struct PooledConnection {
     conn: ManuallyDrop<Connection>,
     pool: Arc<Mutex<Vec<Connection>>>,
@@ -895,15 +903,87 @@ impl LibraryService {
             return Err(anyhow!("collection does not exist"));
         }
 
+        let mut inputs = Vec::new();
+        for path in paths {
+            let source_bytes = match fs::read(path)
+                .with_context(|| format!("failed to read {}", path.display()))
+            {
+                Ok(bytes) => Some(bytes),
+                Err(error) => {
+                    inputs.push(PendingImport {
+                        label: path.to_string_lossy().to_string(),
+                        filename: path
+                            .file_name()
+                            .map(|value| value.to_string_lossy().to_string())
+                            .unwrap_or_else(|| path.to_string_lossy().to_string()),
+                        source_path: path.clone(),
+                        bytes: Err(error.to_string()),
+                        mode,
+                    });
+                    None
+                }
+            };
+            if let Some(bytes) = source_bytes {
+                inputs.push(PendingImport {
+                    label: path.to_string_lossy().to_string(),
+                    filename: path
+                        .file_name()
+                        .map(|value| value.to_string_lossy().to_string())
+                        .unwrap_or_else(|| path.to_string_lossy().to_string()),
+                    source_path: path.clone(),
+                    bytes: Ok(bytes),
+                    mode,
+                });
+            }
+        }
+
+        self.import_pending_files(collection_id, inputs)
+    }
+
+    pub fn import_file_bytes(
+        &self,
+        collection_id: i64,
+        filename: &str,
+        bytes: Vec<u8>,
+        result_path: &str,
+    ) -> Result<ImportBatchResult> {
+        if !self.collection_exists(collection_id)? {
+            return Err(anyhow!("collection does not exist"));
+        }
+        let filename = filename.trim();
+        if filename.is_empty() {
+            return Err(anyhow!("filename must not be empty"));
+        }
+        if bytes.is_empty() {
+            return Err(anyhow!("content must not be empty"));
+        }
+
+        self.import_pending_files(
+            collection_id,
+            vec![PendingImport {
+                label: result_path.to_owned(),
+                filename: filename.to_owned(),
+                source_path: PathBuf::from(filename),
+                bytes: Ok(bytes),
+                mode: ImportMode::ManagedCopy,
+            }],
+        )
+    }
+
+    fn import_pending_files(
+        &self,
+        collection_id: i64,
+        inputs: Vec<PendingImport>,
+    ) -> Result<ImportBatchResult> {
         let mut imported = Vec::new();
         let mut duplicates = Vec::new();
         let mut failed = Vec::new();
         let mut results = Vec::new();
         let mut conn = self.connect()?;
 
-        for path in paths {
-            let path_label = path.to_string_lossy().to_string();
-            let format = infer_attachment_format(&path_label);
+        for input in inputs {
+            let path_label = input.label;
+            let format = infer_attachment_format(&input.filename);
             if format == "unknown" {
                 let result = ImportPathResult {
                     path: path_label,
@@ -916,15 +996,13 @@ impl LibraryService {
                 continue;
             }
 
-            let source_bytes = match fs::read(path)
-                .with_context(|| format!("failed to read {}", path.display()))
-            {
+            let source_bytes = match input.bytes {
                 Ok(bytes) => bytes,
-                Err(error) => {
+                Err(message) => {
                     let result = ImportPathResult {
                         path: path_label,
                         status: "failed".into(),
-                        message: error.to_string(),
+                        message,
                         item: None,
                     };
                     failed.push(result.clone());
@@ -961,7 +1039,7 @@ impl LibraryService {
                 continue;
             }
 
-            let extracted = match extract_document(path, &source_bytes, format) {
+            let extracted = match extract_document(&input.source_path, &source_bytes, format) {
                 Ok(extracted) => extracted,
                 Err(error) => {
                     let result = ImportPathResult {
@@ -976,15 +1054,16 @@ impl LibraryService {
                 }
             };
             let title = extracted.metadata.title.clone().unwrap_or_else(|| {
-                path.file_stem()
+                Path::new(&input.filename)
+                    .file_stem()
                     .map(|value| value.to_string_lossy().to_string())
                     .filter(|value| !value.trim().is_empty())
                     .unwrap_or_else(|| "Untitled".into())
             });
 
-            let storage_path = match mode {
+            let storage_path = match input.mode {
                 ImportMode::ManagedCopy => {
-                    let ext = path
+                    let ext = Path::new(&input.filename)
                         .extension()
                         .and_then(|value| value.to_str())
                         .unwrap_or("bin");
@@ -992,7 +1071,7 @@ impl LibraryService {
                     fs::write(&target, &source_bytes)?;
                     target
                 }
-                ImportMode::LinkedFile => path.clone(),
+                ImportMode::LinkedFile => input.source_path.clone(),
             };
             let attachment_status = if storage_path.exists() {
                 "ready"
@@ -1021,7 +1100,7 @@ impl LibraryService {
                 params![
                     item_id,
                     storage_path.to_string_lossy().to_string(),
-                    mode.as_str(),
+                    input.mode.as_str(),
                     attachment_status,
                     fingerprint
                 ],
@@ -1055,7 +1134,7 @@ impl LibraryService {
             };
             imported.push(item.clone());
             results.push(ImportPathResult {
-                path: path.to_string_lossy().to_string(),
+                path: path_label,
                 status: "imported".into(),
                 message: "Imported successfully.".into(),
                 item: Some(item),

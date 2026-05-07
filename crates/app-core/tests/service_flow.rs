@@ -287,6 +287,84 @@ fn imports_pdf_with_metadata_text_page_count_and_search_index() {
 }
 
 #[test]
+fn imports_uploaded_pdf_bytes_through_managed_copy_path() {
+    let root = tempdir().unwrap();
+    let service = LibraryService::new(root.path()).unwrap();
+    let collection = service.create_collection("Uploads", None).unwrap();
+    let pdf = fixture_path(root.path(), "uploaded.pdf");
+    write_pdf_fixture(&pdf);
+    let bytes = fs::read(&pdf).unwrap();
+
+    let result = service
+        .import_file_bytes(
+            collection.id,
+            "uploaded.pdf",
+            bytes,
+            "https://example.com/uploaded.pdf",
+        )
+        .unwrap();
+
+    assert_eq!(result.imported.len(), 1);
+    assert_eq!(result.results[0].path, "https://example.com/uploaded.pdf");
+    let item = service.list_items(Some(collection.id)).unwrap().remove(0);
+    assert_eq!(item.attachment_format, "pdf");
+    assert!(item.attachment_status == "ready");
+}
+
+#[test]
+fn duplicate_uploaded_content_returns_duplicate_result() {
+    let root = tempdir().unwrap();
+    let service = LibraryService::new(root.path()).unwrap();
+    let collection = service.create_collection("Uploads", None).unwrap();
+    let pdf = fixture_path(root.path(), "uploaded.pdf");
+    write_pdf_fixture(&pdf);
+    let bytes = fs::read(&pdf).unwrap();
+
+    service
+        .import_file_bytes(collection.id, "uploaded.pdf", bytes.clone(), "first.pdf")
+        .unwrap();
+    let duplicate = service
+        .import_file_bytes(collection.id, "renamed.pdf", bytes, "second.pdf")
+        .unwrap();
+
+    assert!(duplicate.imported.is_empty());
+    assert_eq!(duplicate.duplicates.len(), 1);
+    assert_eq!(duplicate.results[0].path, "second.pdf");
+    assert_eq!(duplicate.results[0].status, "duplicate");
+}
+
+#[test]
+fn uploaded_file_rejects_empty_content_and_missing_collection() {
+    let root = tempdir().unwrap();
+    let service = LibraryService::new(root.path()).unwrap();
+    let collection = service.create_collection("Uploads", None).unwrap();
+
+    let empty = service.import_file_bytes(collection.id, "empty.pdf", Vec::new(), "empty.pdf");
+    assert!(empty.unwrap_err().to_string().contains("content must not be empty"));
+
+    let missing = service.import_file_bytes(9999, "paper.pdf", b"%PDF".to_vec(), "paper.pdf");
+    assert!(missing
+        .unwrap_err()
+        .to_string()
+        .contains("collection does not exist"));
+}
+
+#[test]
+fn uploaded_file_reports_unsupported_filename() {
+    let root = tempdir().unwrap();
+    let service = LibraryService::new(root.path()).unwrap();
+    let collection = service.create_collection("Uploads", None).unwrap();
+
+    let result = service
+        .import_file_bytes(collection.id, "paper.txt", b"hello".to_vec(), "paper.txt")
+        .unwrap();
+
+    assert_eq!(result.failed.len(), 1);
+    assert_eq!(result.results[0].status, "failed");
+    assert!(result.results[0].message.contains("Unsupported"));
+}
+
+#[test]
 fn imports_pdf_without_reliable_text_as_unavailable_and_skips_search_index() {
     let root = tempdir().unwrap();
     let service = LibraryService::new(root.path()).unwrap();

@@ -14,6 +14,8 @@
     "extension:test": "npm --prefix extensions/chrome test",
     "extension:smoke": "npm --prefix extensions/chrome run smoke",
     "extension:package": "npm --prefix extensions/chrome run package",
+    "extension:safari:build": "npm --prefix extensions/safari run build",
+    "extension:safari:package": "npm --prefix extensions/safari run package",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
   },

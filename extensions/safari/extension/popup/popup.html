@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Paper Reader Connector</title>
+    <link rel="stylesheet" href="./popup.css" />
+  </head>
+  <body>
+    <main class="panel">
+      <header class="panel-header">
+        <div>
+          <p class="eyebrow">Paper Reader</p>
+          <h1>Browser Connector</h1>
+        </div>
+        <button id="refreshButton" class="ghost-button" type="button">Refresh</button>
+      </header>
+
+      <section class="card config-card">
+        <label class="field">
+          <span>Connector URL</span>
+          <input id="connectorUrl" type="url" placeholder="http://127.0.0.1:17654" />
+        </label>
+        <label class="field">
+          <span>Token</span>
+          <input id="connectorToken" type="password" placeholder="Paste Paper Reader token" />
+        </label>
+        <div class="row-actions">
+          <button id="saveConfigButton" class="ghost-button" type="button">Save</button>
+          <button id="checkHealthButton" class="primary-button" type="button">Check Connection</button>
+        </div>
+        <p id="connectionStatus" class="status-line">Loading connector settings…</p>
+      </section>
+
+      <section class="card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Step 1</p>
+            <h2>Select Collection</h2>
+          </div>
+        </div>
+        <label class="field">
+          <span>Target collection</span>
+          <select id="collectionSelect"></select>
+        </label>
+      </section>
+
+      <section class="card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Step 2</p>
+            <h2>Import PDF or Web Page</h2>
+          </div>
+          <button id="scanButton" class="ghost-button" type="button">Scan Page</button>
+        </div>
+        <p id="pageContext" class="muted-text">Open a tab with a PDF link or a readable web page.</p>
+        <ul id="candidateList" class="candidate-list"></ul>
+        <p id="importStatus" class="status-line"></p>
+      </section>
+    </main>
+
+    <script type="module" src="./popup.js"></script>
+  </body>
+</html>

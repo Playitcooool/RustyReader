@@ -3086,6 +3086,7 @@ name = "paper-reader-desktop"
 version = "0.1.0"
 dependencies = [
  "app-core",
+ "base64 0.22.1",
  "image",
  "lopdf 0.35.0",
  "pdf_oxide",

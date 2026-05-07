@@ -11,6 +11,7 @@ const collections = [
 
 const importedPaths = new Set();
 const importedMarkdown = new Set();
+const importedFiles = new Set();
 
 function json(response, status, payload) {
   response.writeHead(status, { "Content-Type": "application/json" });
@@ -107,6 +108,37 @@ const server = http.createServer(async (request, response) => {
     importedMarkdown.add(fingerprint);
     return json(response, 200, {
       imported: [{ id: Date.now(), title: body.title, primary_attachment_id: Date.now() + 1 }],
+      duplicates: [],
+      failed: [],
+      results: [{ path, status: "imported", message: "Imported", item: null }]
+    });
+  }
+
+  if (request.url === "/v1/import-file" && request.method === "POST") {
+    const body = await readBody(request);
+    const collection = collections.find((entry) => entry.id === body.collection_id);
+    if (!collection) {
+      return json(response, 400, { error: "Collection does not exist" });
+    }
+    if (!body.filename || !/\.(pdf|docx|epub)$/i.test(body.filename)) {
+      return json(response, 400, { error: "Unsupported attachment format" });
+    }
+    if (!body.content_base64 || Buffer.from(body.content_base64, "base64").length === 0) {
+      return json(response, 400, { error: "Content must not be empty" });
+    }
+    const path = body.source_url || body.filename;
+    if (importedFiles.has(body.content_base64)) {
+      return json(response, 200, {
+        imported: [],
+        duplicates: [{ path, status: "duplicate", message: "Already imported", item: null }],
+        failed: [],
+        results: [{ path, status: "duplicate", message: "Already imported", item: null }]
+      });
+    }
+
+    importedFiles.add(body.content_base64);
+    return json(response, 200, {
+      imported: [{ id: Date.now(), title: body.filename, primary_attachment_id: Date.now() + 1 }],
       duplicates: [],
       failed: [],
       results: [{ path, status: "imported", message: "Imported", item: null }]

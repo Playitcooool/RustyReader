@@ -1,0 +1,10 @@
+{
+  "name": "paper-reader-safari-extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-safari-extension.js",
+    "package": "node scripts/package-safari-extension.js"
+  }
+}

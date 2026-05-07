@@ -165,3 +165,31 @@ test("injected page scanner is self-contained", () => {
   assert.equal((source.match(/function domNodeToMarkdown\(/g) || []).length, 1);
   assert.equal((source.match(/function tableToMarkdown\(/g) || []).length, 1);
 });
+
+test("background falls back to upload mode when downloads API is unavailable", () => {
+  const testDir = dirname(fileURLToPath(import.meta.url));
+  const source = readFileSync(join(testDir, "../extension/background.js"), "utf8");
+
+  assert.match(source, /function hasDownloadsApi\(\)/);
+  assert.match(source, /if \(!hasDownloadsApi\(\)\) \{\s*return importFileCandidate/);
+  assert.match(source, /fetch\(url, \{ credentials: "include" \}\)/);
+});
+
+test("Safari upload filenames preserve detected file type", () => {
+  const testDir = dirname(fileURLToPath(import.meta.url));
+  const source = readFileSync(join(testDir, "../extension/background.js"), "utf8");
+  const filenameFunction = extractFunctionSource(source, "candidateFilename");
+
+  assert.match(source, /candidateFilename\(payload\.candidate\.url, payload\.candidate\.title, payload\.candidate\.fileType\)/);
+  assert.match(filenameFunction, /\["pdf", "docx", "epub"\]\.includes\(fileType\)/);
+  assert.match(filenameFunction, /`\$\{safeName\}\.\$\{fileType\}`/);
+});
+
+test("Safari manifest removes downloads and grants remote host permissions", () => {
+  const testDir = dirname(fileURLToPath(import.meta.url));
+  const manifest = JSON.parse(readFileSync(join(testDir, "../../safari/manifest.json"), "utf8"));
+
+  assert.equal(manifest.permissions.includes("downloads"), false);
+  assert.ok(manifest.host_permissions.includes("http://*/*"));
+  assert.ok(manifest.host_permissions.includes("https://*/*"));
+});

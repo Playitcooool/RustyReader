@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Paper Reader Connector",
+  "version": "0.1.0",
+  "description": "Save PDFs, documents, and readable web pages from Safari into Paper Reader.",
+  "permissions": [
+    "contextMenus",
+    "storage",
+    "tabs",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:17654/*",
+    "http://localhost:17654/*",
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "extension/background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Save to Paper Reader",
+    "default_popup": "extension/popup/popup.html"
+  },
+  "icons": {
+    "16": "extension/assets/icon-16.png",
+    "32": "extension/assets/icon-32.png",
+    "48": "extension/assets/icon-48.png",
+    "128": "extension/assets/icon-128.png"
+  }
+}

@@ -8,6 +8,7 @@ use std::{
 };
 
 use app_core::service::{ImportBatchResult, ImportMode, LibraryService};
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 
 pub(crate) const CONNECTOR_PORT: u16 = 17654;
@@ -50,6 +51,18 @@ struct ImportMarkdownRequest {
     source_url: Option<String>,
     #[allow(dead_code)]
     page_url: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ImportFileRequest {
+    collection_id: i64,
+    filename: String,
+    content_base64: String,
+    source_url: Option<String>,
+    #[allow(dead_code)]
+    page_url: Option<String>,
+    #[allow(dead_code)]
+    content_type: Option<String>,
 }
 
 pub(crate) fn new_status() -> SharedConnectorStatus {
@@ -156,6 +169,10 @@ fn route_request(
         return json_response(200, serde_json::json!({ "ok": true }));
     }
 
+    if method == "OPTIONS" {
+        return json_response(200, serde_json::json!({ "ok": true }));
+    }
+
     match authorize(headers, service) {
         Ok(()) => {}
         Err(response) => return response,
@@ -167,6 +184,7 @@ fn route_request(
             Err(error) => json_response(500, error_body(error.to_string())),
         },
         ("POST", "/v1/import-path") => import_path(body, service),
+        ("POST", "/v1/import-file") => import_file(body, service),
         ("POST", "/v1/import-markdown") => import_markdown(body, service),
         _ => json_response(404, error_body("not found")),
     }
@@ -234,6 +252,42 @@ fn import_markdown(body: &[u8], service: &LibraryService) -> HttpResponse {
     }
 }
 
+fn import_file(body: &[u8], service: &LibraryService) -> HttpResponse {
+    let input = match serde_json::from_slice::<ImportFileRequest>(body) {
+        Ok(input) => input,
+        Err(error) => return json_response(400, error_body(error.to_string())),
+    };
+    match service.collection_exists(input.collection_id) {
+        Ok(true) => {}
+        Ok(false) => return json_response(400, error_body("collection does not exist")),
+        Err(error) => return json_response(500, error_body(error.to_string())),
+    }
+
+    let filename = input.filename.trim();
+    if filename.is_empty() {
+        return json_response(400, error_body("filename must not be empty"));
+    }
+    if !matches!(
+        filename.rsplit('.').next().map(|value| value.to_ascii_lowercase()),
+        Some(ext) if ext == "pdf" || ext == "docx" || ext == "epub"
+    ) {
+        return json_response(400, error_body("unsupported attachment format"));
+    }
+
+    let bytes = match base64::engine::general_purpose::STANDARD.decode(input.content_base64.trim())
+    {
+        Ok(bytes) if !bytes.is_empty() => bytes,
+        Ok(_) => return json_response(400, error_body("content must not be empty")),
+        Err(error) => return json_response(400, error_body(format!("invalid base64 content: {error}"))),
+    };
+    let result_path = input.source_url.as_deref().unwrap_or(filename);
+
+    match service.import_file_bytes(input.collection_id, filename, bytes, result_path) {
+        Ok(result) => json_response::<ImportBatchResult>(200, result),
+        Err(error) => json_response(400, error_body(error.to_string())),
+    }
+}
+
 #[derive(Debug)]
 struct HttpResponse {
     status: u16,
@@ -250,7 +304,7 @@ impl HttpResponse {
             _ => "Internal Server Error",
         };
         format!(
-            "HTTP/1.1 {} {}\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            "HTTP/1.1 {} {}\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Headers: Authorization, Content-Type\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
             self.status,
             reason,
             self.body.as_bytes().len(),
