@@ -11,6 +11,9 @@
     "build": "tsc -b && vite build",
     "test": "vitest run",
     "verify": "bash scripts/verify.sh",
+    "extension:test": "npm --prefix extensions/chrome test",
+    "extension:smoke": "npm --prefix extensions/chrome run smoke",
+    "extension:package": "npm --prefix extensions/chrome run package",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
   },

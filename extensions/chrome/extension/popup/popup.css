@@ -1,0 +1,183 @@
+:root {
+  color-scheme: light;
+  --bg: linear-gradient(180deg, #f4efe4 0%, #efe3d0 100%);
+  --ink: #1f1c18;
+  --muted: #6d6458;
+  --panel: rgba(255, 251, 245, 0.92);
+  --border: rgba(78, 63, 43, 0.16);
+  --accent: #1c6b57;
+  --accent-strong: #174f42;
+  --danger: #a33a2b;
+  --shadow: 0 18px 48px rgba(64, 44, 19, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 380px;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.4 "Avenir Next", "Segoe UI", sans-serif;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+.panel {
+  padding: 14px;
+}
+
+.panel-header,
+.section-heading,
+.row-actions,
+.candidate-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.panel-header {
+  margin-bottom: 12px;
+}
+
+.eyebrow {
+  margin: 0 0 2px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 21px;
+}
+
+h2 {
+  font-size: 16px;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  padding: 14px;
+  backdrop-filter: blur(12px);
+}
+
+.card + .card {
+  margin-top: 12px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.field span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+input,
+select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 10px 12px;
+  color: var(--ink);
+}
+
+button {
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  padding: 9px 14px;
+}
+
+.primary-button {
+  background: var(--accent);
+  color: white;
+}
+
+.primary-button:hover {
+  background: var(--accent-strong);
+}
+
+.ghost-button {
+  background: rgba(28, 107, 87, 0.08);
+  color: var(--accent-strong);
+}
+
+.status-line,
+.muted-text {
+  margin-top: 10px;
+  color: var(--muted);
+}
+
+.status-line.is-error {
+  color: var(--danger);
+}
+
+.status-line.is-success {
+  color: var(--accent-strong);
+}
+
+.candidate-list {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+  display: grid;
+  gap: 8px;
+}
+
+.candidate-item {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.candidate-meta {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.candidate-title,
+.candidate-url {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.candidate-url {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: rgba(28, 107, 87, 0.12);
+  color: var(--accent-strong);
+  padding: 3px 8px;
+  font-size: 11px;
+  margin-right: 6px;
+}
