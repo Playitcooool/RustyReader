@@ -280,6 +280,7 @@ fn spans_from_document(
     Ok(spans)
 }
 
+#[cfg(test)]
 fn document_info_from_document(doc: &OxidePdfDocument) -> Result<PdfDocumentInfo, String> {
     let page_count = doc.page_count().map_err(|error| error.to_string())?;
     let mut pages = Vec::with_capacity(page_count);

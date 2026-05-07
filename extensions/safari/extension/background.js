@@ -202,7 +202,7 @@ async function importCandidate(payload, tabId) {
 async function importFileCandidate(payload, config, tabId) {
   try {
     const fetched = await fetchCandidateBytes(payload.candidate.url);
-    const filename = candidateFilename(payload.candidate.url, payload.candidate.title);
+    const filename = candidateFilename(payload.candidate.url, payload.candidate.title, payload.candidate.fileType);
     const result = await importFile(config.connectorUrl, config.connectorToken, {
       collection_id: payload.collectionId,
       filename,
@@ -303,9 +303,11 @@ async function fetchCandidateBytes(url) {
   };
 }
 
-function candidateFilename(url, title) {
-  const extension = title?.includes(".") ? "" : inferExtensionFromUrl(url);
-  return sanitizeFilename(title || url || "download") + extension;
+function candidateFilename(url, title, fileType) {
+  const safeName = sanitizeFilename(title || url || "download");
+  if (/\.(pdf|docx|epub)$/i.test(safeName)) return safeName;
+  if (["pdf", "docx", "epub"].includes(fileType)) return `${safeName}.${fileType}`;
+  return safeName + inferExtensionFromUrl(url);
 }
 
 function arrayBufferToBase64(buffer) {
