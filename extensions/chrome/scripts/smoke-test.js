@@ -50,7 +50,9 @@ async function main() {
   try {
     const health = await request("/v1/health", { bearer: null });
     assert.equal(health.status, 200);
-    assert.deepEqual(health.payload, { ok: true });
+    assert.equal(health.payload.ok, true);
+    assert.equal(health.payload.app_name, "Paper Reader");
+    assert.ok(health.payload.capabilities.includes("import_file"));
 
     const collections = await request("/v1/collections");
     assert.equal(collections.status, 200);

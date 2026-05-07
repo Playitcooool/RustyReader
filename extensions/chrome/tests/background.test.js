@@ -171,6 +171,7 @@ test("background falls back to upload mode when downloads API is unavailable", (
   const source = readFileSync(join(testDir, "../extension/background.js"), "utf8");
 
   assert.match(source, /function hasDownloadsApi\(\)/);
+  assert.match(source, /paper-reader:get-capabilities/);
   assert.match(source, /if \(!hasDownloadsApi\(\)\) \{\s*return importFileCandidate/);
   assert.match(source, /fetch\(url, \{ credentials: "include" \}\)/);
 });

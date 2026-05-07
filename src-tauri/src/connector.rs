@@ -166,7 +166,7 @@ fn route_request(
     service: &LibraryService,
 ) -> HttpResponse {
     if method == "GET" && path == "/v1/health" {
-        return json_response(200, serde_json::json!({ "ok": true }));
+        return json_response(200, health_body());
     }
 
     if method == "OPTIONS" {
@@ -324,4 +324,38 @@ fn json_response<T: Serialize>(status: u16, body: T) -> HttpResponse {
 
 fn error_body(message: impl Into<String>) -> serde_json::Value {
     serde_json::json!({ "error": message.into() })
+}
+
+fn health_body() -> serde_json::Value {
+    serde_json::json!({
+        "ok": true,
+        "app_name": "Paper Reader",
+        "connector_version": 1,
+        "supported_file_types": ["pdf", "docx", "epub"],
+        "capabilities": ["collections", "import_path", "import_file", "import_markdown"]
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::health_body;
+
+    #[test]
+    fn health_body_advertises_connector_capabilities() {
+        let body = health_body();
+
+        assert_eq!(body["ok"], true);
+        assert_eq!(body["app_name"], "Paper Reader");
+        assert_eq!(body["connector_version"], 1);
+        assert!(body["supported_file_types"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value == "pdf"));
+        assert!(body["capabilities"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value == "import_file"));
+    }
 }

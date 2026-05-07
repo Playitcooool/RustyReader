@@ -40,6 +40,11 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === "paper-reader:get-capabilities") {
+    sendResponse({ hasDownloads: hasDownloadsApi() });
+    return undefined;
+  }
+
   if (message?.type === "paper-reader:detect-page-files") {
     void detectPageFiles(message.tabId).then(sendResponse, (error) => sendResponse({ error: error.message }));
     return true;
@@ -179,7 +184,7 @@ async function importCandidate(payload, tabId) {
       await cleanupDownload(download.downloadId);
     }
 
-      await api.storage.sync.set({ [STORAGE_KEYS.lastCollectionId]: payload.collectionId });
+    await api.storage.sync.set({ [STORAGE_KEYS.lastCollectionId]: payload.collectionId });
 
     return {
       ok: true,

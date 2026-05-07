@@ -11,12 +11,21 @@
       <header class="panel-header">
         <div>
           <p class="eyebrow">Paper Reader</p>
-          <h1>Browser Connector</h1>
+          <h1>Save to Library</h1>
         </div>
-        <button id="refreshButton" class="ghost-button" type="button">Refresh</button>
+        <button id="refreshButton" class="icon-button" type="button" title="Refresh collections and rescan page" aria-label="Refresh">↻</button>
       </header>
 
-      <section class="card config-card">
+      <section class="status-card" aria-live="polite">
+        <div class="status-dot" id="connectionDot"></div>
+        <div class="status-copy">
+          <strong id="connectionTitle">Checking Paper Reader</strong>
+          <span id="connectionStatus">Loading connector settings…</span>
+        </div>
+        <button id="toggleConfigButton" class="ghost-button compact" type="button" aria-expanded="false">Settings</button>
+      </section>
+
+      <section id="configCard" class="card config-card is-collapsed">
         <label class="field">
           <span>Connector URL</span>
           <input id="connectorUrl" type="url" placeholder="http://127.0.0.1:17654" />
@@ -27,17 +36,17 @@
         </label>
         <div class="row-actions">
           <button id="saveConfigButton" class="ghost-button" type="button">Save</button>
-          <button id="checkHealthButton" class="primary-button" type="button">Check Connection</button>
+          <button id="checkHealthButton" class="primary-button" type="button">Check</button>
         </div>
-        <p id="connectionStatus" class="status-line">Loading connector settings…</p>
       </section>
 
       <section class="card">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Step 1</p>
-            <h2>Select Collection</h2>
+            <p class="eyebrow">Destination</p>
+            <h2>Collection</h2>
           </div>
+          <span id="collectionCount" class="pill">0</span>
         </div>
         <label class="field">
           <span>Target collection</span>
@@ -48,14 +57,25 @@
       <section class="card">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Step 2</p>
-            <h2>Import PDF or Web Page</h2>
+            <p class="eyebrow">Current tab</p>
+            <h2>Import Options</h2>
           </div>
-          <button id="scanButton" class="ghost-button" type="button">Scan Page</button>
+          <button id="scanButton" class="ghost-button compact" type="button">Scan</button>
         </div>
         <p id="pageContext" class="muted-text">Open a tab with a PDF link or a readable web page.</p>
         <ul id="candidateList" class="candidate-list"></ul>
-        <p id="importStatus" class="status-line"></p>
+        <div id="emptyState" class="empty-state is-hidden">No importable files or readable page content found.</div>
+      </section>
+
+      <section id="resultCard" class="result-card is-hidden" aria-live="polite">
+        <div>
+          <strong id="resultTitle">Ready</strong>
+          <p id="importStatus">Choose an item to import.</p>
+        </div>
+        <div class="row-actions compact-actions">
+          <button id="retryButton" class="ghost-button compact is-hidden" type="button">Retry</button>
+          <button id="rescanButton" class="ghost-button compact" type="button">Rescan</button>
+        </div>
       </section>
     </main>
 

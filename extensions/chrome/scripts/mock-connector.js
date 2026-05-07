@@ -41,7 +41,13 @@ function readBody(request) {
 
 const server = http.createServer(async (request, response) => {
   if (request.url === "/v1/health" && request.method === "GET") {
-    return json(response, 200, { ok: true });
+    return json(response, 200, {
+      ok: true,
+      app_name: "Paper Reader",
+      connector_version: 1,
+      supported_file_types: ["pdf", "docx", "epub"],
+      capabilities: ["collections", "import_path", "import_file", "import_markdown"]
+    });
   }
 
   const auth = request.headers.authorization;
