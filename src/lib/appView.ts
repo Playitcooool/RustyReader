@@ -131,16 +131,20 @@ export const noteHeading = (note: ResearchNote) =>
 
 export const descendantIdsForCollection = (collections: Collection[], collectionId: number) => {
   const descendants = new Set<number>();
+  const childrenByParentId = new Map<number, Collection[]>();
+  for (const collection of collections) {
+    if (collection.parent_id === null) continue;
+    childrenByParentId.set(collection.parent_id, [...(childrenByParentId.get(collection.parent_id) ?? []), collection]);
+  }
   const stack = [collectionId];
 
   while (stack.length > 0) {
     const currentId = stack.pop();
     if (currentId === undefined) continue;
-    for (const collection of collections) {
-      if (collection.parent_id === currentId && !descendants.has(collection.id)) {
-        descendants.add(collection.id);
-        stack.push(collection.id);
-      }
+    for (const collection of childrenByParentId.get(currentId) ?? []) {
+      if (descendants.has(collection.id)) continue;
+      descendants.add(collection.id);
+      stack.push(collection.id);
     }
   }
 

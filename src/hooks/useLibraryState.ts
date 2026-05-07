@@ -44,6 +44,7 @@ export function useLibraryState({
   const manageButtonRef = useRef<HTMLButtonElement | null>(null);
   const managePopoverRef = useRef<HTMLDivElement | null>(null);
   const resourceContextMenuRef = useRef<HTMLDivElement | null>(null);
+  const selectedCollectionIdRef = useRef<number | null>(null);
 
   const [collections, setCollections] = useState<Collection[]>([]);
   const [libraryItems, setLibraryItems] = useState<LibraryItem[]>([]);
@@ -92,9 +93,15 @@ export function useLibraryState({
   );
   const importHasIssues = Boolean(lastImportResult && (lastImportResult.duplicates.length > 0 || lastImportResult.failed.length > 0));
 
-  const loadLibrary = useCallback(async () => {
+  useEffect(() => {
+    selectedCollectionIdRef.current = selectedCollectionId;
+  }, [selectedCollectionId]);
+
+  const loadLibrary = useCallback(async (options: { refreshStatuses?: boolean } = {}) => {
     const runtimeApi = await getApi();
-    await runtimeApi.refreshAttachmentStatuses();
+    if (options.refreshStatuses ?? false) {
+      await runtimeApi.refreshAttachmentStatuses();
+    }
     const loadedItems = await runtimeApi.listItems();
     setLibraryItems(loadedItems);
     return loadedItems;
@@ -117,7 +124,7 @@ export function useLibraryState({
 
   useEffect(() => {
     void refreshCollections();
-    void loadLibrary();
+    void loadLibrary({ refreshStatuses: true });
   }, [loadLibrary, refreshCollections]);
 
   useEffect(() => {
@@ -132,12 +139,13 @@ export function useLibraryState({
           const loadedItems = await loadLibrary();
           const duplicateItem = loadedItems.find((item) => event.duplicate_item_ids?.includes(item.id));
           const importedItem = loadedItems.find((item) => event.imported_item_ids?.includes(item.id));
-          const preferredCollectionId = importedItem?.collection_id ?? duplicateItem?.collection_id ?? event.collection_id ?? selectedCollectionId;
+          const preferredCollectionId =
+            importedItem?.collection_id ?? duplicateItem?.collection_id ?? event.collection_id ?? selectedCollectionIdRef.current;
           await refreshCollections(preferredCollectionId);
           if ((event.imported_count ?? 0) > 0) {
             setStatusMessage("Library updated from browser extension.");
           } else if ((event.duplicate_count ?? 0) > 0) {
-            setStatusMessage("Browser extension found an item that is already in the library.");
+            setStatusMessage("Browser extension found this item already exists in the library.");
           }
         })();
       });
@@ -148,7 +156,7 @@ export function useLibraryState({
       disposed = true;
       dispose?.();
     };
-  }, [getApi, loadLibrary, refreshCollections, selectedCollectionId, setStatusMessage]);
+  }, [getApi, loadLibrary, refreshCollections, setStatusMessage]);
 
   useEffect(() => {
     if (selectedCollectionId === null) {

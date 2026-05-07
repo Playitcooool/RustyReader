@@ -2620,19 +2620,21 @@ impl LibraryService {
 
     pub fn refresh_attachment_statuses(&self) -> Result<()> {
         let conn = self.connect()?;
-        let mut statement =
-            conn.prepare("SELECT id, item_id, path, import_mode FROM attachments ORDER BY id ASC")?;
+        let mut statement = conn.prepare(
+            "SELECT id, item_id, path, import_mode, status FROM attachments ORDER BY id ASC",
+        )?;
         let rows = statement.query_map([], |row| {
             Ok((
                 row.get::<_, i64>(0)?,
                 row.get::<_, i64>(1)?,
                 row.get::<_, String>(2)?,
                 row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
             ))
         })?;
 
         for row in rows {
-            let (attachment_id, item_id, path, import_mode) = row?;
+            let (attachment_id, item_id, path, import_mode, current_status) = row?;
             let status = if Path::new(&path).exists() {
                 "ready"
             } else if import_mode == "linked_file" {
@@ -2640,6 +2642,9 @@ impl LibraryService {
             } else {
                 "needs_attention"
             };
+            if status == current_status {
+                continue;
+            }
             conn.execute(
                 "UPDATE attachments SET status = ?1 WHERE id = ?2",
                 params![status, attachment_id],
@@ -3798,18 +3803,35 @@ fn map_library_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<LibraryItem> {
 }
 
 fn hydrate_item_tags(conn: &Connection, mut items: Vec<LibraryItem>) -> Result<Vec<LibraryItem>> {
+    if items.is_empty() {
+        return Ok(items);
+    }
+
+    let item_ids = items.iter().map(|item| item.id).collect::<Vec<_>>();
+    let placeholders = std::iter::repeat("?")
+        .take(item_ids.len())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut statement = conn.prepare(&format!(
+        "
+        SELECT it.item_id, t.name
+        FROM tags t
+        JOIN item_tags it ON it.tag_id = t.id
+        WHERE it.item_id IN ({placeholders})
+        ORDER BY it.item_id ASC, t.name ASC
+        "
+    ))?;
+    let rows = statement.query_map(rusqlite::params_from_iter(item_ids), |row| {
+        Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+    })?;
+    let mut tags_by_item_id: std::collections::HashMap<i64, Vec<String>> =
+        std::collections::HashMap::new();
+    for row in rows {
+        let (item_id, tag_name) = row?;
+        tags_by_item_id.entry(item_id).or_default().push(tag_name);
+    }
     for item in &mut items {
-        let mut statement = conn.prepare(
-            "
-            SELECT t.name
-            FROM tags t
-            JOIN item_tags it ON it.tag_id = t.id
-            WHERE it.item_id = ?1
-            ORDER BY t.name ASC
-            ",
-        )?;
-        let rows = statement.query_map([item.id], |row| row.get::<_, String>(0))?;
-        item.tags = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        item.tags = tags_by_item_id.remove(&item.id).unwrap_or_default();
     }
     Ok(items)
 }

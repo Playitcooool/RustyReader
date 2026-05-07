@@ -1470,9 +1470,11 @@ describe("App reading workspace", () => {
   });
 
   it("refreshes the library when the browser connector imports a document", async () => {
+    const refreshStatuses = vi.spyOn(fakeApi, "refreshAttachmentStatuses");
     render(<App api={fakeApi} />);
 
     expect(await screen.findByRole("tree", { name: "Library resources" })).toBeInTheDocument();
+    expect(refreshStatuses).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("treeitem", { name: /External Paper/i })).not.toBeInTheDocument();
 
     const result = await fakeApi.importFiles({
@@ -1491,6 +1493,27 @@ describe("App reading workspace", () => {
 
     expect(await screen.findByRole("treeitem", { name: /External Paper/i })).toBeInTheDocument();
     expect(screen.getByText("Library updated from browser extension.")).toBeInTheDocument();
+    expect(refreshStatuses).toHaveBeenCalledTimes(1);
+  });
+
+  it("focuses the existing collection when the browser connector reports a duplicate", async () => {
+    render(<App api={fakeApi} />);
+
+    expect(await screen.findByRole("tree", { name: "Library resources" })).toBeInTheDocument();
+    emitFakeLibraryChanged({
+      source: "connector",
+      collection_id: 1,
+      imported_count: 0,
+      duplicate_count: 1,
+      failed_count: 0,
+      imported_item_ids: [],
+      duplicate_item_ids: [3],
+    });
+
+    expect(await screen.findByText("Browser extension found this item already exists in the library.")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole("treeitem", { name: "Systems" })).toHaveClass("resource-tree-row-active");
+    });
   });
 
   it("filters the resource tree from the sidebar search", async () => {

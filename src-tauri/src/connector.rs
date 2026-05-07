@@ -5,6 +5,7 @@ use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
     thread,
+    time::Duration,
 };
 
 use app_core::service::{ImportBatchResult, ImportMode, LibraryService};
@@ -14,6 +15,8 @@ use tauri::{AppHandle, Emitter};
 
 pub(crate) const CONNECTOR_PORT: u16 = 17654;
 pub(crate) const CONNECTOR_URL: &str = "http://127.0.0.1:17654";
+const SOCKET_TIMEOUT: Duration = Duration::from_secs(15);
+const MAX_REQUEST_BODY_BYTES: usize = 80 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct ConnectorRuntimeSettings {
@@ -142,6 +145,8 @@ fn handle_connection(
     service: Arc<LibraryService>,
     app_handle: AppHandle,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    stream.set_read_timeout(Some(SOCKET_TIMEOUT))?;
+    stream.set_write_timeout(Some(SOCKET_TIMEOUT))?;
     let mut reader = BufReader::new(stream.try_clone()?);
     let mut request_line = String::new();
     reader.read_line(&mut request_line)?;
@@ -166,12 +171,19 @@ fn handle_connection(
         .get("content-length")
         .and_then(|value| value.parse::<usize>().ok())
         .unwrap_or(0);
+    if content_length > MAX_REQUEST_BODY_BYTES {
+        let response = json_response(413, error_body("request body too large"))
+            .with_cors_origin(cors_origin(&headers));
+        stream.write_all(&response.into_bytes())?;
+        return Ok(());
+    }
     let mut body = vec![0_u8; content_length];
     if content_length > 0 {
         reader.read_exact(&mut body)?;
     }
 
-    let response = route_request_with_app(method, path, &headers, &body, &service, Some(&app_handle));
+    let response =
+        route_request_with_app(method, path, &headers, &body, &service, Some(&app_handle));
     stream.write_all(&response.into_bytes())?;
     Ok(())
 }
@@ -195,6 +207,11 @@ fn route_request_with_app(
     app_handle: Option<&AppHandle>,
 ) -> HttpResponse {
     let cors_origin = cors_origin(headers);
+
+    if body.len() > MAX_REQUEST_BODY_BYTES {
+        return json_response(413, error_body("request body too large"))
+            .with_cors_origin(cors_origin);
+    }
 
     if method == "GET" && path == "/v1/health" {
         return json_response(200, health_body()).with_cors_origin(cors_origin);
@@ -267,7 +284,11 @@ fn cors_origin(headers: &HashMap<String, String>) -> Option<String> {
     }
 }
 
-fn import_path(body: &[u8], service: &LibraryService, app_handle: Option<&AppHandle>) -> HttpResponse {
+fn import_path(
+    body: &[u8],
+    service: &LibraryService,
+    app_handle: Option<&AppHandle>,
+) -> HttpResponse {
     let input = match serde_json::from_slice::<ImportPathRequest>(body) {
         Ok(input) => input,
         Err(error) => return json_response(400, error_body(error.to_string())),
@@ -320,7 +341,11 @@ fn import_markdown(
     }
 }
 
-fn import_file(body: &[u8], service: &LibraryService, app_handle: Option<&AppHandle>) -> HttpResponse {
+fn import_file(
+    body: &[u8],
+    service: &LibraryService,
+    app_handle: Option<&AppHandle>,
+) -> HttpResponse {
     let input = match serde_json::from_slice::<ImportFileRequest>(body) {
         Ok(input) => input,
         Err(error) => return json_response(400, error_body(error.to_string())),
@@ -408,6 +433,7 @@ impl HttpResponse {
             200 => "OK",
             400 => "Bad Request",
             401 => "Unauthorized",
+            413 => "Payload Too Large",
             404 => "Not Found",
             _ => "Internal Server Error",
         };
@@ -459,7 +485,7 @@ mod tests {
     use serde_json::Value;
     use tempfile::tempdir;
 
-    use super::{health_body, route_request};
+    use super::{health_body, route_request, MAX_REQUEST_BODY_BYTES};
 
     #[test]
     fn health_body_advertises_connector_capabilities() {
@@ -570,6 +596,20 @@ mod tests {
         );
 
         assert_eq!(response.status, 200);
+        assert_eq!(response.cors_origin.as_deref(), Some("*"));
+    }
+
+    #[test]
+    fn oversized_request_body_is_rejected_before_routing() {
+        let root = tempdir().unwrap();
+        let service = LibraryService::new(root.path()).unwrap();
+        let headers = HashMap::new();
+        let body = vec![b'x'; MAX_REQUEST_BODY_BYTES + 1];
+
+        let response = route_request("POST", "/v1/import-file", &headers, &body, &service);
+
+        assert_eq!(response.status, 413);
+        assert!(response.body.contains("request body too large"));
         assert_eq!(response.cors_origin.as_deref(), Some("*"));
     }
 

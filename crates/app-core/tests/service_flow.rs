@@ -340,7 +340,10 @@ fn uploaded_file_rejects_empty_content_and_missing_collection() {
     let collection = service.create_collection("Uploads", None).unwrap();
 
     let empty = service.import_file_bytes(collection.id, "empty.pdf", Vec::new(), "empty.pdf");
-    assert!(empty.unwrap_err().to_string().contains("content must not be empty"));
+    assert!(empty
+        .unwrap_err()
+        .to_string()
+        .contains("content must not be empty"));
 
     let missing = service.import_file_bytes(9999, "paper.pdf", b"%PDF".to_vec(), "paper.pdf");
     assert!(missing
@@ -1069,6 +1072,62 @@ fn removing_item_prunes_cascaded_records_and_session_scope_item_ids() {
         .unwrap()
         .expect("session artifact");
     assert_eq!(artifact.scope_item_ids, Some(vec![item_b]));
+}
+
+#[test]
+fn list_and_search_items_hydrate_tags_for_multiple_items() {
+    let root = tempdir().unwrap();
+    let service = service_with_transport(root.path(), Arc::new(StubTransport::default()));
+    let collection = service.create_collection("Inbox", None).unwrap();
+    let pdf_a = fixture_path(root.path(), "tagged-a.pdf");
+    let pdf_b = fixture_path(root.path(), "tagged-b.pdf");
+    write_pdf_fixture(&pdf_a);
+    write_partial_pdf_fixture(&pdf_b);
+
+    let result = service
+        .import_files(collection.id, &[pdf_a, pdf_b], ImportMode::ManagedCopy)
+        .unwrap();
+    let first_tag = service.create_tag("alpha").unwrap();
+    let second_tag = service.create_tag("beta").unwrap();
+    service
+        .assign_tag(result.imported[0].id, first_tag.id)
+        .unwrap();
+    service
+        .assign_tag(result.imported[0].id, second_tag.id)
+        .unwrap();
+    service
+        .assign_tag(result.imported[1].id, second_tag.id)
+        .unwrap();
+
+    let listed = service.list_items(Some(collection.id)).unwrap();
+    let listed_first = listed
+        .iter()
+        .find(|item| item.id == result.imported[0].id)
+        .unwrap();
+    let listed_second = listed
+        .iter()
+        .find(|item| item.id == result.imported[1].id)
+        .unwrap();
+    assert_eq!(
+        listed_first.tags,
+        vec!["alpha".to_string(), "beta".to_string()]
+    );
+    assert_eq!(listed_second.tags, vec!["beta".to_string()]);
+
+    let searched = service.search_items("reader team").unwrap();
+    let searched_first = searched
+        .iter()
+        .find(|item| item.id == result.imported[0].id)
+        .unwrap();
+    let searched_second = searched
+        .iter()
+        .find(|item| item.id == result.imported[1].id)
+        .unwrap();
+    assert_eq!(
+        searched_first.tags,
+        vec!["alpha".to_string(), "beta".to_string()]
+    );
+    assert_eq!(searched_second.tags, vec!["beta".to_string()]);
 }
 
 #[test]
