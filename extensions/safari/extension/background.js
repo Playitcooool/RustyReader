@@ -61,7 +61,6 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
 async function getConfig() {
   const [synced, local] = await Promise.all([
     api.storage.sync.get([
-      STORAGE_KEYS.connectorUrl,
       STORAGE_KEYS.connectorToken,
       STORAGE_KEYS.lastCollectionId
     ]),
@@ -78,7 +77,6 @@ async function getConfig() {
   }
 
   return {
-    connectorUrl: synced[STORAGE_KEYS.connectorUrl] || DEFAULT_CONNECTOR_URL,
     connectorToken: localToken || legacySyncToken,
     lastCollectionId: synced[STORAGE_KEYS.lastCollectionId] ?? null
   };
@@ -86,7 +84,6 @@ async function getConfig() {
 
 async function saveConfig(payload) {
   await api.storage.sync.set({
-    [STORAGE_KEYS.connectorUrl]: payload.connectorUrl?.trim() || DEFAULT_CONNECTOR_URL,
     [STORAGE_KEYS.lastCollectionId]: payload.lastCollectionId ?? null
   });
   await api.storage.sync.remove(STORAGE_KEYS.connectorToken);
@@ -99,7 +96,7 @@ async function getState() {
 
 async function loadCollections() {
   const config = await getConfig();
-  const collections = await fetchCollections(config.connectorUrl, config.connectorToken);
+  const collections = await fetchCollections(DEFAULT_CONNECTOR_URL, config.connectorToken);
   return {
     collections,
     config
@@ -158,7 +155,7 @@ async function importCandidate(payload, tabId) {
   downloadJobs.set(download.downloadId, job);
 
   try {
-    const result = await importPath(config.connectorUrl, config.connectorToken, {
+    const result = await importPath(DEFAULT_CONNECTOR_URL, config.connectorToken, {
       collection_id: payload.collectionId,
       path: download.localPath,
       source_url: payload.candidate.url,
@@ -195,7 +192,7 @@ async function importFileCandidate(payload, config, tabId) {
   try {
     const fetched = await fetchCandidateBytes(payload.candidate.url);
     const filename = candidateFilename(payload.candidate.url, payload.candidate.title, payload.candidate.fileType);
-    const result = await importFile(config.connectorUrl, config.connectorToken, {
+    const result = await importFile(DEFAULT_CONNECTOR_URL, config.connectorToken, {
       collection_id: payload.collectionId,
       filename,
       content_base64: arrayBufferToBase64(fetched.bytes),
@@ -222,7 +219,7 @@ async function importFileCandidate(payload, config, tabId) {
 }
 
 async function importHtmlCandidate(payload, config, tabId) {
-  const result = await importMarkdown(config.connectorUrl, config.connectorToken, {
+  const result = await importMarkdown(DEFAULT_CONNECTOR_URL, config.connectorToken, {
     collection_id: payload.collectionId,
     title: payload.candidate.title,
     markdown: payload.candidate.markdown,

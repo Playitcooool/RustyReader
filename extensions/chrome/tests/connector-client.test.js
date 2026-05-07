@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { discoverConnectorUrl, importFile, importMarkdown, importPath } from "../extension/shared/connector-client.js";
+import { discoverConnectorUrl, fetchCollections, importFile, importMarkdown, importPath } from "../extension/shared/connector-client.js";
 
 test("importPath calls import-path endpoint", async () => {
   const calls = [];
@@ -27,6 +27,32 @@ test("importPath keeps bearer token compatibility", async () => {
   await importPath("http://127.0.0.1:17654", "token", { collection_id: 1, path: "/tmp/a.pdf" });
 
   assert.equal(calls[0].options.headers.Authorization, "Bearer token");
+});
+
+test("collections use default connector URL when none is provided", async () => {
+  const calls = [];
+  global.fetch = async (url, options) => {
+    calls.push({ url, options });
+    return new Response(JSON.stringify([]), { status: 200 });
+  };
+
+  await fetchCollections();
+
+  assert.equal(calls[0].url, "http://127.0.0.1:17654/v1/collections");
+  assert.equal(calls[0].options.headers.Authorization, undefined);
+});
+
+test("importPath uses default connector URL when called with only payload", async () => {
+  const calls = [];
+  global.fetch = async (url, options) => {
+    calls.push({ url, options });
+    return new Response(JSON.stringify({ imported: [], duplicates: [], failed: [], results: [] }), { status: 200 });
+  };
+
+  await importPath({ collection_id: 1, path: "/tmp/a.pdf" });
+
+  assert.equal(calls[0].url, "http://127.0.0.1:17654/v1/import-path");
+  assert.equal(JSON.parse(calls[0].options.body).path, "/tmp/a.pdf");
 });
 
 test("importMarkdown calls import-markdown endpoint", async () => {

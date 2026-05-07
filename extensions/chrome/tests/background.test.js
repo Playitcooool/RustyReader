@@ -180,12 +180,17 @@ test("background no longer blocks collection load or import on connector token",
   const testDir = dirname(fileURLToPath(import.meta.url));
   const source = readFileSync(join(testDir, "../extension/background.js"), "utf8");
   const saveConfig = extractFunctionSource(source, "saveConfig");
+  const getConfig = extractFunctionSource(source, "getConfig");
 
   assert.doesNotMatch(source, /Connector token is required/);
-  assert.match(source, /fetchCollections\(config\.connectorUrl, config\.connectorToken\)/);
-  assert.match(source, /importPath\(config\.connectorUrl, config\.connectorToken,/);
+  assert.match(source, /fetchCollections\(DEFAULT_CONNECTOR_URL, config\.connectorToken\)/);
+  assert.match(source, /importPath\(DEFAULT_CONNECTOR_URL, config\.connectorToken,/);
+  assert.match(source, /importFile\(DEFAULT_CONNECTOR_URL, config\.connectorToken,/);
+  assert.match(source, /importMarkdown\(DEFAULT_CONNECTOR_URL, config\.connectorToken,/);
   assert.match(saveConfig, /api\.storage\.sync\.remove\(STORAGE_KEYS\.connectorToken\)/);
   assert.doesNotMatch(saveConfig, /api\.storage\.local\.set/);
+  assert.doesNotMatch(getConfig, /STORAGE_KEYS\.connectorUrl/);
+  assert.doesNotMatch(saveConfig, /STORAGE_KEYS\.connectorUrl/);
 });
 
 test("Safari upload filenames preserve detected file type", () => {

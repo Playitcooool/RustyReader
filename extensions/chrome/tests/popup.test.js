@@ -19,13 +19,16 @@ function extractFunctionSource(source, functionName) {
   throw new Error(`Could not extract ${functionName}`);
 }
 
-test("popup exposes retry, rescan, and collapsible connector settings", () => {
+test("popup exposes retry and rescan without connector settings", () => {
   const html = readFileSync(join(testDir, "../extension/popup/popup.html"), "utf8");
 
-  assert.match(html, /id="toggleConfigButton"/);
   assert.match(html, /id="retryButton"/);
   assert.match(html, /id="rescanButton"/);
-  assert.match(html, /config-card is-collapsed/);
+  assert.doesNotMatch(html, /id="toggleConfigButton"/);
+  assert.doesNotMatch(html, /config-card/);
+  assert.doesNotMatch(html, /id="connectorUrl"/);
+  assert.doesNotMatch(html, /Save<\/button>/);
+  assert.doesNotMatch(html, /Check<\/button>/);
 });
 
 test("popup does not expose connector token setup", () => {
@@ -56,10 +59,13 @@ test("popup discovers connector and requests import capabilities", () => {
   assert.match(source, /Download then import/);
 });
 
-test("popup persists discovered connector URL before background calls", () => {
+test("popup discovers default connector before loading collections", () => {
   const source = readFileSync(join(testDir, "../extension/popup/popup.js"), "utf8");
+  const initialize = extractFunctionSource(source, "initialize");
   const discoverConnector = extractFunctionSource(source, "discoverConnector");
 
-  assert.match(discoverConnector, /connectorUrlInput\.value = connectorUrl/);
-  assert.match(discoverConnector, /await saveConfig\(\{ quiet: true \}\)/);
+  assert.match(initialize, /await discoverConnector\(\);\s*await loadCollections\(\);/);
+  assert.match(discoverConnector, /discoverConnectorUrl\(\)/);
+  assert.doesNotMatch(discoverConnector, /saveConfig/);
+  assert.doesNotMatch(source, /connectorUrlInput/);
 });

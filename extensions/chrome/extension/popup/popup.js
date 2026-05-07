@@ -1,9 +1,8 @@
-import { checkHealth, discoverConnectorUrl } from "../shared/connector-client.js";
+import { discoverConnectorUrl } from "../shared/connector-client.js";
 import { buildCollectionTree, collectionLabel, flattenCollectionTree } from "../shared/collections.js";
 
 const api = globalThis.browser || globalThis.chrome;
 
-const connectorUrlInput = document.querySelector("#connectorUrl");
 const collectionSelect = document.querySelector("#collectionSelect");
 const connectionDot = document.querySelector("#connectionDot");
 const connectionTitle = document.querySelector("#connectionTitle");
@@ -15,8 +14,6 @@ const candidateList = document.querySelector("#candidateList");
 const pageContext = document.querySelector("#pageContext");
 const emptyState = document.querySelector("#emptyState");
 const collectionCount = document.querySelector("#collectionCount");
-const configCard = document.querySelector("#configCard");
-const toggleConfigButton = document.querySelector("#toggleConfigButton");
 const retryButton = document.querySelector("#retryButton");
 
 const state = {
@@ -51,7 +48,7 @@ function setResult(title, message, tone = "neutral", { retry = false } = {}) {
 function setBusy(isBusy) {
   state.busy = isBusy;
   for (const button of document.querySelectorAll("button")) {
-    if (button.id !== "toggleConfigButton") button.disabled = isBusy;
+    button.disabled = isBusy;
   }
 }
 
@@ -69,7 +66,6 @@ async function initialize() {
 
   const config = await sendMessage({ type: "paper-reader:get-state" });
   state.config = config;
-  connectorUrlInput.value = config.connectorUrl;
   state.importModeLabel = await detectImportModeLabel();
 
   await discoverConnector();
@@ -82,55 +78,32 @@ async function detectImportModeLabel() {
   return response?.hasDownloads ? "Download then import" : "Upload to Paper Reader";
 }
 
-function expandConfig(expanded) {
-  configCard.classList.toggle("is-collapsed", !expanded);
-  toggleConfigButton.setAttribute("aria-expanded", String(expanded));
-}
-
 async function saveConfig({ quiet = false } = {}) {
   await sendMessage({
     type: "paper-reader:save-config",
     payload: {
-      connectorUrl: connectorUrlInput.value,
       lastCollectionId: Number(collectionSelect.value) || state.config?.lastCollectionId || null
     }
   });
 
   state.config = {
     ...(state.config || {}),
-    connectorUrl: connectorUrlInput.value,
     lastCollectionId: Number(collectionSelect.value) || state.config?.lastCollectionId || null
   };
 
-  if (!quiet) setConnection("Settings saved", "Connector settings were saved.", "success");
+  if (!quiet) setConnection("Destination saved", "Target collection was saved.", "success");
 }
 
 async function discoverConnector() {
   setConnection("Checking Paper Reader", "Looking for the local connector…");
   try {
-    const { connectorUrl, health } = await discoverConnectorUrl(connectorUrlInput.value.trim());
-    connectorUrlInput.value = connectorUrl;
-    state.config = { ...(state.config || {}), connectorUrl };
-    await saveConfig({ quiet: true });
+    const { health } = await discoverConnectorUrl();
     const version = health.connector_version ? ` v${health.connector_version}` : "";
     setConnection("Paper Reader connected", `${health.app_name || "Connector"}${version} is reachable.`, "success");
     return health;
   } catch (error) {
     setConnection("Paper Reader not reachable", error.message, "error");
-    expandConfig(true);
     throw error;
-  }
-}
-
-async function handleHealthCheck() {
-  setBusy(true);
-  try {
-    const response = await checkHealth(connectorUrlInput.value.trim());
-    setConnection("Paper Reader connected", response.ok ? "Connector health check passed." : "Unexpected connector response.", response.ok ? "success" : "error");
-  } catch (error) {
-    setConnection("Connection failed", error.message, "error");
-  } finally {
-    setBusy(false);
   }
 }
 
@@ -280,12 +253,6 @@ async function importCandidate(candidate) {
   }
 }
 
-document.querySelector("#saveConfigButton").addEventListener("click", () => {
-  void saveConfig().then(loadCollections).catch((error) => setConnection("Save failed", error.message, "error"));
-});
-document.querySelector("#checkHealthButton").addEventListener("click", () => {
-  void handleHealthCheck();
-});
 document.querySelector("#refreshButton").addEventListener("click", () => {
   void loadCollections().then(scanPage).catch((error) => setResult("Refresh failed", error.message, "error"));
 });
@@ -299,9 +266,6 @@ retryButton.addEventListener("click", () => {
   if (state.lastImportCandidate) void importCandidate(state.lastImportCandidate);
   else void scanPage();
 });
-toggleConfigButton.addEventListener("click", () => {
-  expandConfig(configCard.classList.contains("is-collapsed"));
-});
 collectionSelect.addEventListener("change", () => {
   state.config = { ...(state.config || {}), lastCollectionId: Number(collectionSelect.value) || null };
   void saveConfig({ quiet: true }).catch((error) => setConnection("Save failed", error.message, "error"));
@@ -309,5 +273,5 @@ collectionSelect.addEventListener("change", () => {
 
 void initialize().catch((error) => {
   setConnection("Setup needed", error.message, "error");
-  setResult("Not ready", "Check the connector settings, then refresh.", "error");
+  setResult("Not ready", "Start or update Paper Reader, then refresh.", "error");
 });

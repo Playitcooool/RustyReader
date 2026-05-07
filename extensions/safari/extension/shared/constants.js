@@ -1,6 +1,5 @@
 export const DEFAULT_CONNECTOR_URL = "http://127.0.0.1:17654";
 export const STORAGE_KEYS = {
-  connectorUrl: "connectorUrl",
   connectorToken: "connectorToken",
   lastCollectionId: "lastCollectionId"
 };

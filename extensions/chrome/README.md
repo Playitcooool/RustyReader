@@ -4,7 +4,7 @@ Chrome MV3 extension for saving PDFs and readable web pages from the current tab
 
 ## What is implemented here
 
-- MV3 extension with popup flow: configure connector, load collections, scan current tab, import a PDF or current web page.
+- MV3 extension with popup flow: load collections from the local connector, scan current tab, import a PDF or current web page.
 - Background service worker that owns downloads, Markdown page snapshots, import requests, duplicate handling, and temp file cleanup.
 - On-demand page scanning via `chrome.scripting.executeScript`, only when the popup flow needs import detection.
 - Right-click `Save to Paper Reader` menu for direct file links, using the last selected collection.
@@ -34,15 +34,12 @@ rtk npm run extension:package
 
 The same command also writes `/Volumes/Samsung/Projects/paper-reader/extensions/chrome/dist/paper-reader-connector-v0.1.0.zip`.
 
-## Configure it
+## Use it
 
 1. Start the Paper Reader desktop connector from `/Volumes/Samsung/Projects/paper-reader`, or run the mock server below.
 2. Click the extension icon.
-3. Enter the connector URL. Default is `http://127.0.0.1:17654`.
-4. Paste the Paper Reader connector token.
-5. Click `Check Connection`, then `Refresh`.
-6. Pick a collection.
-7. The popup scans the current tab automatically after collections load. Use `Scan Page` again if the page changed.
+3. Pick a collection.
+4. The popup scans the current tab automatically after collections load. Use `Scan Page` again if the page changed.
 
 ## Run the mock connector
 

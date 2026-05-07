@@ -132,10 +132,6 @@ h2 {
   background: var(--danger);
 }
 
-.config-card.is-collapsed {
-  display: none;
-}
-
 .field {
   display: grid;
   gap: 6px;

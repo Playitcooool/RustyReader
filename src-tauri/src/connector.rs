@@ -197,6 +197,10 @@ fn authorize(
     headers: &HashMap<String, String>,
     service: &LibraryService,
 ) -> Result<(), HttpResponse> {
+    if !headers.contains_key("origin") {
+        return Ok(());
+    }
+
     if headers
         .get("origin")
         .is_some_and(|origin| is_trusted_browser_extension_origin(origin))
@@ -455,6 +459,47 @@ mod tests {
             response.cors_origin.as_deref(),
             Some("safari-web-extension://com.example.paper-reader")
         );
+    }
+
+    #[test]
+    fn collections_allow_originless_local_requests_without_token() {
+        let root = tempdir().unwrap();
+        let service = LibraryService::new(root.path()).unwrap();
+        service.create_collection("Inbox", None).unwrap();
+        let headers = HashMap::new();
+
+        let response = route_request("GET", "/v1/collections", &headers, &[], &service);
+
+        assert_eq!(response.status, 200);
+        assert_eq!(response.cors_origin.as_deref(), Some("*"));
+        let collections: Vec<Value> = serde_json::from_str(&response.body).unwrap();
+        assert_eq!(collections.len(), 1);
+    }
+
+    #[test]
+    fn import_file_allows_originless_local_requests_without_token() {
+        let root = tempdir().unwrap();
+        let service = LibraryService::new(root.path()).unwrap();
+        let collection = service.create_collection("Inbox", None).unwrap();
+        let headers = HashMap::new();
+        let body = serde_json::json!({
+            "collection_id": collection.id,
+            "filename": "paper.pdf",
+            "content_base64": "JVBERi0xLjQK",
+            "source_url": "https://example.com/paper.pdf"
+        })
+        .to_string();
+
+        let response = route_request(
+            "POST",
+            "/v1/import-file",
+            &headers,
+            body.as_bytes(),
+            &service,
+        );
+
+        assert_eq!(response.status, 200);
+        assert_eq!(response.cors_origin.as_deref(), Some("*"));
     }
 
     #[test]

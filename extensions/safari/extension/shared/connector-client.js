@@ -26,7 +26,7 @@ async function request(baseUrl, path, { token, method = "GET", body, timeoutMs =
     if (error?.name === "AbortError") {
       throw new Error("Paper Reader desktop connector did not respond in time. Confirm Paper Reader is running.");
     }
-    throw new Error("Paper Reader desktop connector is unreachable. Start Paper Reader and confirm the connector URL.");
+    throw new Error("Paper Reader desktop connector is unreachable. Start or update Paper Reader.");
   } finally {
     clearTimeout(timeout);
   }
@@ -93,20 +93,25 @@ export async function discoverConnectorUrl(preferredUrl = DEFAULT_CONNECTOR_URL)
       lastError = error;
     }
   }
-  throw lastError || new Error("Paper Reader desktop connector is unreachable. Start Paper Reader and confirm the connector URL.");
+  throw lastError || new Error("Paper Reader desktop connector is unreachable. Start or update Paper Reader.");
 }
 
-export async function fetchCollections(baseUrl, token) {
+export async function fetchCollections(baseUrl = DEFAULT_CONNECTOR_URL, token) {
   return request(baseUrl, "/v1/collections", { token });
 }
 
-function legacyArgs(tokenOrPayload, maybePayload) {
-  if (maybePayload === undefined) return { token: undefined, payload: tokenOrPayload };
-  return { token: tokenOrPayload, payload: maybePayload };
+function requestArgs(baseUrlOrPayload, tokenOrPayload, maybePayload) {
+  if (typeof baseUrlOrPayload !== "string") {
+    return { baseUrl: DEFAULT_CONNECTOR_URL, token: undefined, payload: baseUrlOrPayload };
+  }
+  if (maybePayload === undefined) {
+    return { baseUrl: baseUrlOrPayload, token: undefined, payload: tokenOrPayload };
+  }
+  return { baseUrl: baseUrlOrPayload, token: tokenOrPayload, payload: maybePayload };
 }
 
-export async function importPath(baseUrl, tokenOrPayload, maybePayload) {
-  const { token, payload } = legacyArgs(tokenOrPayload, maybePayload);
+export async function importPath(baseUrlOrPayload, tokenOrPayload, maybePayload) {
+  const { baseUrl, token, payload } = requestArgs(baseUrlOrPayload, tokenOrPayload, maybePayload);
   return request(baseUrl, "/v1/import-path", {
     method: "POST",
     token,
@@ -114,8 +119,8 @@ export async function importPath(baseUrl, tokenOrPayload, maybePayload) {
   });
 }
 
-export async function importFile(baseUrl, tokenOrPayload, maybePayload) {
-  const { token, payload } = legacyArgs(tokenOrPayload, maybePayload);
+export async function importFile(baseUrlOrPayload, tokenOrPayload, maybePayload) {
+  const { baseUrl, token, payload } = requestArgs(baseUrlOrPayload, tokenOrPayload, maybePayload);
   return request(baseUrl, "/v1/import-file", {
     method: "POST",
     token,
@@ -123,8 +128,8 @@ export async function importFile(baseUrl, tokenOrPayload, maybePayload) {
   });
 }
 
-export async function importMarkdown(baseUrl, tokenOrPayload, maybePayload) {
-  const { token, payload } = legacyArgs(tokenOrPayload, maybePayload);
+export async function importMarkdown(baseUrlOrPayload, tokenOrPayload, maybePayload) {
+  const { baseUrl, token, payload } = requestArgs(baseUrlOrPayload, tokenOrPayload, maybePayload);
   return request(baseUrl, "/v1/import-markdown", {
     method: "POST",
     token,
