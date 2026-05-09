@@ -129,11 +129,7 @@ const MAX_BUNDLE_BATCH: usize = 4;
 const MAX_TEXT_BATCH: usize = 16;
 const SEARCH_CACHE_LIMIT: usize = 8;
 
-fn remember_search_result(
-    cache: &mut PdfEngineCache,
-    key: (i64, String),
-    result: PdfSearchResult,
-) {
+fn remember_search_result(cache: &mut PdfEngineCache, key: (i64, String), result: PdfSearchResult) {
     cache.search_cache_by_query.insert(key.clone(), result);
     cache.search_order.retain(|existing| existing != &key);
     cache.search_order.push_back(key);
@@ -296,7 +292,10 @@ fn document_info_from_document(doc: &OxidePdfDocument) -> Result<PdfDocumentInfo
     Ok(PdfDocumentInfo { page_count, pages })
 }
 
-fn quick_document_info_from_document(doc: &OxidePdfDocument, page_index: usize) -> Result<PdfDocumentInfo, String> {
+fn quick_document_info_from_document(
+    doc: &OxidePdfDocument,
+    page_index: usize,
+) -> Result<PdfDocumentInfo, String> {
     let page_count = doc.page_count().map_err(|error| error.to_string())?;
     if page_count == 0 {
         return Ok(PdfDocumentInfo {
@@ -513,7 +512,8 @@ pub(crate) async fn pdf_engine_get_initial_page_bundle(
                 .get(&(input.primary_attachment_id, input.page_index0))
                 .cloned()
         };
-        let bundle = render_page_bundle_from_document(&mut doc, page_index, bucketed_width, cached_spans)?;
+        let bundle =
+            render_page_bundle_from_document(&mut doc, page_index, bucketed_width, cached_spans)?;
 
         let mut cache = pdf_cache
             .lock()
@@ -601,7 +601,12 @@ pub(crate) async fn pdf_engine_get_page_bundle(
         } else {
             spans_from_document(&doc, page_index)?
         };
-        let bundle = render_page_bundle_from_document(&mut doc, page_index, bucketed_width, Some(spans.clone()))?;
+        let bundle = render_page_bundle_from_document(
+            &mut doc,
+            page_index,
+            bucketed_width,
+            Some(spans.clone()),
+        )?;
 
         let mut cache = pdf_cache
             .lock()
@@ -648,7 +653,11 @@ pub(crate) async fn pdf_engine_get_page_bundles_batch(
             .lock()
             .map_err(|_| "pdf cache poisoned".to_string())?;
         unique.iter().all(|page_index0| {
-            cache.bundle_by_key.contains_key(&(input.primary_attachment_id, *page_index0, bucketed_width))
+            cache.bundle_by_key.contains_key(&(
+                input.primary_attachment_id,
+                *page_index0,
+                bucketed_width,
+            ))
         })
     };
     if cached_all {
@@ -658,8 +667,10 @@ pub(crate) async fn pdf_engine_get_page_bundles_batch(
             .map_err(|_| "pdf cache poisoned".to_string())?;
         let mut by_page: HashMap<i64, PdfPageBundle> = HashMap::new();
         for page_index0 in &unique {
-            if let Some(bundle) =
-                cache.bundle_by_key.get(&(input.primary_attachment_id, *page_index0, bucketed_width)).cloned()
+            if let Some(bundle) = cache
+                .bundle_by_key
+                .get(&(input.primary_attachment_id, *page_index0, bucketed_width))
+                .cloned()
             {
                 by_page.insert(*page_index0, bundle);
             }
@@ -693,7 +704,11 @@ pub(crate) async fn pdf_engine_get_page_bundles_batch(
                 .iter()
                 .copied()
                 .filter(|page_index0| {
-                    !cache.bundle_by_key.contains_key(&(input.primary_attachment_id, *page_index0, bucketed_width))
+                    !cache.bundle_by_key.contains_key(&(
+                        input.primary_attachment_id,
+                        *page_index0,
+                        bucketed_width,
+                    ))
                 })
                 .collect()
         };
@@ -758,7 +773,11 @@ pub(crate) async fn pdf_engine_get_page_bundles_batch(
                 let mut cache = pdf_cache
                     .lock()
                     .map_err(|_| "pdf cache poisoned".to_string())?;
-                remember_text_spans(&mut cache, (input.primary_attachment_id, *page_index0), spans);
+                remember_text_spans(
+                    &mut cache,
+                    (input.primary_attachment_id, *page_index0),
+                    spans,
+                );
                 remember_page_bundle(
                     &mut cache,
                     (input.primary_attachment_id, *page_index0, bucketed_width),
@@ -773,8 +792,10 @@ pub(crate) async fn pdf_engine_get_page_bundles_batch(
             .map_err(|_| "pdf cache poisoned".to_string())?;
         let mut by_page: HashMap<i64, PdfPageBundle> = HashMap::new();
         for page_index0 in &unique {
-            if let Some(bundle) =
-                cache.bundle_by_key.get(&(input.primary_attachment_id, *page_index0, bucketed_width)).cloned()
+            if let Some(bundle) = cache
+                .bundle_by_key
+                .get(&(input.primary_attachment_id, *page_index0, bucketed_width))
+                .cloned()
             {
                 by_page.insert(*page_index0, bundle);
             }
@@ -832,7 +853,11 @@ pub(crate) async fn pdf_engine_get_page_texts_batch(
                 let mut cache = pdf_cache
                     .lock()
                     .map_err(|_| "pdf cache poisoned".to_string())?;
-                remember_text_spans(&mut cache, (input.primary_attachment_id, *page_index0), spans);
+                remember_text_spans(
+                    &mut cache,
+                    (input.primary_attachment_id, *page_index0),
+                    spans,
+                );
             }
         }
 
@@ -921,7 +946,12 @@ pub(crate) async fn pdf_engine_search(
                 }
             };
             let remaining = max_matches.saturating_sub(matches.len());
-            matches.extend(collect_search_matches_for_page(page_index0, &spans, &q, remaining));
+            matches.extend(collect_search_matches_for_page(
+                page_index0,
+                &spans,
+                &q,
+                remaining,
+            ));
             if matches.len() >= max_matches {
                 break;
             }
@@ -1081,7 +1111,11 @@ mod tests {
             .collect::<Vec<_>>();
 
         for page_index0 in 0..page_count {
-            remember_text_spans(&mut cache, (9, page_index0 as i64), pages[page_index0].clone());
+            remember_text_spans(
+                &mut cache,
+                (9, page_index0 as i64),
+                pages[page_index0].clone(),
+            );
         }
         assert!(!cache.text_spans_by_page.contains_key(&(9, 0)));
 

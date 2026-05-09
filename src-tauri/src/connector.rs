@@ -188,6 +188,7 @@ fn handle_connection(
     Ok(())
 }
 
+#[cfg(test)]
 fn route_request(
     method: &str,
     path: &str,

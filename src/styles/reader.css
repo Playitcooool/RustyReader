@@ -5,6 +5,13 @@
   padding: 14px 18px 0;
 }
 
+.reader-shell-workspace .reader-tabs {
+  flex-wrap: nowrap;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+}
+
 .reader-tab,
 .ai-tab {
   padding: 10px 13px;
@@ -16,17 +23,36 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
   padding: 3px;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.04);
 }
 
+.reader-shell-workspace .reader-tab-shell {
+  flex: 1 1 168px;
+  max-width: 260px;
+}
+
+.reader-shell-workspace .reader-ai-toggle {
+  flex: 0 0 auto;
+}
+
 .reader-tab {
   background: transparent;
   white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reader-shell-workspace .reader-tab {
+  flex: 1 1 auto;
+  text-align: left;
 }
 
 .tab-close-button {
+  flex: 0 0 auto;
   width: 26px;
   height: 26px;
   border-radius: 9px;
