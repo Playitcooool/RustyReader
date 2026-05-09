@@ -3925,14 +3925,13 @@ fn build_session_prompt(
             "session.compare" => {
                 "# Comparison\n\n## Comparison Matrix\n- ...\n\n## Method Notes\n..."
             }
-            "session.review_draft" => {
-                "# Review Draft\n\n## Evidence Map\n- ...\n\n## Narrative\n..."
-            }
+            "session.review_draft" => literature_review_template("session"),
             "session.ask" => "...",
             _ => return Err(anyhow!("unsupported session task kind")),
         };
         return Ok(format!(
-            "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nPreserve the heading and section style shown below.\nCite evidence for key claims, comparisons, and synthesis using the provided bracket ids like [E23]. Use only the evidence chunks below.\n\nTask kind: {kind}\n{}\n\nEvidence chunks:\n\n{}\n{}",
+            "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nPreserve the heading and section style shown below.\nCite evidence for key claims, comparisons, and synthesis using the provided bracket ids like [E23]. Use only the evidence chunks below.\n{}\n\nTask kind: {kind}\n{}\n\nEvidence chunks:\n\n{}\n{}",
+            review_draft_rules(kind),
             task_instructions,
             evidence,
             if kind == "session.ask" {
@@ -4016,7 +4015,7 @@ fn build_session_prompt(
         }
         "session.theme_map" => "# Theme Map\n\n## Themes\n- ...\n\n## Theme Clusters\n...",
         "session.compare" => "# Comparison\n\n## Comparison Matrix\n- ...\n\n## Method Notes\n...",
-        "session.review_draft" => "# Review Draft\n\n## Evidence Map\n- ...\n\n## Narrative\n...",
+        "session.review_draft" => literature_review_template("session"),
         "session.ask" => "...",
         _ => return Err(anyhow!("unsupported session task kind")),
     };
@@ -4029,7 +4028,8 @@ fn build_session_prompt(
         String::new()
     };
     Ok(format!(
-        "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nPreserve the heading and section style shown below.\n\nTask kind: {kind}\n{}\n\nUse only this extracted evidence in the exact paper order provided:\n\n{}\n{}",
+        "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nPreserve the heading and section style shown below.\n{}\n\nTask kind: {kind}\n{}\n\nUse only this extracted evidence in the exact paper order provided:\n\n{}\n{}",
+        review_draft_rules(kind),
         task_instructions,
         sections.join("\n\n"),
         prompt_suffix
@@ -4049,11 +4049,12 @@ fn build_single_session_prompt(
         "session.ask" => "...",
         "session.compare" => return Err(anyhow!("compare requires at least 2 unique papers")),
         "session.theme_map" => "# Theme Map: {title}\n\n## Themes\n- ...\n\n## Theme Clusters\n...",
-        "session.review_draft" => "# Review Draft: {title}\n\n## Evidence Map\n- ...\n\n## Narrative\n...",
+        "session.review_draft" => literature_review_template("{title}"),
         _ => return Err(anyhow!("unsupported session task kind")),
     };
     Ok(format!(
-        "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nPreserve the heading and section style shown below.\n\nTarget title: {title}\nCollection: {collection_name}\nTask kind: {kind}\n{}\n\nUse only this extracted paper text:\n\"\"\"\n{}\n\"\"\"\n{}",
+        "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nPreserve the heading and section style shown below.\n{}\n\nTarget title: {title}\nCollection: {collection_name}\nTask kind: {kind}\n{}\n\nUse only this extracted paper text:\n\"\"\"\n{}\n\"\"\"\n{}",
+        review_draft_rules(kind),
         task_instructions
             .replace("{title}", title)
             .replace("{collection}", collection_name),
@@ -4115,6 +4116,22 @@ fn evidence_context(chunks: &[EvidenceChunk]) -> String {
         .join("\n\n")
 }
 
+fn literature_review_template(target: &str) -> &'static str {
+    match target {
+        "{title}" => "# Literature Review: {title}\n\n## Research Problem and Scope\n- ...\n\n## Main Themes\n- ...\n\n## Method and Evidence Comparison\n- ...\n\n## Agreements, Tensions, and Gaps\n- ...\n\n## Suggested Review Narrative\n...\n\n## Open Questions\n- ...",
+        "{collection}" => "# Literature Review: {collection}\n\n## Research Problem and Scope\n- ...\n\n## Main Themes\n- ...\n\n## Method and Evidence Comparison\n- ...\n\n## Agreements, Tensions, and Gaps\n- ...\n\n## Suggested Review Narrative\n...\n\n## Open Questions\n- ...",
+        _ => "# Literature Review: session\n\n## Research Problem and Scope\n- ...\n\n## Main Themes\n- ...\n\n## Method and Evidence Comparison\n- ...\n\n## Agreements, Tensions, and Gaps\n- ...\n\n## Suggested Review Narrative\n...\n\n## Open Questions\n- ...",
+    }
+}
+
+fn review_draft_rules(kind: &str) -> &'static str {
+    if kind.ends_with("review_draft") {
+        "For review drafts: write an academic literature review, not a generic summary. Use only the retrieved evidence. Every key judgment, comparison, and gap analysis must cite evidence with [E{id}] when evidence ids are available. Do not invent papers, methods, datasets, results, or conclusions. If the evidence does not establish a point, write \"not established by retrieved evidence\"."
+    } else {
+        ""
+    }
+}
+
 fn build_collection_prompt(
     conn: &Connection,
     collection_id: i64,
@@ -4135,12 +4152,13 @@ fn build_collection_prompt(
             "collection.bulk_summarize" => "# Bulk Summary: {collection}\n\n## Paper Capsules\n- ...\n\n## Synthesis\n...",
             "collection.theme_map" => "# Theme Map: {collection}\n\n## Themes\n- ...\n\n## Theme Clusters\n...",
             "collection.compare_methods" => "# Method Comparison: {collection}\n\n## Comparison Matrix\n- ...\n\n## Method Notes\n...",
-            "collection.review_draft" => "# Review Draft: {collection}\n\n## Evidence Map\n- ...\n\n## Narrative\n...",
+            "collection.review_draft" => literature_review_template("{collection}"),
             "collection.ask" => "...",
             _ => return Err(anyhow!("unsupported collection task kind")),
         };
         return Ok(format!(
-            "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nPreserve the heading and section style shown below.\nCite evidence for key claims, comparisons, and synthesis using the provided bracket ids like [E23]. Use only the evidence chunks below.\n\nCollection: {collection_name}\nTask kind: {kind}\n{}\n\nEvidence chunks:\n\n{}\n{}",
+            "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nPreserve the heading and section style shown below.\nCite evidence for key claims, comparisons, and synthesis using the provided bracket ids like [E23]. Use only the evidence chunks below.\n{}\n\nCollection: {collection_name}\nTask kind: {kind}\n{}\n\nEvidence chunks:\n\n{}\n{}",
+            review_draft_rules(kind),
             task_instructions.replace("{collection}", collection_name),
             evidence_context(&chunks),
             if kind == "collection.ask" {
@@ -4187,7 +4205,7 @@ fn build_collection_prompt(
         "collection.bulk_summarize" => "# Bulk Summary: {collection}\n\n## Paper Capsules\n- ...\n\n## Synthesis\n...",
         "collection.theme_map" => "# Theme Map: {collection}\n\n## Themes\n- ...\n\n## Theme Clusters\n...",
         "collection.compare_methods" => "# Method Comparison: {collection}\n\n## Comparison Matrix\n- ...\n\n## Method Notes\n...",
-        "collection.review_draft" => "# Review Draft: {collection}\n\n## Evidence Map\n- ...\n\n## Narrative\n...",
+        "collection.review_draft" => literature_review_template("{collection}"),
         "collection.ask" => "...",
         _ => return Err(anyhow!("unsupported collection task kind")),
     };
@@ -4200,7 +4218,8 @@ fn build_collection_prompt(
         String::new()
     };
     Ok(format!(
-        "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nPreserve the heading and section style shown below.\n\nCollection: {collection_name}\nTask kind: {kind}\n{}\n\nUse only this extracted collection evidence in the exact item order provided:\n\n{}\n{}",
+        "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nPreserve the heading and section style shown below.\n{}\n\nCollection: {collection_name}\nTask kind: {kind}\n{}\n\nUse only this extracted collection evidence in the exact item order provided:\n\n{}\n{}",
+        review_draft_rules(kind),
         task_instructions.replace("{collection}", collection_name),
         sections.join("\n\n"),
         prompt_suffix

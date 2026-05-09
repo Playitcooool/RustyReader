@@ -245,6 +245,66 @@ fn starts_with_an_empty_library() {
 }
 
 #[test]
+fn review_draft_prompts_use_literature_review_template_and_evidence_rules() {
+    let root = tempdir().unwrap();
+    let transport = Arc::new(StubTransport::default());
+    let service = service_with_transport(root.path(), transport.clone());
+    let collection = service.create_collection("Scaling", None).unwrap();
+    let pdf = fixture_path(root.path(), "scaling.pdf");
+    write_pdf_fixture(&pdf);
+    let result = service
+        .import_files(collection.id, &[pdf], ImportMode::ManagedCopy)
+        .unwrap();
+    let item_id = result.imported[0].id;
+    let session = service.create_ai_session().unwrap();
+    service
+        .add_ai_session_reference(session.id, AISessionReferenceKind::Item, item_id)
+        .unwrap();
+    service
+        .update_ai_settings(UpdateAISettingsInput {
+            active_provider: AIProvider::OpenAI,
+            openai_model: "gpt-4.1-mini".into(),
+            openai_base_url: "".into(),
+            openai_api_key: Some("openai-secret".into()),
+            clear_openai_api_key: None,
+            anthropic_model: "".into(),
+            anthropic_base_url: "".into(),
+            anthropic_api_key: None,
+            clear_anthropic_api_key: None,
+            translation_provider: TranslationProvider::OpenAI,
+            translation_openai_model: "".into(),
+            translation_anthropic_model: "".into(),
+            translation_target_lang: "ZH-HANS".into(),
+            deepl_base_url: "https://api-free.deepl.com".into(),
+            deepl_api_key: None,
+            clear_deepl_api_key: None,
+        })
+        .unwrap();
+
+    service
+        .run_ai_session_task(session.id, "session.review_draft", None)
+        .unwrap();
+    service
+        .run_collection_task(collection.id, "collection.review_draft", &[item_id], None)
+        .unwrap();
+
+    let requests = transport.requests.lock().unwrap();
+    assert_eq!(requests.len(), 2);
+    for prompt in requests.iter().map(|request| &request.prompt) {
+        assert!(prompt.contains("# Literature Review:"));
+        assert!(prompt.contains("## Research Problem and Scope"));
+        assert!(prompt.contains("## Main Themes"));
+        assert!(prompt.contains("## Method and Evidence Comparison"));
+        assert!(prompt.contains("## Agreements, Tensions, and Gaps"));
+        assert!(prompt.contains("## Suggested Review Narrative"));
+        assert!(prompt.contains("## Open Questions"));
+        assert!(prompt.contains("Every key judgment, comparison, and gap analysis must cite evidence with [E{id}]"));
+        assert!(prompt.contains("Use only the evidence chunks below"));
+        assert!(prompt.contains("not established by retrieved evidence"));
+    }
+}
+
+#[test]
 fn new_returns_error_when_root_is_not_a_directory() {
     let root = tempdir().unwrap();
     let blocked_root = root.path().join("library-root-file");

@@ -373,6 +373,81 @@ describe("App reading workspace", () => {
     );
   });
 
+  it("opens Copilot with the current paper on Ctrl+J without a selection", async () => {
+    const user = userEvent.setup();
+    render(<App api={fakeApi} />);
+
+    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    fireEvent.keyDown(window, { key: "j", ctrlKey: true });
+
+    expect(await screen.findByLabelText("AI panel")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Remove Transformer Scaling Laws/i })).toBeInTheDocument();
+    });
+  });
+
+  it("opens Copilot with PDF selection context on Ctrl+J", async () => {
+    const user = userEvent.setup();
+    render(<App api={fakeApi} />);
+
+    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(screen.getByRole("button", { name: "Mock select PDF text" }));
+    fireEvent.keyDown(window, { key: "j", ctrlKey: true });
+
+    const prompt = await screen.findByRole("textbox", { name: "AI prompt" });
+    await waitFor(() => {
+      expect(prompt).toHaveValue("> Hello\n\nSource: Transformer Scaling Laws, p. 1\n\nQuestion: ");
+      expect(prompt).toHaveFocus();
+    });
+  });
+
+  it("ignores Ctrl+J inside editable elements", async () => {
+    const user = userEvent.setup();
+    render(<App api={fakeApi} />);
+
+    await user.click(await screen.findByRole("button", { name: "New folder" }));
+    const input = await screen.findByRole("textbox", { name: "New collection name" });
+    input.focus();
+    fireEvent.keyDown(input, { key: "j", ctrlKey: true });
+
+    expect(screen.queryByLabelText("AI panel")).not.toBeInTheDocument();
+  });
+
+  it("asks with selection by opening Copilot, adding the paper reference, and focusing the composer", async () => {
+    const user = userEvent.setup();
+    const addReferenceSpy = vi.spyOn(fakeApi, "addAiSessionReference");
+    render(<App api={fakeApi} />);
+
+    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(screen.getByRole("button", { name: "Mock select PDF text" }));
+    fireEvent.contextMenu(screen.getByTestId("pdf-reader"), { clientX: 140, clientY: 150 });
+    await user.click(screen.getByRole("menuitem", { name: "Ask with Selection" }));
+
+    const prompt = await screen.findByRole("textbox", { name: "AI prompt" });
+    await waitFor(() => {
+      expect(addReferenceSpy).toHaveBeenCalledWith({ session_id: 910, kind: "item", target_id: 1 });
+      expect(prompt).toHaveValue("> Hello\n\nSource: Transformer Scaling Laws, p. 1\n\nQuestion: ");
+      expect(prompt).toHaveFocus();
+    });
+  });
+
+  it("adds a highlight to the session without duplicating the paper reference", async () => {
+    const user = userEvent.setup();
+    const addReferenceSpy = vi.spyOn(fakeApi, "addAiSessionReference");
+    render(<App api={fakeApi} />);
+
+    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(screen.getByRole("button", { name: "Mock select PDF text" }));
+    fireEvent.contextMenu(screen.getByTestId("pdf-reader"), { clientX: 140, clientY: 150 });
+    await user.click(screen.getByRole("menuitem", { name: "Add Highlight to Session" }));
+
+    await waitFor(() => {
+      const currentPaperAdds = addReferenceSpy.mock.calls.filter(([input]) => input.session_id === 910 && input.kind === "item" && input.target_id === 1);
+      expect(currentPaperAdds).toHaveLength(1);
+      expect(screen.getByRole("textbox", { name: "AI prompt" })).toHaveValue("> Hello\n\nSource: Transformer Scaling Laws, p. 1\n\nQuestion: ");
+    });
+  });
+
   it("does not show the reader selection context menu without a pdf selection", async () => {
     render(<App api={fakeApi} />);
     await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i });

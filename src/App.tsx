@@ -85,6 +85,7 @@ export default function App({ api }: { api: AppApi }) {
   const [deeplApiKeyDraft, setDeeplApiKeyDraft] = useState("");
   const [connectorSettings, setConnectorSettings] = useState<ConnectorSettings | null>(null);
   const appShellRef = useRef<HTMLDivElement | null>(null);
+  const aiComposerInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const library = useLibraryState({
     api,
@@ -159,35 +160,56 @@ export default function App({ api }: { api: AppApi }) {
     }
   }, [getApi, library.libraryItems, readerState]);
 
-  const selectionCitation = useCallback(() => {
-    const selection = readerState.pdfSelection ?? readerState.translationSelection;
+  const focusAiComposer = useCallback(() => {
+    requestAnimationFrame(() => {
+      aiComposerInputRef.current?.focus();
+    });
+  }, []);
+
+  const selectionCitation = useCallback((selectionOverride?: typeof readerState.pdfSelection | typeof readerState.translationSelection | null) => {
+    const selection = selectionOverride ?? readerState.pdfSelection ?? readerState.translationSelection;
     if (!readerState.activePaper || !selection?.quote.trim()) return null;
     let page = "";
-    if (readerState.pdfSelection) {
-      const anchor = JSON.parse(readerState.pdfSelection.anchor) as { page?: number };
-      page = typeof anchor.page === "number" ? `, p. ${anchor.page}` : "";
+    if (isPdfTextSelection(selection)) {
+      try {
+        const anchor = JSON.parse(selection.anchor) as { page?: number };
+        page = typeof anchor.page === "number" ? `, p. ${anchor.page}` : "";
+      } catch {
+        page = "";
+      }
     }
     return `> ${selection.quote.trim()}\n\nSource: ${readerState.activePaper.title}${page}`;
   }, [readerState.activePaper, readerState.pdfSelection, readerState.translationSelection]);
 
+  const ensureAiSessionWithCurrentPaper = useCallback(async () => {
+    const sessionId = await ai.ensureSessionReady();
+    if (readerState.activePaper) {
+      await (await getApi()).addAiSessionReference({ session_id: sessionId, kind: "item", target_id: readerState.activePaper.id });
+      await ai.refreshActiveAiSession(sessionId);
+    }
+    return sessionId;
+  }, [ai, getApi, readerState.activePaper]);
+
+  const handleOpenCopilotWithSelection = useCallback(async (quoted: string | null) => {
+    await ensureAiSessionWithCurrentPaper();
+    if (quoted) ai.setAiComposerValue(`${quoted}\n\nQuestion: `);
+    focusAiComposer();
+  }, [ai, ensureAiSessionWithCurrentPaper, focusAiComposer]);
+
   const handleAskWithSelection = useCallback(async () => {
     const quoted = selectionCitation();
     if (!quoted) return;
-    await ai.ensureSessionReady();
-    ai.setAiComposerValue(`${quoted}\n\nQuestion: `);
-  }, [ai, selectionCitation]);
+    await handleOpenCopilotWithSelection(quoted);
+  }, [handleOpenCopilotWithSelection, selectionCitation]);
 
   const handleAddHighlightToSession = useCallback(async () => {
+    const quoted = selectionCitation();
     if (readerState.pdfSelection) {
       await readerState.handleCreatePdfFocusHighlight("yellow");
     }
-    const quoted = selectionCitation();
     if (!quoted || !readerState.activePaper) return;
-    const sessionId = await ai.ensureSessionReady();
-    await (await getApi()).addAiSessionReference({ session_id: sessionId, kind: "item", target_id: readerState.activePaper.id });
-    await ai.refreshActiveAiSession(sessionId);
-    ai.setAiComposerValue((current: string) => [current.trim(), quoted].filter(Boolean).join("\n\n"));
-  }, [ai, getApi, readerState, selectionCitation]);
+    await handleOpenCopilotWithSelection(quoted);
+  }, [handleOpenCopilotWithSelection, readerState, selectionCitation]);
 
   const handleSaveSelectionAsNote = useCallback(async () => {
     const quoted = selectionCitation();
@@ -386,6 +408,13 @@ export default function App({ api }: { api: AppApi }) {
         readerState.openFindHud();
         return;
       }
+      if (!isEditable && event.key.toLowerCase() === "j" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        const selection = readerState.pdfSelection ?? readerState.translationSelection;
+        const quoted = selectionCitation(selection);
+        void handleOpenCopilotWithSelection(quoted);
+        return;
+      }
       if (event.key === "Escape" && readerState.translationPopover) {
         readerState.closeTranslationPopover();
         return;
@@ -397,7 +426,7 @@ export default function App({ api }: { api: AppApi }) {
     }
     window.addEventListener("keydown", handleWindowKeydown);
     return () => window.removeEventListener("keydown", handleWindowKeydown);
-  }, [readerState, setIsSidebarVisible]);
+  }, [handleOpenCopilotWithSelection, readerState, selectionCitation, setIsSidebarVisible]);
 
   const startPaneResize = useCallback((target: "sidebar" | "ai", event: ReactPointerEvent<HTMLDivElement>) => {
     if (window.innerWidth <= 820) return;
@@ -694,6 +723,7 @@ export default function App({ api }: { api: AppApi }) {
               activeAiSessionId={ai.activeAiSessionId}
               activeNoteId={ai.activeNoteId}
               aiChatHistoryRef={ai.aiChatHistoryRef}
+              aiComposerInputRef={aiComposerInputRef}
               aiComposerValue={ai.aiComposerValue}
               aiDockOpen={ai.aiDockOpen}
               aiPanelCanSend={ai.aiPanelCanSend}

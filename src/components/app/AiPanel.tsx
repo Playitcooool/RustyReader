@@ -136,6 +136,7 @@ type Props = {
   activeAiSessionId: number | null;
   activeNoteId: number | null;
   aiChatHistoryRef: RefObject<HTMLDivElement>;
+  aiComposerInputRef: RefObject<HTMLTextAreaElement>;
   aiComposerValue: string;
   aiDockOpen: Record<AiDockSection, boolean>;
   aiPanelCanSend: boolean;
@@ -189,6 +190,7 @@ export function AiPanel(props: Props) {
     activeAiSessionId,
     activeNoteId,
     aiChatHistoryRef,
+    aiComposerInputRef,
     aiComposerValue,
     aiDockOpen,
     aiPanelCanSend,
@@ -450,6 +452,7 @@ export function AiPanel(props: Props) {
             </div>
           </div>
           <textarea
+            ref={aiComposerInputRef}
             aria-label="AI prompt"
             className="note-editor ai-composer-input"
             placeholder="Ask about the current references..."
