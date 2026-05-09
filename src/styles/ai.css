@@ -501,6 +501,24 @@
   color: var(--muted-text);
 }
 
+.ai-citation-chip {
+  border: 1px solid rgba(244, 192, 120, 0.45);
+  border-radius: 999px;
+  background: rgba(244, 192, 120, 0.1);
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 0.85em;
+  line-height: 1;
+  margin: 0 2px;
+  padding: 3px 7px;
+}
+
+.ai-citation-chip:hover {
+  border-color: rgba(244, 192, 120, 0.9);
+}
+
 .ai-markdown table {
   width: 100%;
   border-collapse: collapse;
@@ -528,4 +546,3 @@
   margin-top: 14px;
   flex-wrap: wrap;
 }
-

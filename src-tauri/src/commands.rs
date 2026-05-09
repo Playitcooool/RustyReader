@@ -1,6 +1,6 @@
 use app_core::service::{
     AIArtifact, AISession, AISessionReference, AISessionReferenceKind, AISettings, AITask,
-    Annotation, ImportBatchResult, ImportMode, LibraryItem, ResearchNote, Tag,
+    Annotation, EvidenceChunk, ImportBatchResult, ImportMode, LibraryItem, ResearchNote, Tag,
     TranslateSelectionResult, TranslationProvider, UpdateAISettingsInput,
 };
 use serde::Deserialize;
@@ -36,6 +36,14 @@ pub(crate) struct UpdateNoteInput {
 }
 
 #[derive(Deserialize)]
+pub(crate) struct CreateResearchNoteInput {
+    collection_id: Option<i64>,
+    session_id: Option<i64>,
+    title: String,
+    markdown: String,
+}
+
+#[derive(Deserialize)]
 pub(crate) struct CreateTagInput {
     name: String,
 }
@@ -49,6 +57,13 @@ pub(crate) struct AssignTagInput {
 #[derive(Deserialize)]
 pub(crate) struct SearchItemsInput {
     query: String,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct QueryEvidenceChunksInput {
+    item_ids: Vec<i64>,
+    query: Option<String>,
+    limit: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -421,6 +436,26 @@ pub(crate) fn list_ai_session_task_runs(
 }
 
 #[tauri::command]
+pub(crate) fn query_evidence_chunks(
+    state: State<'_, AppState>,
+    input: QueryEvidenceChunksInput,
+) -> Result<Vec<EvidenceChunk>, String> {
+    service(&state)
+        .query_evidence_chunks(&input.item_ids, input.query.as_deref(), input.limit)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) fn get_evidence_chunk(
+    state: State<'_, AppState>,
+    evidence_id: i64,
+) -> Result<Option<EvidenceChunk>, String> {
+    service(&state)
+        .get_evidence_chunk(evidence_id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub(crate) fn get_ai_session_artifact(
     state: State<'_, AppState>,
     session_id: i64,
@@ -447,6 +482,21 @@ pub(crate) fn create_ai_session_note_from_artifact(
 ) -> Result<ResearchNote, String> {
     service(&state)
         .create_note_from_artifact(artifact_id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) fn create_research_note(
+    state: State<'_, AppState>,
+    input: CreateResearchNoteInput,
+) -> Result<ResearchNote, String> {
+    service(&state)
+        .create_research_note(
+            input.collection_id,
+            input.session_id,
+            &input.title,
+            &input.markdown,
+        )
         .map_err(|error| error.to_string())
 }
 

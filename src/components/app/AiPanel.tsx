@@ -14,8 +14,23 @@ import type {
 } from "../../lib/contracts";
 import type { AiDockSection, AiPendingMessage, AiReferencePickerResult } from "../../hooks/useAiSessionState";
 
-const markdownComponents = {
-  a: (props: ComponentProps<"a">) => <a {...props} rel="noreferrer" target="_blank" />,
+const citationHrefPrefix = "evidence://";
+
+const withCitationLinks = (markdown: string) =>
+  markdown.replace(/\[E(\d+)\]/g, (_match, id) => `[[E${id}]](${citationHrefPrefix}${id})`);
+
+const markdownComponents = (onCitationClick?: (evidenceId: number) => void) => ({
+  a: ({ href, children, ...props }: ComponentProps<"a">) => {
+    if (href?.startsWith(citationHrefPrefix)) {
+      const evidenceId = Number(href.slice(citationHrefPrefix.length));
+      return (
+        <button className="ai-citation-chip" type="button" onClick={() => Number.isFinite(evidenceId) && onCitationClick?.(evidenceId)}>
+          {children}
+        </button>
+      );
+    }
+    return <a href={href} {...props} rel="noreferrer" target="_blank">{children}</a>;
+  },
   pre: (props: ComponentProps<"pre">) => <pre className="ai-markdown-pre" {...props} />,
   code({
     className,
@@ -28,7 +43,7 @@ const markdownComponents = {
       </code>
     );
   },
-};
+});
 
 function AiIcon({
   children,
@@ -102,11 +117,11 @@ export const DeleteSessionIcon = () => (
   </AiIcon>
 );
 
-export function MarkdownMessage({ markdown }: { markdown: string }) {
+export function MarkdownMessage({ markdown, onCitationClick }: { markdown: string; onCitationClick?: (evidenceId: number) => void }) {
   return (
     <div className="ai-markdown">
-      <ReactMarkdown components={markdownComponents} remarkPlugins={[remarkGfm]}>
-        {markdown}
+      <ReactMarkdown components={markdownComponents(onCitationClick)} remarkPlugins={[remarkGfm]}>
+        {withCitationLinks(markdown)}
       </ReactMarkdown>
     </div>
   );
@@ -156,6 +171,7 @@ type Props = {
   onOpenSession: (sessionId: number) => void;
   onQuickAction: (kind: string) => void | Promise<void>;
   onAddReference: (kind: "item" | "collection", targetId: number) => void | Promise<void>;
+  onOpenEvidenceCitation?: (evidenceId: number) => void;
   onRemoveReference: (referenceId: number) => void | Promise<void>;
   onSaveNoteEdits: () => void | Promise<void>;
   onSelectNote: (note: ResearchNote) => void;
@@ -208,6 +224,7 @@ export function AiPanel(props: Props) {
     onOpenSession,
     onQuickAction,
     onAddReference,
+    onOpenEvidenceCitation,
     onRemoveReference,
     onSaveNoteEdits,
     onSelectNote,
@@ -255,7 +272,7 @@ export function AiPanel(props: Props) {
         <div className="ai-floating-panels">
           {aiDockOpen.artifacts ? (
             <div className="management-panel-body ai-dock-panel-body ai-floating-panel" aria-label="Artifacts panel">
-              {aiSessionArtifact ? <MarkdownMessage markdown={aiSessionArtifact.markdown} /> : <p>No artifact yet.</p>}
+              {aiSessionArtifact ? <MarkdownMessage markdown={aiSessionArtifact.markdown} onCitationClick={onOpenEvidenceCitation} /> : <p>No artifact yet.</p>}
               {aiSessionArtifact ? (
                 <button className="ghost-button" type="button" onClick={() => void onCreateResearchNote()}>
                   Save as Research Note
@@ -338,7 +355,7 @@ export function AiPanel(props: Props) {
               <p>{task.input_prompt ?? taskLabel(task.kind)}</p>
             </div>
             <div className="ai-message ai-message-assistant">
-              <MarkdownMessage markdown={task.output_markdown} />
+              <MarkdownMessage markdown={task.output_markdown} onCitationClick={onOpenEvidenceCitation} />
             </div>
           </article>
         ))}
@@ -351,7 +368,7 @@ export function AiPanel(props: Props) {
             </div>
             <div className="ai-message ai-message-assistant">
               {activeAiPending.error ? <p className="ai-error-text">{activeAiPending.error}</p> : null}
-              {activeAiPending.markdown ? <MarkdownMessage markdown={activeAiPending.markdown} /> : null}
+              {activeAiPending.markdown ? <MarkdownMessage markdown={activeAiPending.markdown} onCitationClick={onOpenEvidenceCitation} /> : null}
               {activeAiPending.status === "streaming" ? (
                 <div className="ai-loading-indicator" aria-label="AI response streaming">
                   <span aria-label="AI response loading" className="sr-only" />

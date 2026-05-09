@@ -74,6 +74,9 @@ type ReaderWorkspaceActions = {
   onClearReaderSelection: () => void;
   onCopyReaderSelection: () => void | Promise<void>;
   onCreatePdfFocusHighlight: (color: PdfHighlightColor) => void | Promise<void>;
+  onAskWithSelection: () => void | Promise<void>;
+  onAddHighlightToSession: () => void | Promise<void>;
+  onSaveSelectionAsNote: () => void | Promise<void>;
   onCreatePdfFocusTextBoxAnnotation: (draft: PdfTextBoxAnnotationDraft) => void | Promise<void>;
   onUpdatePdfTextBoxAnnotation: (annotationId: number, anchor: string, body?: string) => void | Promise<void>;
   onRemovePdfTextBoxAnnotation: (annotationId: number) => void | Promise<void>;
@@ -155,6 +158,9 @@ export function ReaderWorkspace(props: Props) {
     onCloseTab,
     onCopyReaderSelection,
     onCreatePdfFocusHighlight,
+    onAskWithSelection,
+    onAddHighlightToSession,
+    onSaveSelectionAsNote,
     onCreatePdfFocusTextBoxAnnotation,
     onUpdatePdfTextBoxAnnotation,
     onRemovePdfTextBoxAnnotation,
@@ -476,6 +482,39 @@ export function ReaderWorkspace(props: Props) {
             }}
           >
             Translate
+          </button>
+          <button
+            className="nav-item"
+            role="menuitem"
+            type="button"
+            onClick={() => {
+              setReaderContextMenu(null);
+              void onAskWithSelection();
+            }}
+          >
+            Ask with Selection
+          </button>
+          <button
+            className="nav-item"
+            role="menuitem"
+            type="button"
+            onClick={() => {
+              setReaderContextMenu(null);
+              void onAddHighlightToSession();
+            }}
+          >
+            Add Highlight to Session
+          </button>
+          <button
+            className="nav-item"
+            role="menuitem"
+            type="button"
+            onClick={() => {
+              setReaderContextMenu(null);
+              void onSaveSelectionAsNote();
+            }}
+          >
+            Save as Note
           </button>
           {showPdfHighlightActions
             ? pdfHighlightColors.map((color) => (

@@ -88,6 +88,19 @@ pub struct Annotation {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvidenceChunk {
+    pub id: i64,
+    pub item_id: i64,
+    pub item_title: String,
+    pub chunk_index: i64,
+    pub page_number: Option<i64>,
+    pub anchor_json: String,
+    pub text: String,
+    pub source_kind: String,
+    pub extractor_version: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AITask {
     pub id: i64,
     pub item_id: Option<i64>,
@@ -415,11 +428,20 @@ impl ProviderRequestPurpose {
 struct ExtractedDocument {
     plain_text: String,
     normalized_html: String,
+    chunks: Vec<ExtractedChunkDraft>,
     page_count: Option<i64>,
     content_status: String,
     content_notice: Option<String>,
     extractor_version: i64,
     metadata: InferredMetadata,
+}
+
+#[derive(Debug, Clone)]
+struct ExtractedChunkDraft {
+    page_number: Option<i64>,
+    anchor_json: String,
+    text: String,
+    source_kind: String,
 }
 
 impl ExtractedDocument {
@@ -432,6 +454,9 @@ const EXTRACTOR_VERSION: i64 = 1;
 const ITEM_TASK_TEXT_LIMIT: usize = 18_000;
 const COLLECTION_ITEM_TEXT_LIMIT: usize = 4_000;
 const COLLECTION_TOTAL_TEXT_LIMIT: usize = 40_000;
+const EVIDENCE_QUERY_LIMIT: i64 = 16;
+const EVIDENCE_CHUNK_TARGET_CHARS: usize = 1_200;
+const EVIDENCE_CHUNK_MAX_CHARS: usize = 1_800;
 const DEFAULT_AI_SESSION_TITLE: &str = "New Chat";
 const DEEPL_TEXT_LIMIT_BYTES: usize = 128 * 1024;
 
@@ -1125,6 +1150,13 @@ impl LibraryService {
                     params![item_id, title, extracted.plain_text],
                 )?;
             }
+            rebuild_evidence_chunks_conn(
+                &tx,
+                item_id,
+                &title,
+                &extracted.chunks,
+                extracted.extractor_version,
+            )?;
             tx.commit()?;
 
             let item = ImportedItem {
@@ -1236,6 +1268,8 @@ impl LibraryService {
             "INSERT INTO search_index(item_id, title, plain_text) VALUES (?1, ?2, ?3)",
             params![item_id, title, plain_text],
         )?;
+        let chunks = build_paragraph_chunks(&plain_text, None, "markdown");
+        rebuild_evidence_chunks_conn(&tx, item_id, title, &chunks, EXTRACTOR_VERSION)?;
         tx.commit()?;
 
         let item = ImportedItem {
@@ -1402,6 +1436,10 @@ impl LibraryService {
             "UPDATE search_index SET title = ?1 WHERE item_id = ?2",
             params![title, item_id],
         )?;
+        conn.execute(
+            "UPDATE evidence_chunk_index SET title = ?1 WHERE item_id = ?2",
+            params![title, item_id],
+        )?;
         Ok(())
     }
 
@@ -1436,6 +1474,11 @@ impl LibraryService {
             normalize_session_reference_sort_indexes_conn(&tx, session_id)?;
         }
         tx.execute("DELETE FROM search_index WHERE item_id = ?1", [item_id])?;
+        tx.execute(
+            "DELETE FROM evidence_chunk_index WHERE item_id = ?1",
+            [item_id],
+        )?;
+        tx.execute("DELETE FROM evidence_chunks WHERE item_id = ?1", [item_id])?;
         prune_scope_item_ids_for_removed_items(&tx, &[item_id])?;
         tx.execute("DELETE FROM items WHERE id = ?1", [item_id])?;
         tx.commit()?;
@@ -1554,6 +1597,37 @@ impl LibraryService {
         })?;
         rows.collect::<rusqlite::Result<Vec<_>>>()
             .map_err(Into::into)
+    }
+
+    pub fn query_evidence_chunks(
+        &self,
+        item_ids: &[i64],
+        query: Option<&str>,
+        limit: Option<i64>,
+    ) -> Result<Vec<EvidenceChunk>> {
+        let conn = self.connect()?;
+        query_evidence_chunks_conn(
+            &conn,
+            item_ids,
+            query,
+            limit.unwrap_or(EVIDENCE_QUERY_LIMIT),
+        )
+    }
+
+    pub fn get_evidence_chunk(&self, evidence_id: i64) -> Result<Option<EvidenceChunk>> {
+        let conn = self.connect()?;
+        conn.query_row(
+            "
+            SELECT c.id, c.item_id, i.title, c.chunk_index, c.page_number, c.anchor_json, c.text, c.source_kind, c.extractor_version
+            FROM evidence_chunks c
+            JOIN items i ON i.id = c.item_id
+            WHERE c.id = ?1
+            ",
+            [evidence_id],
+            map_evidence_chunk,
+        )
+        .optional()
+        .map_err(Into::into)
     }
 
     pub fn remove_annotation(&self, annotation_id: i64) -> Result<()> {
@@ -1824,6 +1898,13 @@ impl LibraryService {
                 params![item_id, item_title, extracted.plain_text],
             )?;
         }
+        rebuild_evidence_chunks_conn(
+            &tx,
+            item_id,
+            &item_title,
+            &extracted.chunks,
+            extracted.extractor_version,
+        )?;
         tx.commit()?;
         Ok(true)
     }
@@ -2019,21 +2100,14 @@ impl LibraryService {
     ) -> Result<AITask> {
         let mut conn = self.connect()?;
         let settings = self.load_ai_settings(&conn)?;
-        let (collection_id, title, excerpt) = conn.query_row(
+        let (collection_id, title) = conn.query_row(
             "
-            SELECT i.collection_id, i.title, e.plain_text
+            SELECT i.collection_id, i.title
             FROM items i
-            JOIN extracted_content e ON e.item_id = i.id
             WHERE i.id = ?1
             ",
             [item_id],
-            |row| {
-                Ok((
-                    row.get::<_, i64>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                ))
-            },
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
         )?;
         let collection_name: String = conn.query_row(
             "SELECT name FROM collections WHERE id = ?1",
@@ -2041,8 +2115,19 @@ impl LibraryService {
             |row| row.get(0),
         )?;
         let prompt_text = prompt.map(str::trim).filter(|value| !value.is_empty());
-        let excerpt = truncate_chars(&excerpt, ITEM_TASK_TEXT_LIMIT);
-        let prompt_body = build_item_prompt(kind, &title, &collection_name, &excerpt, prompt_text)?;
+        let chunks = query_evidence_chunks_conn(
+            &conn,
+            &[item_id],
+            if kind == "item.ask" {
+                prompt_text
+            } else {
+                None
+            },
+            EVIDENCE_QUERY_LIMIT,
+        )?;
+        let evidence = evidence_context(&chunks);
+        let prompt_body =
+            build_item_prompt(kind, &title, &collection_name, &evidence, prompt_text)?;
         let request = self.build_provider_request(&settings, prompt_body)?;
         let output = self
             .ai_transport
@@ -2113,6 +2198,32 @@ impl LibraryService {
             session_id,
             title,
             markdown,
+        })
+    }
+
+    pub fn create_research_note(
+        &self,
+        collection_id: Option<i64>,
+        session_id: Option<i64>,
+        title: &str,
+        markdown: &str,
+    ) -> Result<ResearchNote> {
+        let title = title.trim();
+        let markdown = markdown.trim();
+        if title.is_empty() || markdown.is_empty() {
+            return Err(anyhow!("note title and markdown must not be empty"));
+        }
+        let conn = self.connect()?;
+        conn.execute(
+            "INSERT INTO research_notes(collection_id, session_id, title, markdown) VALUES (?1, ?2, ?3, ?4)",
+            params![collection_id, session_id, title, markdown],
+        )?;
+        Ok(ResearchNote {
+            id: conn.last_insert_rowid(),
+            collection_id,
+            session_id,
+            title: title.to_string(),
+            markdown: markdown.to_string(),
         })
     }
 
@@ -2790,6 +2901,17 @@ impl LibraryService {
                 body TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS evidence_chunks(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+                chunk_index INTEGER NOT NULL,
+                page_number INTEGER NULL,
+                anchor_json TEXT NOT NULL,
+                text TEXT NOT NULL,
+                source_kind TEXT NOT NULL,
+                extractor_version INTEGER NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS ai_tasks(
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 item_id INTEGER NULL REFERENCES items(id),
@@ -2858,12 +2980,20 @@ impl LibraryService {
                 plain_text
             );
 
+            CREATE VIRTUAL TABLE IF NOT EXISTS evidence_chunk_index USING fts5(
+                chunk_id UNINDEXED,
+                item_id UNINDEXED,
+                title,
+                text
+            );
+
             CREATE INDEX IF NOT EXISTS idx_collections_parent_id ON collections(parent_id);
             CREATE INDEX IF NOT EXISTS idx_items_collection_id ON items(collection_id);
             CREATE INDEX IF NOT EXISTS idx_attachments_item_primary ON attachments(item_id, is_primary);
             CREATE INDEX IF NOT EXISTS idx_item_tags_tag_id ON item_tags(tag_id);
             CREATE INDEX IF NOT EXISTS idx_extracted_content_item_id ON extracted_content(item_id);
             CREATE INDEX IF NOT EXISTS idx_annotations_item_id ON annotations(item_id);
+            CREATE INDEX IF NOT EXISTS idx_evidence_chunks_item_id ON evidence_chunks(item_id, chunk_index);
             CREATE INDEX IF NOT EXISTS idx_ai_tasks_session_id ON ai_tasks(session_id);
             CREATE INDEX IF NOT EXISTS idx_ai_tasks_item_collection ON ai_tasks(item_id, collection_id);
             CREATE INDEX IF NOT EXISTS idx_ai_tasks_collection_item ON ai_tasks(collection_id, item_id);
@@ -2943,6 +3073,7 @@ impl LibraryService {
             [],
         )?;
         ensure_connector_settings_row(&conn)?;
+        ensure_existing_evidence_chunks_conn(&conn)?;
         Ok(())
     }
 }
@@ -2966,6 +3097,237 @@ fn ensure_connector_settings_row(conn: &Connection) -> Result<ConnectorSettings>
         return Ok(ConnectorSettings { token });
     }
     Ok(ConnectorSettings { token })
+}
+
+fn rebuild_evidence_chunks_conn(
+    conn: &Connection,
+    item_id: i64,
+    title: &str,
+    chunks: &[ExtractedChunkDraft],
+    extractor_version: i64,
+) -> Result<()> {
+    conn.execute(
+        "DELETE FROM evidence_chunk_index WHERE item_id = ?1",
+        [item_id],
+    )?;
+    conn.execute("DELETE FROM evidence_chunks WHERE item_id = ?1", [item_id])?;
+    for (index, chunk) in chunks
+        .iter()
+        .filter(|chunk| !chunk.text.trim().is_empty())
+        .enumerate()
+    {
+        conn.execute(
+            "INSERT INTO evidence_chunks(item_id, chunk_index, page_number, anchor_json, text, source_kind, extractor_version)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                item_id,
+                index as i64,
+                chunk.page_number,
+                chunk.anchor_json,
+                chunk.text,
+                chunk.source_kind,
+                extractor_version
+            ],
+        )?;
+        let chunk_id = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO evidence_chunk_index(chunk_id, item_id, title, text) VALUES (?1, ?2, ?3, ?4)",
+            params![chunk_id, item_id, title, chunk.text],
+        )?;
+    }
+    Ok(())
+}
+
+fn ensure_existing_evidence_chunks_conn(conn: &Connection) -> Result<()> {
+    let missing = conn.query_row(
+        "
+        SELECT COUNT(*)
+        FROM extracted_content e
+        JOIN items i ON i.id = e.item_id
+        LEFT JOIN evidence_chunks c ON c.item_id = e.item_id
+        WHERE c.id IS NULL AND trim(e.plain_text) != ''
+        ",
+        [],
+        |row| row.get::<_, i64>(0),
+    )?;
+    if missing == 0 {
+        return Ok(());
+    }
+    let mut statement = conn.prepare(
+        "
+        SELECT i.id, i.title, COALESCE(a.path, ''), e.plain_text, COALESCE(e.extractor_version, ?1)
+        FROM items i
+        JOIN extracted_content e ON e.item_id = i.id
+        LEFT JOIN attachments a ON a.item_id = i.id AND a.is_primary = 1
+        WHERE trim(e.plain_text) != ''
+        ORDER BY i.id ASC
+        ",
+    )?;
+    let rows = statement.query_map([EXTRACTOR_VERSION], |row| {
+        Ok((
+            row.get::<_, i64>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, String>(3)?,
+            row.get::<_, i64>(4)?,
+        ))
+    })?;
+    for row in rows {
+        let (item_id, title, path, plain_text, extractor_version) = row?;
+        let has_chunks = conn
+            .query_row(
+                "SELECT id FROM evidence_chunks WHERE item_id = ?1 LIMIT 1",
+                [item_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()?
+            .is_some();
+        if has_chunks {
+            continue;
+        }
+        let source_kind = match infer_attachment_format(&path) {
+            "pdf" => "pdf",
+            "docx" => "docx",
+            "epub" => "epub",
+            "md" => "markdown",
+            _ => "text",
+        };
+        let chunks = build_paragraph_chunks(&plain_text, None, source_kind);
+        rebuild_evidence_chunks_conn(conn, item_id, &title, &chunks, extractor_version)?;
+    }
+    Ok(())
+}
+
+fn query_evidence_chunks_conn(
+    conn: &Connection,
+    item_ids: &[i64],
+    query: Option<&str>,
+    limit: i64,
+) -> Result<Vec<EvidenceChunk>> {
+    if item_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let limit = limit.clamp(1, 64);
+    let placeholders = std::iter::repeat("?")
+        .take(item_ids.len())
+        .collect::<Vec<_>>()
+        .join(",");
+    let query_text = query
+        .map(fts_query)
+        .filter(|value| !value.trim().is_empty());
+    let mut args: Vec<rusqlite::types::Value> = item_ids.iter().copied().map(Into::into).collect();
+    let sql = if let Some(query_text) = query_text {
+        args.push(query_text.into());
+        args.push(limit.into());
+        format!(
+            "
+            SELECT c.id, c.item_id, i.title, c.chunk_index, c.page_number, c.anchor_json, c.text, c.source_kind, c.extractor_version
+            FROM evidence_chunk_index idx
+            JOIN evidence_chunks c ON c.id = idx.chunk_id
+            JOIN items i ON i.id = c.item_id
+            WHERE c.item_id IN ({placeholders}) AND evidence_chunk_index MATCH ?
+            ORDER BY bm25(evidence_chunk_index), c.item_id ASC, c.chunk_index ASC
+            LIMIT ?
+            "
+        )
+    } else {
+        args.push(limit.into());
+        format!(
+            "
+            SELECT c.id, c.item_id, i.title, c.chunk_index, c.page_number, c.anchor_json, c.text, c.source_kind, c.extractor_version
+            FROM evidence_chunks c
+            JOIN items i ON i.id = c.item_id
+            WHERE c.item_id IN ({placeholders})
+            ORDER BY c.item_id ASC, c.chunk_index ASC
+            LIMIT ?
+            "
+        )
+    };
+    let mut statement = conn.prepare(&sql)?;
+    let rows = statement.query_map(params_from_iter(args), map_evidence_chunk)?;
+    rows.collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(Into::into)
+}
+
+fn map_evidence_chunk(row: &rusqlite::Row<'_>) -> rusqlite::Result<EvidenceChunk> {
+    Ok(EvidenceChunk {
+        id: row.get(0)?,
+        item_id: row.get(1)?,
+        item_title: row.get(2)?,
+        chunk_index: row.get(3)?,
+        page_number: row.get(4)?,
+        anchor_json: row.get(5)?,
+        text: row.get(6)?,
+        source_kind: row.get(7)?,
+        extractor_version: row.get(8)?,
+    })
+}
+
+fn fts_query(query: &str) -> String {
+    query
+        .split_whitespace()
+        .map(|term| term.trim_matches(|ch: char| !ch.is_alphanumeric()))
+        .filter(|term| !term.is_empty())
+        .map(|term| format!("\"{}\"", term.replace('"', "\"\"")))
+        .collect::<Vec<_>>()
+        .join(" OR ")
+}
+
+fn build_pdf_chunks(page_text: &[String]) -> Vec<ExtractedChunkDraft> {
+    page_text
+        .iter()
+        .enumerate()
+        .flat_map(|(page_index0, text)| {
+            build_paragraph_chunks(text, Some(page_index0 as i64 + 1), "pdf")
+        })
+        .collect()
+}
+
+fn build_paragraph_chunks(
+    text: &str,
+    page_number: Option<i64>,
+    source_kind: &str,
+) -> Vec<ExtractedChunkDraft> {
+    let mut chunks = Vec::new();
+    let mut current = String::new();
+    for paragraph in text
+        .split("\n\n")
+        .map(normalize_whitespace)
+        .filter(|value| !value.is_empty())
+    {
+        if !current.is_empty()
+            && current.chars().count() + paragraph.chars().count() > EVIDENCE_CHUNK_MAX_CHARS
+        {
+            chunks.push(extracted_chunk(page_number, source_kind, &current));
+            current.clear();
+        }
+        if !current.is_empty() {
+            current.push_str("\n\n");
+        }
+        current.push_str(&paragraph);
+        if current.chars().count() >= EVIDENCE_CHUNK_TARGET_CHARS {
+            chunks.push(extracted_chunk(page_number, source_kind, &current));
+            current.clear();
+        }
+    }
+    if !current.trim().is_empty() {
+        chunks.push(extracted_chunk(page_number, source_kind, &current));
+    }
+    chunks
+}
+
+fn extracted_chunk(page_number: Option<i64>, source_kind: &str, text: &str) -> ExtractedChunkDraft {
+    ExtractedChunkDraft {
+        page_number,
+        anchor_json: serde_json::json!({
+            "kind": "evidence_chunk",
+            "page_number": page_number,
+            "text_prefix": truncate_chars(text, 160),
+        })
+        .to_string(),
+        text: text.to_string(),
+        source_kind: source_kind.to_string(),
+    }
 }
 
 fn generate_connector_token() -> String {
@@ -3545,6 +3907,41 @@ fn build_session_prompt(
     expansion: &SessionPromptExpansion,
     prompt: Option<&str>,
 ) -> Result<String> {
+    let evidence_query = if kind == "session.ask" { prompt } else { None };
+    let chunks = query_evidence_chunks_conn(
+        conn,
+        &expansion.item_ids,
+        evidence_query,
+        EVIDENCE_QUERY_LIMIT,
+    )?;
+    if !chunks.is_empty() {
+        let evidence = evidence_context(&chunks);
+        let task_instructions = match kind {
+            "session.summarize" => "# Summary Set\n\n## Paper Capsules\n- ...\n\n## Synthesis\n...",
+            "session.explain_terms" => {
+                "# Terminology Notes\n\n## Terms\n- term: explanation\n\n## Cross-Paper Usage\n..."
+            }
+            "session.theme_map" => "# Theme Map\n\n## Themes\n- ...\n\n## Theme Clusters\n...",
+            "session.compare" => {
+                "# Comparison\n\n## Comparison Matrix\n- ...\n\n## Method Notes\n..."
+            }
+            "session.review_draft" => {
+                "# Review Draft\n\n## Evidence Map\n- ...\n\n## Narrative\n..."
+            }
+            "session.ask" => "...",
+            _ => return Err(anyhow!("unsupported session task kind")),
+        };
+        return Ok(format!(
+            "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nPreserve the heading and section style shown below.\nCite evidence for key claims, comparisons, and synthesis using the provided bracket ids like [E23]. Use only the evidence chunks below.\n\nTask kind: {kind}\n{}\n\nEvidence chunks:\n\n{}\n{}",
+            task_instructions,
+            evidence,
+            if kind == "session.ask" {
+                format!("\nUser question:\n{}", prompt.unwrap_or("No question provided."))
+            } else {
+                String::new()
+            }
+        ));
+    }
     if expansion.item_ids.len() == 1 && !expansion.has_collection_reference {
         let item_id = expansion.item_ids[0];
         let (collection_id, title, excerpt) = conn.query_row(
@@ -3685,7 +4082,7 @@ fn build_item_prompt(
     };
     let prompt_text = prompt.unwrap_or("");
     Ok(format!(
-        "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nPreserve the heading and section style shown below.\n\nTarget title: {title}\nCollection: {collection_name}\nTask kind: {kind}\n{}\n\nUse only this extracted paper text:\n\"\"\"\n{}\n\"\"\"\n{}",
+        "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nPreserve the heading and section style shown below.\nCite evidence for key claims using the provided bracket ids like [E23]. Use only the evidence chunks below.\n\nTarget title: {title}\nCollection: {collection_name}\nTask kind: {kind}\n{}\n\nEvidence chunks:\n\n{}\n{}",
         task_instructions
             .replace("{title}", title)
             .replace("{collection}", collection_name),
@@ -3698,6 +4095,26 @@ fn build_item_prompt(
     ))
 }
 
+fn evidence_context(chunks: &[EvidenceChunk]) -> String {
+    chunks
+        .iter()
+        .map(|chunk| {
+            let page = chunk
+                .page_number
+                .map(|page| format!(", p. {page}"))
+                .unwrap_or_default();
+            format!(
+                "[E{}] {}{}\n{}",
+                chunk.id,
+                chunk.item_title,
+                page,
+                truncate_chars(&chunk.text, EVIDENCE_CHUNK_MAX_CHARS)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
 fn build_collection_prompt(
     conn: &Connection,
     collection_id: i64,
@@ -3706,6 +4123,33 @@ fn build_collection_prompt(
     scope_item_ids: &[i64],
     prompt: Option<&str>,
 ) -> Result<String> {
+    let evidence_query = if kind == "collection.ask" {
+        prompt
+    } else {
+        None
+    };
+    let chunks =
+        query_evidence_chunks_conn(conn, scope_item_ids, evidence_query, EVIDENCE_QUERY_LIMIT)?;
+    if !chunks.is_empty() {
+        let task_instructions = match kind {
+            "collection.bulk_summarize" => "# Bulk Summary: {collection}\n\n## Paper Capsules\n- ...\n\n## Synthesis\n...",
+            "collection.theme_map" => "# Theme Map: {collection}\n\n## Themes\n- ...\n\n## Theme Clusters\n...",
+            "collection.compare_methods" => "# Method Comparison: {collection}\n\n## Comparison Matrix\n- ...\n\n## Method Notes\n...",
+            "collection.review_draft" => "# Review Draft: {collection}\n\n## Evidence Map\n- ...\n\n## Narrative\n...",
+            "collection.ask" => "...",
+            _ => return Err(anyhow!("unsupported collection task kind")),
+        };
+        return Ok(format!(
+            "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nPreserve the heading and section style shown below.\nCite evidence for key claims, comparisons, and synthesis using the provided bracket ids like [E23]. Use only the evidence chunks below.\n\nCollection: {collection_name}\nTask kind: {kind}\n{}\n\nEvidence chunks:\n\n{}\n{}",
+            task_instructions.replace("{collection}", collection_name),
+            evidence_context(&chunks),
+            if kind == "collection.ask" {
+                format!("\nUser question:\n{}", prompt.unwrap_or("No question provided."))
+            } else {
+                String::new()
+            }
+        ));
+    }
     let mut remaining = COLLECTION_TOTAL_TEXT_LIMIT;
     let mut sections = Vec::new();
     for item_id in scope_item_ids {
@@ -4193,11 +4637,11 @@ fn extract_pdf(path: &Path, bytes: &[u8]) -> Result<ExtractedDocument> {
             doi: None,
         });
 
-    let page_fragments = panic::catch_unwind(|| pdf_extract::extract_text_from_mem_by_pages(bytes))
+    let page_text = panic::catch_unwind(|| pdf_extract::extract_text_from_mem_by_pages(bytes))
         .ok()
         .and_then(Result::ok)
-        .map(|pages| pdf_page_fragments(&pages))
         .unwrap_or_default();
+    let page_fragments = pdf_page_fragments(&page_text);
     let plain_text = join_plain_text(&page_fragments);
     let (content_status, content_notice) =
         classify_pdf_content(&page_fragments, page_count.unwrap_or(0) as usize);
@@ -4212,6 +4656,7 @@ fn extract_pdf(path: &Path, bytes: &[u8]) -> Result<ExtractedDocument> {
     Ok(ExtractedDocument {
         normalized_html,
         plain_text,
+        chunks: build_pdf_chunks(&page_text),
         page_count,
         content_status,
         content_notice,
@@ -4233,10 +4678,12 @@ fn extract_docx(path: &Path, bytes: &[u8]) -> Result<ExtractedDocument> {
     });
     let authors = read_docx_author(&mut archive)?.unwrap_or_else(|| "Imported Author".into());
     let plain_text = join_plain_text(&paragraphs);
+    let chunks = build_paragraph_chunks(&plain_text, None, "docx");
 
     Ok(ExtractedDocument {
         normalized_html: article_from_paragraphs(&title, &paragraphs),
         plain_text,
+        chunks,
         page_count: Some(paragraphs.len() as i64),
         content_status: "ready".into(),
         content_notice: None,
@@ -4265,10 +4712,12 @@ fn extract_epub(path: &Path, bytes: &[u8]) -> Result<ExtractedDocument> {
             .unwrap_or_else(|| "Untitled".into())
     });
     let plain_text = join_plain_text(&sections);
+    let chunks = build_paragraph_chunks(&plain_text, None, "epub");
 
     Ok(ExtractedDocument {
         normalized_html: article_from_paragraphs(&resolved_title, &sections),
         plain_text,
+        chunks,
         page_count: Some(sections.len() as i64),
         content_status: "ready".into(),
         content_notice: None,

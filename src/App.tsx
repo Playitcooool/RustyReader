@@ -136,6 +136,78 @@ export default function App({ api }: { api: AppApi }) {
     void ai.ensureSessionReady();
   }, [ai, closeReaderFloatingUi, readerState.workspaceMode]);
 
+  const handleOpenEvidenceCitation = useCallback(async (evidenceId: number) => {
+    const chunk = await (await getApi()).getEvidenceChunk(evidenceId);
+    if (!chunk) {
+      setStatusMessage(`Evidence E${evidenceId} is no longer available.`);
+      return;
+    }
+    const item = library.libraryItems.find((entry) => entry.id === chunk.item_id);
+    if (!item) {
+      setStatusMessage(`Evidence E${evidenceId} belongs to a paper outside the current library view.`);
+      return;
+    }
+    readerState.activateItem(item, { focusPdf: item.attachment_format === "pdf" });
+    if (item.attachment_format === "pdf" && chunk.page_number) {
+      readerState.setReaderPageClamped(chunk.page_number);
+    } else {
+      const prefix = chunk.text.slice(0, 80).trim();
+      if (prefix) {
+        readerState.setReaderSearchQuery(prefix);
+        readerState.openFindHud();
+      }
+    }
+  }, [getApi, library.libraryItems, readerState]);
+
+  const selectionCitation = useCallback(() => {
+    const selection = readerState.pdfSelection ?? readerState.translationSelection;
+    if (!readerState.activePaper || !selection?.quote.trim()) return null;
+    let page = "";
+    if (readerState.pdfSelection) {
+      const anchor = JSON.parse(readerState.pdfSelection.anchor) as { page?: number };
+      page = typeof anchor.page === "number" ? `, p. ${anchor.page}` : "";
+    }
+    return `> ${selection.quote.trim()}\n\nSource: ${readerState.activePaper.title}${page}`;
+  }, [readerState.activePaper, readerState.pdfSelection, readerState.translationSelection]);
+
+  const handleAskWithSelection = useCallback(async () => {
+    const quoted = selectionCitation();
+    if (!quoted) return;
+    await ai.ensureSessionReady();
+    ai.setAiComposerValue(`${quoted}\n\nQuestion: `);
+  }, [ai, selectionCitation]);
+
+  const handleAddHighlightToSession = useCallback(async () => {
+    if (readerState.pdfSelection) {
+      await readerState.handleCreatePdfFocusHighlight("yellow");
+    }
+    const quoted = selectionCitation();
+    if (!quoted || !readerState.activePaper) return;
+    const sessionId = await ai.ensureSessionReady();
+    await (await getApi()).addAiSessionReference({ session_id: sessionId, kind: "item", target_id: readerState.activePaper.id });
+    await ai.refreshActiveAiSession(sessionId);
+    ai.setAiComposerValue((current: string) => [current.trim(), quoted].filter(Boolean).join("\n\n"));
+  }, [ai, getApi, readerState, selectionCitation]);
+
+  const handleSaveSelectionAsNote = useCallback(async () => {
+    const quoted = selectionCitation();
+    if (!quoted || !readerState.activePaper) return;
+    const sessionId = ai.activeAiSessionId ?? null;
+    const note = await (await getApi()).createResearchNote({
+      collection_id: readerState.activePaper.collection_id,
+      session_id: sessionId,
+      title: `${readerState.activePaper.title} Selection`,
+      markdown: `# ${readerState.activePaper.title} Selection\n\n${quoted}`,
+    });
+    if (sessionId) {
+      const notes = await (await getApi()).listAiSessionNotes(sessionId);
+      ai.setNotes(notes);
+      ai.setActiveNoteId(note.id);
+      ai.setNoteDraft(note.markdown);
+    }
+    setStatusMessage("Saved selection as a note.");
+  }, [ai, getApi, readerState.activePaper, selectionCitation]);
+
   const closeAiPanel = useCallback(() => {
     if (readerState.workspaceMode === "pdf_focus") closeReaderFloatingUi();
     ai.closeAiPanel();
@@ -561,6 +633,9 @@ export default function App({ api }: { api: AppApi }) {
           onCloseTranslationPopover: readerState.closeTranslationPopover,
           onCopyReaderSelection: readerState.copyReaderSelection,
           onCreatePdfFocusHighlight: readerState.handleCreatePdfFocusHighlight,
+          onAskWithSelection: handleAskWithSelection,
+          onAddHighlightToSession: handleAddHighlightToSession,
+          onSaveSelectionAsNote: handleSaveSelectionAsNote,
           onCreatePdfFocusTextBoxAnnotation: readerState.handleCreatePdfFocusTextBoxAnnotation,
           onUpdatePdfTextBoxAnnotation: readerState.handleUpdatePdfTextBoxAnnotation,
           onRemovePdfTextBoxAnnotation: readerState.handleRemovePdfTextBoxAnnotation,
@@ -654,6 +729,7 @@ export default function App({ api }: { api: AppApi }) {
               onOpenSession={(sessionId) => { ai.setActiveAiSessionId(sessionId); ai.setIsAiSessionHistoryOpen(false); }}
               onQuickAction={ai.handleQuickAction}
               onAddReference={ai.handleAddAiReference}
+              onOpenEvidenceCitation={handleOpenEvidenceCitation}
               onRemoveReference={ai.handleRemoveAiReference}
               onSaveNoteEdits={ai.handleSaveNoteEdits}
               onSelectNote={(note) => { ai.setActiveNoteId(note.id); ai.setNoteDraft(note.markdown); }}

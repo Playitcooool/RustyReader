@@ -70,6 +70,25 @@ export type Annotation = {
   body: string;
 };
 
+export type EvidenceChunk = {
+  id: number;
+  item_id: number;
+  item_title: string;
+  chunk_index: number;
+  page_number: number | null;
+  anchor_json: string;
+  text: string;
+  source_kind: string;
+  extractor_version: number;
+};
+
+export type EvidenceCitationTarget = {
+  evidenceId: number;
+  itemId: number;
+  pageNumber: number | null;
+  textPrefix: string;
+};
+
 export type AnnotationFilter = "all" | "current_page" | "search_matches";
 
 export type AITask = {
@@ -383,9 +402,12 @@ export type AppApi = {
   removeAiSessionReference: (referenceId: number) => Promise<void>;
   runAiSessionTask: (input: AIRunSessionTaskInput) => Promise<void>;
   listAiSessionTaskRuns: (sessionId: number) => Promise<AITask[]>;
+  queryEvidenceChunks: (input: { item_ids: number[]; query?: string; limit?: number }) => Promise<EvidenceChunk[]>;
+  getEvidenceChunk: (evidenceId: number) => Promise<EvidenceChunk | null>;
   getAiSessionArtifact: (sessionId: number) => Promise<AIArtifact | null>;
   listAiSessionNotes: (sessionId: number) => Promise<ResearchNote[]>;
   createAiSessionNoteFromArtifact: (artifactId: number) => Promise<ResearchNote>;
+  createResearchNote: (input: { collection_id?: number | null; session_id?: number | null; title: string; markdown: string }) => Promise<ResearchNote>;
   runItemTask: (input: {
     item_id: number;
     kind: string;

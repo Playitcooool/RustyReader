@@ -699,6 +699,7 @@ export function useAiSessionState({
     setIsAiPanelOpen,
     setIsAiSessionHistoryOpen,
     setNoteDraft,
+    setNotes,
     setActiveNoteId,
     setAiReferenceQuery,
     toggleAiDockSection: (section: AiDockSection) =>

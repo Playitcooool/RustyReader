@@ -1550,6 +1550,41 @@ export const fakeApi: AppApi = {
     return state.tasks.filter((task) => task.session_id === sessionId);
   },
 
+  async queryEvidenceChunks(input) {
+    const query = input.query?.trim().toLowerCase() ?? "";
+    const limit = input.limit ?? 16;
+    return state.items
+      .filter((item) => input.item_ids.includes(item.id))
+      .map((item, index) => ({
+        id: index + 1,
+        item_id: item.id,
+        item_title: item.title,
+        chunk_index: 0,
+        page_number: item.attachment_format === "pdf" ? 1 : null,
+        anchor_json: JSON.stringify({ kind: "evidence_chunk", page_number: item.attachment_format === "pdf" ? 1 : null, text_prefix: item.title }),
+        text: `${item.title} evidence chunk for ${query || "overview"}.`,
+        source_kind: item.attachment_format,
+        extractor_version: 1,
+      }))
+      .slice(0, limit);
+  },
+
+  async getEvidenceChunk(evidenceId) {
+    const item = state.items[evidenceId - 1] ?? state.items[0];
+    if (!item) return null;
+    return {
+      id: evidenceId,
+      item_id: item.id,
+      item_title: item.title,
+      chunk_index: 0,
+      page_number: item.attachment_format === "pdf" ? 1 : null,
+      anchor_json: JSON.stringify({ kind: "evidence_chunk", page_number: item.attachment_format === "pdf" ? 1 : null, text_prefix: item.title }),
+      text: `${item.title} evidence chunk.`,
+      source_kind: item.attachment_format,
+      extractor_version: 1,
+    };
+  },
+
   async getArtifact(input) {
     return (
       state.artifacts.find((artifact) => {
@@ -1566,6 +1601,18 @@ export const fakeApi: AppApi = {
 
   async getAiSessionArtifact(sessionId) {
     return state.artifacts.find((artifact) => artifact.session_id === sessionId) ?? null;
+  },
+
+  async createResearchNote(input) {
+    const note = {
+      id: state.nextId++,
+      collection_id: input.collection_id ?? null,
+      session_id: input.session_id ?? null,
+      title: input.title,
+      markdown: input.markdown,
+    };
+    state.notes.push(note);
+    return note;
   },
 
   async listNotes(collectionId) {

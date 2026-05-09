@@ -202,6 +202,8 @@ export async function createTauriApi(): Promise<AppApi> {
       invoke("list_ai_session_task_runs", {
         sessionId,
       }),
+    queryEvidenceChunks: (input) => invoke("query_evidence_chunks", { input }),
+    getEvidenceChunk: (evidenceId) => invoke("get_evidence_chunk", { evidenceId }),
     getAiSessionArtifact: (sessionId) =>
       invoke("get_ai_session_artifact", {
         sessionId,
@@ -214,6 +216,7 @@ export async function createTauriApi(): Promise<AppApi> {
       invoke("create_ai_session_note_from_artifact", {
         artifactId,
       }),
+    createResearchNote: (input) => invoke("create_research_note", { input }),
     runItemTask: (input) => invoke("run_item_task", { input }),
     runCollectionTask: (input) => invoke("run_collection_task", { input }),
     listenAiTaskStream: async (handler) => {
