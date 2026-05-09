@@ -94,10 +94,26 @@ pub struct EvidenceChunk {
     pub item_title: String,
     pub chunk_index: i64,
     pub page_number: Option<i64>,
+    pub page_start: Option<i64>,
+    pub page_end: Option<i64>,
+    pub section_title: Option<String>,
+    pub heading_path_json: Option<String>,
+    pub content_kind: String,
+    pub metadata_json: Option<String>,
+    pub retrieval_weight: f64,
+    pub score: Option<f64>,
     pub anchor_json: String,
     pub text: String,
     pub source_kind: String,
     pub extractor_version: i64,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct EvidenceQueryOptions {
+    pub scope: Option<String>,
+    pub content_kinds: Vec<String>,
+    pub group_by_item: bool,
+    pub rerank: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -439,6 +455,13 @@ struct ExtractedDocument {
 #[derive(Debug, Clone)]
 struct ExtractedChunkDraft {
     page_number: Option<i64>,
+    page_start: Option<i64>,
+    page_end: Option<i64>,
+    section_title: Option<String>,
+    heading_path_json: Option<String>,
+    content_kind: String,
+    metadata_json: Option<String>,
+    retrieval_weight: f64,
     anchor_json: String,
     text: String,
     source_kind: String,
@@ -1604,6 +1627,7 @@ impl LibraryService {
         item_ids: &[i64],
         query: Option<&str>,
         limit: Option<i64>,
+        options: EvidenceQueryOptions,
     ) -> Result<Vec<EvidenceChunk>> {
         let conn = self.connect()?;
         query_evidence_chunks_conn(
@@ -1611,6 +1635,7 @@ impl LibraryService {
             item_ids,
             query,
             limit.unwrap_or(EVIDENCE_QUERY_LIMIT),
+            &options,
         )
     }
 
@@ -1618,7 +1643,9 @@ impl LibraryService {
         let conn = self.connect()?;
         conn.query_row(
             "
-            SELECT c.id, c.item_id, i.title, c.chunk_index, c.page_number, c.anchor_json, c.text, c.source_kind, c.extractor_version
+            SELECT c.id, c.item_id, i.title, c.chunk_index, c.page_number, c.page_start, c.page_end,
+                   c.section_title, c.heading_path_json, c.content_kind, c.metadata_json, c.retrieval_weight,
+                   NULL, c.anchor_json, c.text, c.source_kind, c.extractor_version
             FROM evidence_chunks c
             JOIN items i ON i.id = c.item_id
             WHERE c.id = ?1
@@ -2124,6 +2151,7 @@ impl LibraryService {
                 None
             },
             EVIDENCE_QUERY_LIMIT,
+            &EvidenceQueryOptions::default(),
         )?;
         let evidence = evidence_context(&chunks);
         let prompt_body =
@@ -2906,10 +2934,26 @@ impl LibraryService {
                 item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
                 chunk_index INTEGER NOT NULL,
                 page_number INTEGER NULL,
+                page_start INTEGER NULL,
+                page_end INTEGER NULL,
+                section_title TEXT NULL,
+                heading_path_json TEXT NULL,
+                content_kind TEXT NOT NULL DEFAULT 'body',
+                metadata_json TEXT NULL,
+                retrieval_weight REAL NOT NULL DEFAULT 1.0,
                 anchor_json TEXT NOT NULL,
                 text TEXT NOT NULL,
                 source_kind TEXT NOT NULL,
                 extractor_version INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS evidence_embeddings(
+                chunk_id INTEGER NOT NULL REFERENCES evidence_chunks(id) ON DELETE CASCADE,
+                model_id TEXT NOT NULL,
+                text_hash TEXT NOT NULL,
+                vector_blob BLOB NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (chunk_id, model_id)
             );
 
             CREATE TABLE IF NOT EXISTS ai_tasks(
@@ -2994,6 +3038,8 @@ impl LibraryService {
             CREATE INDEX IF NOT EXISTS idx_extracted_content_item_id ON extracted_content(item_id);
             CREATE INDEX IF NOT EXISTS idx_annotations_item_id ON annotations(item_id);
             CREATE INDEX IF NOT EXISTS idx_evidence_chunks_item_id ON evidence_chunks(item_id, chunk_index);
+            CREATE INDEX IF NOT EXISTS idx_evidence_chunks_content_kind ON evidence_chunks(content_kind);
+            CREATE INDEX IF NOT EXISTS idx_evidence_embeddings_hash ON evidence_embeddings(model_id, text_hash);
             CREATE INDEX IF NOT EXISTS idx_ai_tasks_session_id ON ai_tasks(session_id);
             CREATE INDEX IF NOT EXISTS idx_ai_tasks_item_collection ON ai_tasks(item_id, collection_id);
             CREATE INDEX IF NOT EXISTS idx_ai_tasks_collection_item ON ai_tasks(collection_id, item_id);
@@ -3028,6 +3074,31 @@ impl LibraryService {
         ensure_column(&conn, "ai_tasks", "scope_item_ids", "TEXT NULL")?;
         ensure_column(&conn, "ai_tasks", "input_prompt", "TEXT NULL")?;
         ensure_column(&conn, "ai_tasks", "session_id", "INTEGER NULL")?;
+        ensure_column(&conn, "evidence_chunks", "page_start", "INTEGER NULL")?;
+        ensure_column(&conn, "evidence_chunks", "page_end", "INTEGER NULL")?;
+        ensure_column(&conn, "evidence_chunks", "section_title", "TEXT NULL")?;
+        ensure_column(&conn, "evidence_chunks", "heading_path_json", "TEXT NULL")?;
+        ensure_column(
+            &conn,
+            "evidence_chunks",
+            "content_kind",
+            "TEXT NOT NULL DEFAULT 'body'",
+        )?;
+        ensure_column(&conn, "evidence_chunks", "metadata_json", "TEXT NULL")?;
+        ensure_column(
+            &conn,
+            "evidence_chunks",
+            "retrieval_weight",
+            "REAL NOT NULL DEFAULT 1.0",
+        )?;
+        conn.execute(
+            "UPDATE evidence_chunks
+             SET page_start = COALESCE(page_start, page_number),
+                 page_end = COALESCE(page_end, page_number),
+                 content_kind = COALESCE(NULLIF(content_kind, ''), 'body'),
+                 retrieval_weight = COALESCE(retrieval_weight, 1.0)",
+            [],
+        )?;
         ensure_column(&conn, "ai_artifacts", "scope_item_ids", "TEXT NULL")?;
         ensure_column(&conn, "ai_artifacts", "session_id", "INTEGER NULL")?;
         ensure_column(&conn, "research_notes", "session_id", "INTEGER NULL")?;
@@ -3117,12 +3188,22 @@ fn rebuild_evidence_chunks_conn(
         .enumerate()
     {
         conn.execute(
-            "INSERT INTO evidence_chunks(item_id, chunk_index, page_number, anchor_json, text, source_kind, extractor_version)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO evidence_chunks(
+                item_id, chunk_index, page_number, page_start, page_end, section_title, heading_path_json,
+                content_kind, metadata_json, retrieval_weight, anchor_json, text, source_kind, extractor_version
+             )
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             params![
                 item_id,
                 index as i64,
                 chunk.page_number,
+                chunk.page_start,
+                chunk.page_end,
+                chunk.section_title,
+                chunk.heading_path_json,
+                chunk.content_kind,
+                chunk.metadata_json,
+                chunk.retrieval_weight,
                 chunk.anchor_json,
                 chunk.text,
                 chunk.source_kind,
@@ -3203,6 +3284,7 @@ fn query_evidence_chunks_conn(
     item_ids: &[i64],
     query: Option<&str>,
     limit: i64,
+    options: &EvidenceQueryOptions,
 ) -> Result<Vec<EvidenceChunk>> {
     if item_ids.is_empty() {
         return Ok(Vec::new());
@@ -3215,18 +3297,24 @@ fn query_evidence_chunks_conn(
     let query_text = query
         .map(fts_query)
         .filter(|value| !value.trim().is_empty());
+    if options.group_by_item {
+        return query_evidence_chunks_grouped_conn(conn, item_ids, query, limit, options);
+    }
     let mut args: Vec<rusqlite::types::Value> = item_ids.iter().copied().map(Into::into).collect();
+    let content_filter = content_kind_filter_sql(options, &mut args);
     let sql = if let Some(query_text) = query_text {
         args.push(query_text.into());
         args.push(limit.into());
         format!(
             "
-            SELECT c.id, c.item_id, i.title, c.chunk_index, c.page_number, c.anchor_json, c.text, c.source_kind, c.extractor_version
+            SELECT c.id, c.item_id, i.title, c.chunk_index, c.page_number, c.page_start, c.page_end,
+                   c.section_title, c.heading_path_json, c.content_kind, c.metadata_json, c.retrieval_weight,
+                   bm25(evidence_chunk_index), c.anchor_json, c.text, c.source_kind, c.extractor_version
             FROM evidence_chunk_index idx
             JOIN evidence_chunks c ON c.id = idx.chunk_id
             JOIN items i ON i.id = c.item_id
-            WHERE c.item_id IN ({placeholders}) AND evidence_chunk_index MATCH ?
-            ORDER BY bm25(evidence_chunk_index), c.item_id ASC, c.chunk_index ASC
+            WHERE c.item_id IN ({placeholders}) {content_filter} AND evidence_chunk_index MATCH ?
+            ORDER BY (bm25(evidence_chunk_index) / c.retrieval_weight), c.item_id ASC, c.chunk_index ASC
             LIMIT ?
             "
         )
@@ -3234,10 +3322,12 @@ fn query_evidence_chunks_conn(
         args.push(limit.into());
         format!(
             "
-            SELECT c.id, c.item_id, i.title, c.chunk_index, c.page_number, c.anchor_json, c.text, c.source_kind, c.extractor_version
+            SELECT c.id, c.item_id, i.title, c.chunk_index, c.page_number, c.page_start, c.page_end,
+                   c.section_title, c.heading_path_json, c.content_kind, c.metadata_json, c.retrieval_weight,
+                   NULL, c.anchor_json, c.text, c.source_kind, c.extractor_version
             FROM evidence_chunks c
             JOIN items i ON i.id = c.item_id
-            WHERE c.item_id IN ({placeholders})
+            WHERE c.item_id IN ({placeholders}) {content_filter}
             ORDER BY c.item_id ASC, c.chunk_index ASC
             LIMIT ?
             "
@@ -3249,6 +3339,60 @@ fn query_evidence_chunks_conn(
         .map_err(Into::into)
 }
 
+fn query_evidence_chunks_grouped_conn(
+    conn: &Connection,
+    item_ids: &[i64],
+    query_text: Option<&str>,
+    limit: i64,
+    options: &EvidenceQueryOptions,
+) -> Result<Vec<EvidenceChunk>> {
+    let per_item_limit = ((limit as usize / item_ids.len().max(1)) + 1).clamp(1, 8) as i64;
+    let mut grouped = Vec::new();
+    for item_id in item_ids {
+        let mut item_options = options.clone();
+        item_options.group_by_item = false;
+        grouped.extend(query_evidence_chunks_conn(
+            conn,
+            &[*item_id],
+            query_text,
+            per_item_limit,
+            &item_options,
+        )?);
+    }
+    grouped.sort_by(|a, b| {
+        a.score
+            .partial_cmp(&b.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.item_id.cmp(&b.item_id))
+            .then_with(|| a.chunk_index.cmp(&b.chunk_index))
+    });
+    grouped.truncate(limit as usize);
+    Ok(grouped)
+}
+
+fn content_kind_filter_sql(
+    options: &EvidenceQueryOptions,
+    args: &mut Vec<rusqlite::types::Value>,
+) -> String {
+    let kinds = options
+        .content_kinds
+        .iter()
+        .map(|kind| kind.trim())
+        .filter(|kind| !kind.is_empty())
+        .collect::<Vec<_>>();
+    if kinds.is_empty() {
+        return String::new();
+    }
+    let placeholders = std::iter::repeat("?")
+        .take(kinds.len())
+        .collect::<Vec<_>>()
+        .join(",");
+    for kind in kinds {
+        args.push(kind.to_string().into());
+    }
+    format!("AND c.content_kind IN ({placeholders})")
+}
+
 fn map_evidence_chunk(row: &rusqlite::Row<'_>) -> rusqlite::Result<EvidenceChunk> {
     Ok(EvidenceChunk {
         id: row.get(0)?,
@@ -3256,10 +3400,18 @@ fn map_evidence_chunk(row: &rusqlite::Row<'_>) -> rusqlite::Result<EvidenceChunk
         item_title: row.get(2)?,
         chunk_index: row.get(3)?,
         page_number: row.get(4)?,
-        anchor_json: row.get(5)?,
-        text: row.get(6)?,
-        source_kind: row.get(7)?,
-        extractor_version: row.get(8)?,
+        page_start: row.get(5)?,
+        page_end: row.get(6)?,
+        section_title: row.get(7)?,
+        heading_path_json: row.get(8)?,
+        content_kind: row.get(9)?,
+        metadata_json: row.get(10)?,
+        retrieval_weight: row.get(11)?,
+        score: row.get(12)?,
+        anchor_json: row.get(13)?,
+        text: row.get(14)?,
+        source_kind: row.get(15)?,
+        extractor_version: row.get(16)?,
     })
 }
 
@@ -3319,14 +3471,44 @@ fn build_paragraph_chunks(
 fn extracted_chunk(page_number: Option<i64>, source_kind: &str, text: &str) -> ExtractedChunkDraft {
     ExtractedChunkDraft {
         page_number,
+        page_start: page_number,
+        page_end: page_number,
+        section_title: None,
+        heading_path_json: None,
+        content_kind: infer_content_kind(text).to_string(),
+        metadata_json: None,
+        retrieval_weight: infer_retrieval_weight(text),
         anchor_json: serde_json::json!({
             "kind": "evidence_chunk",
             "page_number": page_number,
+            "page_start": page_number,
+            "page_end": page_number,
             "text_prefix": truncate_chars(text, 160),
         })
         .to_string(),
         text: text.to_string(),
         source_kind: source_kind.to_string(),
+    }
+}
+
+fn infer_content_kind(text: &str) -> &'static str {
+    let trimmed = text.trim_start().to_lowercase();
+    if trimmed.starts_with("figure ")
+        || trimmed.starts_with("fig. ")
+        || trimmed.starts_with("fig ")
+    {
+        "figure_caption"
+    } else if trimmed.starts_with("table ") {
+        "table_caption"
+    } else {
+        "body"
+    }
+}
+
+fn infer_retrieval_weight(text: &str) -> f64 {
+    match infer_content_kind(text) {
+        "figure_caption" | "table_caption" => 1.15,
+        _ => 1.0,
     }
 }
 
@@ -3913,6 +4095,10 @@ fn build_session_prompt(
         &expansion.item_ids,
         evidence_query,
         EVIDENCE_QUERY_LIMIT,
+        &EvidenceQueryOptions {
+            group_by_item: matches!(kind, "session.review_draft" | "session.compare_methods" | "session.theme_map"),
+            ..EvidenceQueryOptions::default()
+        },
     )?;
     if !chunks.is_empty() {
         let evidence = evidence_context(&chunks);
@@ -4100,15 +4286,24 @@ fn evidence_context(chunks: &[EvidenceChunk]) -> String {
     chunks
         .iter()
         .map(|chunk| {
-            let page = chunk
-                .page_number
-                .map(|page| format!(", p. {page}"))
+            let page = match (chunk.page_start.or(chunk.page_number), chunk.page_end) {
+                (Some(start), Some(end)) if end != start => format!(", pp. {start}-{end}"),
+                (Some(start), _) => format!(", p. {start}"),
+                _ => String::new(),
+            };
+            let section = chunk
+                .section_title
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+                .map(|value| format!(", section: {value}"))
                 .unwrap_or_default();
             format!(
-                "[E{}] {}{}\n{}",
+                "[E{}] {}{}{}; kind: {}\n{}",
                 chunk.id,
                 chunk.item_title,
                 page,
+                section,
+                chunk.content_kind,
                 truncate_chars(&chunk.text, EVIDENCE_CHUNK_MAX_CHARS)
             )
         })
@@ -4145,8 +4340,16 @@ fn build_collection_prompt(
     } else {
         None
     };
-    let chunks =
-        query_evidence_chunks_conn(conn, scope_item_ids, evidence_query, EVIDENCE_QUERY_LIMIT)?;
+    let chunks = query_evidence_chunks_conn(
+        conn,
+        scope_item_ids,
+        evidence_query,
+        EVIDENCE_QUERY_LIMIT,
+        &EvidenceQueryOptions {
+            group_by_item: matches!(kind, "collection.review_draft" | "collection.compare_methods" | "collection.theme_map"),
+            ..EvidenceQueryOptions::default()
+        },
+    )?;
     if !chunks.is_empty() {
         let task_instructions = match kind {
             "collection.bulk_summarize" => "# Bulk Summary: {collection}\n\n## Paper Capsules\n- ...\n\n## Synthesis\n...",

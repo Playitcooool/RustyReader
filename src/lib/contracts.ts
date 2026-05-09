@@ -76,6 +76,14 @@ export type EvidenceChunk = {
   item_title: string;
   chunk_index: number;
   page_number: number | null;
+  page_start: number | null;
+  page_end: number | null;
+  section_title: string | null;
+  heading_path_json: string | null;
+  content_kind: string;
+  metadata_json: string | null;
+  retrieval_weight: number;
+  score: number | null;
   anchor_json: string;
   text: string;
   source_kind: string;
@@ -402,7 +410,15 @@ export type AppApi = {
   removeAiSessionReference: (referenceId: number) => Promise<void>;
   runAiSessionTask: (input: AIRunSessionTaskInput) => Promise<void>;
   listAiSessionTaskRuns: (sessionId: number) => Promise<AITask[]>;
-  queryEvidenceChunks: (input: { item_ids: number[]; query?: string; limit?: number }) => Promise<EvidenceChunk[]>;
+  queryEvidenceChunks: (input: {
+    item_ids: number[];
+    query?: string;
+    limit?: number;
+    scope?: "page" | "section" | "paper" | "collection";
+    content_kinds?: string[];
+    group_by_item?: boolean;
+    rerank?: "none" | "local";
+  }) => Promise<EvidenceChunk[]>;
   getEvidenceChunk: (evidenceId: number) => Promise<EvidenceChunk | null>;
   getAiSessionArtifact: (sessionId: number) => Promise<AIArtifact | null>;
   listAiSessionNotes: (sessionId: number) => Promise<ResearchNote[]>;

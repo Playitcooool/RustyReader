@@ -1555,30 +1555,50 @@ export const fakeApi: AppApi = {
     const limit = input.limit ?? 16;
     return state.items
       .filter((item) => input.item_ids.includes(item.id))
-      .map((item, index) => ({
+      .map((item, index) => {
+        const pageNumber = item.attachment_format === "pdf" ? 1 : null;
+        return {
         id: index + 1,
         item_id: item.id,
         item_title: item.title,
         chunk_index: 0,
-        page_number: item.attachment_format === "pdf" ? 1 : null,
-        anchor_json: JSON.stringify({ kind: "evidence_chunk", page_number: item.attachment_format === "pdf" ? 1 : null, text_prefix: item.title }),
+        page_number: pageNumber,
+        page_start: pageNumber,
+        page_end: pageNumber,
+        section_title: null,
+        heading_path_json: null,
+        content_kind: "body",
+        metadata_json: null,
+        retrieval_weight: 1,
+        score: null,
+        anchor_json: JSON.stringify({ kind: "evidence_chunk", page_number: pageNumber, page_start: pageNumber, page_end: pageNumber, text_prefix: item.title }),
         text: `${item.title} evidence chunk for ${query || "overview"}.`,
         source_kind: item.attachment_format,
         extractor_version: 1,
-      }))
+      };
+      })
       .slice(0, limit);
   },
 
   async getEvidenceChunk(evidenceId) {
     const item = state.items[evidenceId - 1] ?? state.items[0];
     if (!item) return null;
+    const pageNumber = item.attachment_format === "pdf" ? 1 : null;
     return {
       id: evidenceId,
       item_id: item.id,
       item_title: item.title,
       chunk_index: 0,
-      page_number: item.attachment_format === "pdf" ? 1 : null,
-      anchor_json: JSON.stringify({ kind: "evidence_chunk", page_number: item.attachment_format === "pdf" ? 1 : null, text_prefix: item.title }),
+      page_number: pageNumber,
+      page_start: pageNumber,
+      page_end: pageNumber,
+      section_title: null,
+      heading_path_json: null,
+      content_kind: "body",
+      metadata_json: null,
+      retrieval_weight: 1,
+      score: null,
+      anchor_json: JSON.stringify({ kind: "evidence_chunk", page_number: pageNumber, page_start: pageNumber, page_end: pageNumber, text_prefix: item.title }),
       text: `${item.title} evidence chunk.`,
       source_kind: item.attachment_format,
       extractor_version: 1,

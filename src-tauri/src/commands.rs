@@ -1,7 +1,7 @@
 use app_core::service::{
     AIArtifact, AISession, AISessionReference, AISessionReferenceKind, AISettings, AITask,
-    Annotation, EvidenceChunk, ImportBatchResult, ImportMode, LibraryItem, ResearchNote, Tag,
-    TranslateSelectionResult, TranslationProvider, UpdateAISettingsInput,
+    Annotation, EvidenceChunk, EvidenceQueryOptions, ImportBatchResult, ImportMode, LibraryItem,
+    ResearchNote, Tag, TranslateSelectionResult, TranslationProvider, UpdateAISettingsInput,
 };
 use serde::Deserialize;
 use std::path::PathBuf;
@@ -64,6 +64,10 @@ pub(crate) struct QueryEvidenceChunksInput {
     item_ids: Vec<i64>,
     query: Option<String>,
     limit: Option<i64>,
+    scope: Option<String>,
+    content_kinds: Option<Vec<String>>,
+    group_by_item: Option<bool>,
+    rerank: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -441,7 +445,17 @@ pub(crate) fn query_evidence_chunks(
     input: QueryEvidenceChunksInput,
 ) -> Result<Vec<EvidenceChunk>, String> {
     service(&state)
-        .query_evidence_chunks(&input.item_ids, input.query.as_deref(), input.limit)
+        .query_evidence_chunks(
+            &input.item_ids,
+            input.query.as_deref(),
+            input.limit,
+            EvidenceQueryOptions {
+                scope: input.scope,
+                content_kinds: input.content_kinds.unwrap_or_default(),
+                group_by_item: input.group_by_item.unwrap_or(false),
+                rerank: input.rerank,
+            },
+        )
         .map_err(|error| error.to_string())
 }
 
