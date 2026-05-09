@@ -5,8 +5,6 @@ import type {
   Annotation,
   OcrPdfPageInput,
   PdfDocumentInfo,
-  PdfEngineGetPageBundleInput,
-  PdfInitialPageBundle,
   PdfSearchMatch,
   PdfSearchResult,
   PdfPageText,
@@ -25,6 +23,7 @@ import {
 } from "./pdfSelection";
 import { installPdfJsTextLayerSelectionSupport } from "./pdfTextLayerSelectionSupport";
 import { buildRustPdfTextLayer, pageWidthAtScale1FromPoints } from "./pdfRustTextLayer";
+import { loadPdfJsDocument, renderPdfJsPageToPng, type PdfJsDocument } from "./pdfJsPageRenderer";
 import {
   DEFAULT_PDF_TEXT_BOX_COLOR,
   DEFAULT_PDF_TEXT_BOX_FONT_SIZE,
@@ -40,6 +39,7 @@ const escapeHtml = (value: string) =>
 
 const blobFromBytes = (bytes: Uint8Array, type: string) =>
   new Blob([bytes.slice()], { type });
+const defaultReadPrimaryAttachmentBytes = async () => new Uint8Array();
 
 const widthBucket = (widthPx: number) => Math.max(1, Math.ceil(widthPx / 64) * 64);
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -62,8 +62,16 @@ type PdfContinuousReaderProps = {
   zoom: number;
   fitMode?: "manual" | "fit_width";
   getPdfDocumentInfo: (primaryAttachmentId: number) => Promise<PdfDocumentInfo>;
-  getPdfInitialPageBundle?: (input: PdfEngineGetPageBundleInput) => Promise<PdfInitialPageBundle>;
-  getPdfPageBundle: (input: PdfEngineGetPageBundleInput) => Promise<{
+  getPdfInitialPageBundle?: (input: {
+    primary_attachment_id: number;
+    page_index0: number;
+    target_width_px: number;
+  }) => Promise<unknown>;
+  getPdfPageBundle: (input: {
+    primary_attachment_id: number;
+    page_index0: number;
+    target_width_px: number;
+  }) => Promise<{
     png_bytes: Uint8Array;
     width_px: number;
     height_px: number;
@@ -81,6 +89,7 @@ type PdfContinuousReaderProps = {
     spans: Array<{ text: string; x0: number; y0: number; x1: number; y1: number }>;
   }>>;
   getPdfPageTextsBatch?: (input: { primary_attachment_id: number; page_indexes0: number[] }) => Promise<PdfPageText[]>;
+  readPrimaryAttachmentBytes?: (primaryAttachmentId: number) => Promise<Uint8Array>;
   pdfEngineSearch?: (input: { primary_attachment_id: number; query: string; max_matches?: number }) => Promise<PdfSearchResult>;
   ocrPdfPage: (input: OcrPdfPageInput) => Promise<{
     primary_attachment_id: number;
@@ -214,11 +223,12 @@ export function PdfContinuousReader({
   zoom,
   fitMode = "fit_width",
   getPdfDocumentInfo,
-  getPdfInitialPageBundle,
-  getPdfPageBundle,
-  getPdfPageBundlesBatch,
+  getPdfInitialPageBundle: _getPdfInitialPageBundle,
+  getPdfPageBundle: _getPdfPageBundle,
+  getPdfPageBundlesBatch: _getPdfPageBundlesBatch,
   getPdfPageText,
   getPdfPageTextsBatch,
+  readPrimaryAttachmentBytes = defaultReadPrimaryAttachmentBytes,
   pdfEngineSearch,
   ocrPdfPage,
   onPageCountChange,
@@ -264,6 +274,7 @@ export function PdfContinuousReader({
   const [errorMessage, setErrorMessage] = useState("");
   const [stageWidth, setStageWidth] = useState(0);
   const [pdfDocumentInfo, setPdfDocumentInfo] = useState<PdfDocumentInfo | null>(null);
+  const [pdfJsDocument, setPdfJsDocument] = useState<PdfJsDocument | null>(null);
   const [pageWidthAtScale1, setPageWidthAtScale1] = useState<number | null>(null);
   const [pageShells, setPageShells] = useState<Record<number, PageShellInfo>>({});
   const [pages, setPages] = useState<Record<number, RenderedPageState>>({});
@@ -523,6 +534,7 @@ export function PdfContinuousReader({
     setStatus("loading");
     setErrorMessage("");
     setPdfDocumentInfo(null);
+    setPdfJsDocument(null);
     setPageWidthAtScale1(null);
     setTextLayerReadyByPage({});
     setPages({});
@@ -548,60 +560,35 @@ export function PdfContinuousReader({
 
     void (async () => {
       try {
-        if (getPdfInitialPageBundle) {
-          const initial = await getPdfInitialPageBundle({
-            primary_attachment_id: primaryAttachmentId,
-            page_index0: page,
-            target_width_px: targetRasterWidthPx,
-          });
-          if (cancelled) return;
-          const info = initial.document_info;
-          setPdfDocumentInfo(info);
-          const nextPageCount = Math.max(1, info.page_count || view.page_count || 1);
-          setPageCount(nextPageCount);
-          onPageCountChangeRef.current?.(nextPageCount);
-          const bundle = initial.bundle;
-          if (bundle.page_width_pt > 0) setPageWidthAtScale1(pageWidthAtScale1FromPoints(bundle.page_width_pt));
-          const baseWidth = pageWidthAtScale1FromPoints(bundle.page_width_pt || info.pages[0]?.width_pt || 600);
-          const cssWidthPx = desiredWidthCssPx;
-          const cssHeightPx = Math.max(1, Math.round((bundle.page_height_pt || info.pages[0]?.height_pt || 750) * (96 / 72) * (cssWidthPx / Math.max(1, baseWidth))));
-          const requestKey = `${page}:${cssWidthBucketPx}:${MAX_INITIAL_RASTER_SCALE}`;
-          latestRequestKeyByPageRef.current.set(page, requestKey);
-          requestedRenderKeysRef.current.add(requestKey);
-          const blobUrl = URL.createObjectURL(blobFromBytes(bundle.png_bytes, "image/png"));
-          imageUrlsByIndexRef.current.set(page, blobUrl);
-          const nextRenderedState: RenderedPageState = {
-            imageUrl: blobUrl,
-            cssWidthPx,
-            cssHeightPx,
-            rasterWidthPx: bundle.width_px,
-            rasterHeightPx: bundle.height_px,
-            rasterScale: MAX_INITIAL_RASTER_SCALE,
-            bucketWidthPx: widthBucket(cssWidthPx),
-            requestKey,
-            textSource: pickPageTextSource(bundle.spans.map((span) => span.text ?? "")),
-          };
-          pagesRef.current = { [page]: nextRenderedState };
-          setPages({ [page]: nextRenderedState });
-          rememberPageText(page, bundle.spans.map((span) => span.text ?? ""));
-          setPageShells({
-            [page]: {
-              widthCssPx: cssWidthPx,
-              heightCssPx: cssHeightPx,
-            },
-          });
-          setStatus("ready");
+        const [infoResult, bytes] = await Promise.all([
+          getPdfDocumentInfo(primaryAttachmentId).catch((error) => {
+            void error;
+            return null;
+          }),
+          readPrimaryAttachmentBytes(primaryAttachmentId),
+        ]);
+        if (cancelled) return;
+        const pdfJs = await loadPdfJsDocument(bytes);
+        if (cancelled) {
+          void pdfJs.destroy?.();
           return;
         }
-
-        const info = await getPdfDocumentInfo(primaryAttachmentId);
-        if (cancelled) return;
+        setPdfJsDocument(pdfJs);
+        const info = infoResult ?? {
+          page_count: Math.max(1, pdfJs.numPages || view.page_count || 1),
+          pages: [],
+        };
         setPdfDocumentInfo(info);
         const nextPageCount = Math.max(1, info.page_count || view.page_count || 1);
         setPageCount(nextPageCount);
         onPageCountChangeRef.current?.(nextPageCount);
         const firstPage = info.pages[0];
-        if (firstPage?.width_pt) setPageWidthAtScale1(pageWidthAtScale1FromPoints(firstPage.width_pt));
+        if (firstPage?.width_pt) {
+          setPageWidthAtScale1(pageWidthAtScale1FromPoints(firstPage.width_pt));
+        } else {
+          const page1 = await pdfJs.getPage(1);
+          if (!cancelled) setPageWidthAtScale1(page1.getViewport({ scale: 1 }).width);
+        }
       } catch (error) {
         if (cancelled) return;
         setStatus("error");
@@ -611,24 +598,34 @@ export function PdfContinuousReader({
 
     return () => {
       cancelled = true;
+      setPdfJsDocument((current) => {
+        void current?.destroy?.();
+        return null;
+      });
     };
-  }, [getPdfDocumentInfo, getPdfInitialPageBundle, view.page_count, view.primary_attachment_id]);
+  }, [getPdfDocumentInfo, readPrimaryAttachmentBytes, view.page_count, view.primary_attachment_id]);
 
   useEffect(() => {
     if (!pdfDocumentInfo) return;
     const nextShells: Record<number, PageShellInfo> = {};
     for (let pageIndex0 = 0; pageIndex0 < pageCount; pageIndex0 += 1) {
       const pageInfo = pdfDocumentInfo.pages[pageIndex0] ?? pdfDocumentInfo.pages[0];
-      if (!pageInfo?.width_pt || !pageInfo?.height_pt) continue;
-      const baseWidth = pageWidthAtScale1FromPoints(pageInfo.width_pt);
-      const scale = desiredWidthCssPx / Math.max(1, baseWidth);
-      nextShells[pageIndex0] = {
-        widthCssPx: desiredWidthCssPx,
-        heightCssPx: Math.max(1, Math.round(pageInfo.height_pt * (96 / 72) * scale)),
-      };
+      if (pageInfo?.width_pt && pageInfo?.height_pt) {
+        const baseWidth = pageWidthAtScale1FromPoints(pageInfo.width_pt);
+        const scale = desiredWidthCssPx / Math.max(1, baseWidth);
+        nextShells[pageIndex0] = {
+          widthCssPx: desiredWidthCssPx,
+          heightCssPx: Math.max(1, Math.round(pageInfo.height_pt * (96 / 72) * scale)),
+        };
+      } else {
+        nextShells[pageIndex0] = {
+          widthCssPx: desiredWidthCssPx,
+          heightCssPx: estimatedPageHeightCssPx,
+        };
+      }
     }
     setPageShells(nextShells);
-  }, [desiredWidthCssPx, pageCount, pdfDocumentInfo]);
+  }, [desiredWidthCssPx, estimatedPageHeightCssPx, pageCount, pdfDocumentInfo]);
 
   const searchMatches = useMemo((): SearchMatchWithHitIndex[] => {
     if (!textEnabled || loweredSearch.length === 0) return [];
@@ -756,7 +753,123 @@ export function PdfContinuousReader({
   useEffect(() => {
     let cancelled = false;
     const primaryAttachmentId = view.primary_attachment_id;
-    if (!primaryAttachmentId || renderRequests.length === 0 || !pdfDocumentInfo) return;
+    if (!primaryAttachmentId || renderRequests.length === 0 || !pdfDocumentInfo || !pdfJsDocument) return;
+
+    const pageSizePoints = (pageIndex0: number) => {
+      const info = pdfDocumentInfo.pages[pageIndex0] ?? pdfDocumentInfo.pages[0];
+      return {
+        pageWidthPt: Math.max(1, info?.width_pt ?? 612),
+        pageHeightPt: Math.max(1, info?.height_pt ?? 792),
+      };
+    };
+
+    const applyPage = (
+      request: RenderRequest,
+      rendered: Awaited<ReturnType<typeof renderPdfJsPageToPng>>,
+      text: PdfPageText,
+      runOcrFallback: boolean,
+    ) => {
+      if (cancelled) return;
+      if (latestRequestKeyByPageRef.current.get(request.pageIndex0) !== request.requestKey) {
+        const url = URL.createObjectURL(blobFromBytes(rendered.pngBytes, "image/png"));
+        URL.revokeObjectURL(url);
+        return;
+      }
+
+      const previousUrl = imageUrlsByIndexRef.current.get(request.pageIndex0);
+      const blobUrl = URL.createObjectURL(blobFromBytes(rendered.pngBytes, "image/png"));
+      if (previousUrl) URL.revokeObjectURL(previousUrl);
+      imageUrlsByIndexRef.current.set(request.pageIndex0, blobUrl);
+
+      const nativeStrings = text.spans.map((span) => span.text ?? "");
+      const nextRenderedState: RenderedPageState = {
+        imageUrl: blobUrl,
+        cssWidthPx: request.cssWidthPx,
+        cssHeightPx: rendered.cssHeightPx,
+        rasterWidthPx: rendered.widthPx,
+        rasterHeightPx: rendered.heightPx,
+        rasterScale: request.rasterScale,
+        bucketWidthPx: request.bucketWidthPx,
+        requestKey: request.requestKey,
+        textSource: pickPageTextSource(nativeStrings),
+      };
+      pagesRef.current = {
+        ...pagesRef.current,
+        [request.pageIndex0]: nextRenderedState,
+      };
+      setPages((current) => ({
+        ...current,
+        [request.pageIndex0]: nextRenderedState,
+      }));
+      setPageShells((current) => ({
+        ...current,
+        [request.pageIndex0]: {
+          widthCssPx: request.cssWidthPx,
+          heightCssPx: rendered.cssHeightPx,
+        },
+      }));
+
+      const currentHost = textLayerHostByIndexRef.current.get(request.pageIndex0);
+      if (!currentHost) return;
+      const { pageWidthPt, pageHeightPt } = pageSizePoints(request.pageIndex0);
+      const nativeLayer = buildRustPdfTextLayer({
+        host: currentHost,
+        spans: text.spans,
+        pageWidthPt,
+        pageHeightPt,
+        renderedWidthCssPx: request.cssWidthPx,
+        renderedHeightCssPx: rendered.cssHeightPx,
+      });
+      setTextLayerForPage({
+        pageIndex0: request.pageIndex0,
+        divs: nativeLayer.divs,
+        strings: nativeLayer.strings,
+        textSource: pickPageTextSource(nativeLayer.strings),
+      });
+      if (request.pageIndex0 === page) setStatus("ready");
+
+      const ocrEligible =
+        runOcrFallback &&
+        shouldFallbackToOcr(nativeLayer.strings) &&
+        (request.pageIndex0 === page || visiblePageIndexesRef.current.includes(request.pageIndex0)) &&
+        !inFlightOcrPagesRef.current.has(request.pageIndex0) &&
+        inFlightOcrPagesRef.current.size < OCR_CONCURRENCY;
+      if (ocrEligible) {
+        inFlightOcrPagesRef.current.add(request.pageIndex0);
+        void (async () => {
+          try {
+            const result = await ocrPdfPage({
+              primary_attachment_id: primaryAttachmentId,
+              page_index0: request.pageIndex0,
+              png_bytes: rendered.pngBytes,
+              lang: "eng+chi_sim",
+              config_version: OCR_CONFIG_VERSION,
+              source_resolution: Math.max(72, Math.round((rendered.widthPx / Math.max(1, request.cssWidthPx)) * 96)),
+            });
+            if (cancelled) return;
+            const ocrHost = textLayerHostByIndexRef.current.get(request.pageIndex0);
+            if (!ocrHost) return;
+            const built = buildOcrTextLayer({
+              host: ocrHost,
+              viewportWidth: request.cssWidthPx,
+              viewportHeight: rendered.cssHeightPx,
+              lines: result.lines,
+            });
+            setTextLayerForPage({
+              pageIndex0: request.pageIndex0,
+              divs: built.divs,
+              strings: built.strings,
+              textSource: built.divs.length > 0 ? "ocr" : pickPageTextSource(nativeLayer.strings),
+            });
+            void result;
+          } catch (error) {
+            void error;
+          } finally {
+            inFlightOcrPagesRef.current.delete(request.pageIndex0);
+          }
+        })();
+      }
+    };
 
     const processRequest = async (request: RenderRequest) => {
       const existing = pagesRef.current[request.pageIndex0];
@@ -773,109 +886,20 @@ export function PdfContinuousReader({
         if (host) clearChildren(host);
 
         void effectiveZoom;
-        const bundle = await getPdfPageBundle({
-          primary_attachment_id: primaryAttachmentId,
-          page_index0: request.pageIndex0,
-          target_width_px: request.targetRasterWidthPx,
-        });
+        const [rendered, text] = await Promise.all([
+          renderPdfJsPageToPng({
+            document: pdfJsDocument,
+            pageIndex0: request.pageIndex0,
+            cssWidthPx: request.cssWidthPx,
+            rasterScale: request.rasterScale,
+          }),
+          getPdfPageText({
+            primary_attachment_id: primaryAttachmentId,
+            page_index0: request.pageIndex0,
+          }),
+        ]);
         if (cancelled) return;
-        if (latestRequestKeyByPageRef.current.get(request.pageIndex0) !== request.requestKey) return;
-
-        const previousUrl = imageUrlsByIndexRef.current.get(request.pageIndex0);
-        const blobUrl = URL.createObjectURL(blobFromBytes(bundle.png_bytes, "image/png"));
-        if (previousUrl) URL.revokeObjectURL(previousUrl);
-        imageUrlsByIndexRef.current.set(request.pageIndex0, blobUrl);
-
-        const nextRenderedState: RenderedPageState = {
-          imageUrl: blobUrl,
-          cssWidthPx: request.cssWidthPx,
-          cssHeightPx: request.cssHeightPx,
-          rasterWidthPx: bundle.width_px,
-          rasterHeightPx: bundle.height_px,
-          rasterScale: request.rasterScale,
-          bucketWidthPx: request.bucketWidthPx,
-          requestKey: request.requestKey,
-          textSource: pickPageTextSource(bundle.spans.map((span) => span.text ?? "")),
-        };
-        pagesRef.current = {
-          ...pagesRef.current,
-          [request.pageIndex0]: nextRenderedState,
-        };
-        setPages((current) => ({
-          ...current,
-          [request.pageIndex0]: nextRenderedState,
-        }));
-        if (!pageWidthAtScale1 && bundle.page_width_pt > 0) {
-          setPageWidthAtScale1(pageWidthAtScale1FromPoints(bundle.page_width_pt));
-        }
-        if (bundle.page_width_pt > 0 && bundle.page_height_pt > 0) {
-          const baseWidth = pageWidthAtScale1FromPoints(bundle.page_width_pt);
-          const nextHeight = Math.max(1, Math.round(bundle.page_height_pt * (96 / 72) * (request.cssWidthPx / Math.max(1, baseWidth))));
-          setPageShells((current) => ({
-            ...current,
-            [request.pageIndex0]: {
-              widthCssPx: request.cssWidthPx,
-              heightCssPx: nextHeight,
-            },
-          }));
-        }
-
-        const currentHost = textLayerHostByIndexRef.current.get(request.pageIndex0);
-        if (!currentHost) return;
-        const nativeLayer = buildRustPdfTextLayer({
-          host: currentHost,
-          bundle,
-          renderedWidthCssPx: request.cssWidthPx,
-          renderedHeightCssPx: request.cssHeightPx,
-        });
-        setTextLayerForPage({
-          pageIndex0: request.pageIndex0,
-          divs: nativeLayer.divs,
-          strings: nativeLayer.strings,
-          textSource: pickPageTextSource(nativeLayer.strings),
-        });
-        if (request.pageIndex0 === page) setStatus("ready");
-
-        const ocrEligible =
-          shouldFallbackToOcr(nativeLayer.strings) &&
-          (request.pageIndex0 === page || visiblePageIndexesRef.current.includes(request.pageIndex0)) &&
-          !inFlightOcrPagesRef.current.has(request.pageIndex0) &&
-          inFlightOcrPagesRef.current.size < OCR_CONCURRENCY;
-        if (ocrEligible) {
-          inFlightOcrPagesRef.current.add(request.pageIndex0);
-          void (async () => {
-            try {
-              const result = await ocrPdfPage({
-                primary_attachment_id: primaryAttachmentId,
-                page_index0: request.pageIndex0,
-                png_bytes: bundle.png_bytes,
-                lang: "eng+chi_sim",
-                config_version: OCR_CONFIG_VERSION,
-                source_resolution: Math.max(72, Math.round((bundle.width_px / Math.max(1, request.cssWidthPx)) * 96)),
-              });
-              if (cancelled) return;
-              const ocrHost = textLayerHostByIndexRef.current.get(request.pageIndex0);
-              if (!ocrHost) return;
-              const built = buildOcrTextLayer({
-                host: ocrHost,
-                viewportWidth: request.cssWidthPx,
-                viewportHeight: request.cssHeightPx,
-                lines: result.lines,
-              });
-              setTextLayerForPage({
-                pageIndex0: request.pageIndex0,
-                divs: built.divs,
-                strings: built.strings,
-                textSource: built.divs.length > 0 ? "ocr" : pickPageTextSource(nativeLayer.strings),
-              });
-              void result;
-            } catch (error) {
-              void error;
-            } finally {
-              inFlightOcrPagesRef.current.delete(request.pageIndex0);
-            }
-          })();
-        }
+        applyPage(request, rendered, text, true);
       } catch (error) {
         if (cancelled) return;
         setStatus("error");
@@ -884,71 +908,6 @@ export function PdfContinuousReader({
         inFlightRenderPagesRef.current.delete(request.pageIndex0);
         inFlightRenderKeysRef.current.delete(request.requestKey);
       }
-    };
-
-    const applyBundleToPage = (request: RenderRequest, bundle: Awaited<ReturnType<typeof getPdfPageBundle>>) => {
-      if (cancelled) return;
-      if (latestRequestKeyByPageRef.current.get(request.pageIndex0) !== request.requestKey) {
-        // Avoid leaking object URLs for stale results.
-        const url = URL.createObjectURL(blobFromBytes(bundle.png_bytes, "image/png"));
-        URL.revokeObjectURL(url);
-        return;
-      }
-
-      const previousUrl = imageUrlsByIndexRef.current.get(request.pageIndex0);
-      const blobUrl = URL.createObjectURL(blobFromBytes(bundle.png_bytes, "image/png"));
-      if (previousUrl) URL.revokeObjectURL(previousUrl);
-      imageUrlsByIndexRef.current.set(request.pageIndex0, blobUrl);
-
-      const nextRenderedState: RenderedPageState = {
-        imageUrl: blobUrl,
-        cssWidthPx: request.cssWidthPx,
-        cssHeightPx: request.cssHeightPx,
-        rasterWidthPx: bundle.width_px,
-        rasterHeightPx: bundle.height_px,
-        rasterScale: request.rasterScale,
-        bucketWidthPx: request.bucketWidthPx,
-        requestKey: request.requestKey,
-        textSource: pickPageTextSource(bundle.spans.map((span) => span.text ?? "")),
-      };
-      pagesRef.current = {
-        ...pagesRef.current,
-        [request.pageIndex0]: nextRenderedState,
-      };
-      setPages((current) => ({
-        ...current,
-        [request.pageIndex0]: nextRenderedState,
-      }));
-      if (!pageWidthAtScale1 && bundle.page_width_pt > 0) {
-        setPageWidthAtScale1(pageWidthAtScale1FromPoints(bundle.page_width_pt));
-      }
-      if (bundle.page_width_pt > 0 && bundle.page_height_pt > 0) {
-        const baseWidth = pageWidthAtScale1FromPoints(bundle.page_width_pt);
-        const nextHeight = Math.max(1, Math.round(bundle.page_height_pt * (96 / 72) * (request.cssWidthPx / Math.max(1, baseWidth))));
-        setPageShells((current) => ({
-          ...current,
-          [request.pageIndex0]: {
-            widthCssPx: request.cssWidthPx,
-            heightCssPx: nextHeight,
-          },
-        }));
-      }
-
-      const currentHost = textLayerHostByIndexRef.current.get(request.pageIndex0);
-      if (!currentHost) return;
-      const nativeLayer = buildRustPdfTextLayer({
-        host: currentHost,
-        bundle,
-        renderedWidthCssPx: request.cssWidthPx,
-        renderedHeightCssPx: request.cssHeightPx,
-      });
-      setTextLayerForPage({
-        pageIndex0: request.pageIndex0,
-        divs: nativeLayer.divs,
-        strings: nativeLayer.strings,
-        textSource: pickPageTextSource(nativeLayer.strings),
-      });
-      if (request.pageIndex0 === page) setStatus("ready");
     };
 
     const processBatch = async (batch: RenderRequest[]) => {
@@ -960,7 +919,6 @@ export function PdfContinuousReader({
         return true;
       });
       if (batch.length === 0) return;
-      const targetWidth = batch[0]!.targetRasterWidthPx;
       const uniquePages = Array.from(new Set(batch.map((r) => r.pageIndex0)));
       for (const request of batch) {
         latestRequestKeyByPageRef.current.set(request.pageIndex0, request.requestKey);
@@ -972,28 +930,33 @@ export function PdfContinuousReader({
       }
 
       try {
-        const bundles = getPdfPageBundlesBatch
-          ? await getPdfPageBundlesBatch({
+        const [renderedPages, textPages] = await Promise.all([
+          Promise.all(
+            uniquePages.map((pageIndex0) => {
+              const request = batch.find((entry) => entry.pageIndex0 === pageIndex0);
+              return renderPdfJsPageToPng({
+                document: pdfJsDocument,
+                pageIndex0,
+                cssWidthPx: request?.cssWidthPx ?? desiredWidthCssPx,
+                rasterScale: request?.rasterScale ?? MAX_INITIAL_RASTER_SCALE,
+              });
+            }),
+          ),
+          getPdfPageTextsBatch
+            ? getPdfPageTextsBatch({
               primary_attachment_id: primaryAttachmentId,
               page_indexes0: uniquePages,
-              target_width_px: targetWidth,
             })
-          : await Promise.all(
-              uniquePages.map((page_index0) =>
-                getPdfPageBundle({
-                  primary_attachment_id: primaryAttachmentId,
-                  page_index0,
-                  target_width_px: targetWidth,
-                }),
-              ),
-            );
+            : Promise.all(uniquePages.map((page_index0) => getPdfPageText({ primary_attachment_id: primaryAttachmentId, page_index0 }))),
+        ]);
         if (cancelled) return;
         for (let i = 0; i < uniquePages.length; i += 1) {
           const pageIndex0 = uniquePages[i]!;
           const request = batch.find((r) => r.pageIndex0 === pageIndex0);
-          const bundle = bundles[i];
-          if (!request || !bundle) continue;
-          applyBundleToPage(request, bundle as never);
+          const rendered = renderedPages[i];
+          const text = textPages[i];
+          if (!request || !rendered || !text) continue;
+          applyPage(request, rendered, text, false);
         }
       } catch (error) {
         if (cancelled) return;
@@ -1069,13 +1032,14 @@ export function PdfContinuousReader({
       inFlightRenderPagesRef.current.clear();
     };
   }, [
+    desiredWidthCssPx,
     effectiveZoom,
-    getPdfPageBundle,
-    getPdfPageBundlesBatch,
+    getPdfPageText,
+    getPdfPageTextsBatch,
     ocrPdfPage,
     page,
-    pageWidthAtScale1,
     pdfDocumentInfo,
+    pdfJsDocument,
     renderRequests,
     setTextLayerForPage,
     view.primary_attachment_id,
@@ -2107,12 +2071,14 @@ export function PdfContinuousReader({
                           }}
                           onBlur={(event) => {
                             if (textBox.persisted) {
-                              if (!editing || textBox.annotationId === undefined) return;
+                              if (textBox.annotationId === undefined) return;
+                              const hasBodyDraft = Object.prototype.hasOwnProperty.call(textBoxBodyDrafts, textBox.annotationId);
+                              if (!editing && !hasBodyDraft) return;
                               void commitPersistedTextBoxBody({
                                 annotationId: textBox.annotationId,
                                 anchor: textBox.anchor,
                                 originalBody: textBox.body,
-                                nextBody: event.currentTarget.value,
+                                nextBody: textBoxBodyDrafts[textBox.annotationId] ?? event.currentTarget.value,
                               });
                               return;
                             }

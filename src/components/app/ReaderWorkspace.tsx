@@ -37,6 +37,7 @@ type ReaderWorkspacePdfApi = {
   getPdfPageBundlesBatch: (input: { primary_attachment_id: number; page_indexes0: number[]; target_width_px: number }) => Promise<unknown>;
   getPdfPageText: (input: { primary_attachment_id: number; page_index0: number }) => Promise<unknown>;
   getPdfPageTextsBatch: (input: { primary_attachment_id: number; page_indexes0: number[] }) => Promise<unknown>;
+  readPrimaryAttachmentBytes: (primaryAttachmentId: number) => Promise<Uint8Array>;
   pdfEngineSearch: (input: { primary_attachment_id: number; query: string; max_matches?: number }) => Promise<unknown>;
   onOcrPdfPage: (input: { primary_attachment_id: number; page_index0: number; png_bytes: Uint8Array; lang?: string; config_version: string; source_resolution?: number }) => Promise<unknown>;
 };
@@ -120,6 +121,7 @@ export function ReaderWorkspace(props: Props) {
     getPdfPageText,
     getPdfPageTextsBatch,
     onOcrPdfPage,
+    readPrimaryAttachmentBytes,
     pdfEngineSearch,
   } = props.pdfApi;
   const {
@@ -347,6 +349,7 @@ export function ReaderWorkspace(props: Props) {
                 getPdfPageBundlesBatch={getPdfPageBundlesBatch as never}
                 getPdfPageText={getPdfPageText as never}
                 getPdfPageTextsBatch={getPdfPageTextsBatch as never}
+                readPrimaryAttachmentBytes={readPrimaryAttachmentBytes}
                 ocrPdfPage={onOcrPdfPage as never}
                 pdfEngineSearch={pdfEngineSearch as never}
                 page={readerPage}

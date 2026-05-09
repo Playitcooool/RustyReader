@@ -1,6 +1,20 @@
 import { vi } from "vitest";
 
-export const getLegacyDocumentMock = vi.fn();
+const makeLegacyPageMock = () => ({
+  getViewport: ({ scale }: { scale: number }) => ({
+    width: 800 * scale,
+    height: 1000 * scale,
+  }),
+  render: vi.fn(() => ({ promise: Promise.resolve() })),
+});
+
+export const getLegacyDocumentMock = vi.fn(() => ({
+  promise: Promise.resolve({
+    numPages: 3,
+    getPage: vi.fn(async () => makeLegacyPageMock()),
+    destroy: vi.fn(async () => undefined),
+  }),
+}));
 
 vi.mock("pdfjs-dist/legacy/build/pdf.mjs", () => ({
   GlobalWorkerOptions: { workerSrc: "" },

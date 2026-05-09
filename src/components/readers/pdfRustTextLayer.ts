@@ -1,4 +1,4 @@
-import type { PdfPageBundle } from "../../lib/contracts";
+import type { PdfPageBundle, PdfTextSpan } from "../../lib/contracts";
 
 type BuiltPdfTextLayer = {
   divs: HTMLElement[];
@@ -11,22 +11,25 @@ export const pageWidthAtScale1FromPoints = (pageWidthPt: number) => pageWidthPt 
 
 export function buildRustPdfTextLayer(input: {
   host: HTMLElement;
-  bundle: PdfPageBundle;
+  bundle?: PdfPageBundle;
+  spans?: PdfTextSpan[];
+  pageWidthPt?: number;
+  pageHeightPt?: number;
   renderedWidthCssPx: number;
   renderedHeightCssPx: number;
 }): BuiltPdfTextLayer {
-  const { host, bundle, renderedWidthCssPx, renderedHeightCssPx } = input;
+  const { host, renderedWidthCssPx, renderedHeightCssPx } = input;
   host.replaceChildren();
 
   const divs: HTMLElement[] = [];
   const strings: string[] = [];
 
-  const pageWidthPt = Math.max(1, bundle.page_width_pt);
-  const pageHeightPt = Math.max(1, bundle.page_height_pt);
+  const pageWidthPt = Math.max(1, input.pageWidthPt ?? input.bundle?.page_width_pt ?? 1);
+  const pageHeightPt = Math.max(1, input.pageHeightPt ?? input.bundle?.page_height_pt ?? 1);
   const scaleX = renderedWidthCssPx / pageWidthPt;
   const scaleY = renderedHeightCssPx / pageHeightPt;
 
-  for (const span of bundle.spans) {
+  for (const span of input.spans ?? input.bundle?.spans ?? []) {
     const text = span.text ?? "";
     if (text.length === 0) continue;
 

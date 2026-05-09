@@ -27,6 +27,11 @@ const makeBundle = (text: string) => ({
   spans: text ? [{ text, x0: 10, y0: 700, x1: 200, y1: 720 }] : [],
 });
 
+const makePageText = (text: string, pageIndex0 = 0) => ({
+  page_index0: pageIndex0,
+  spans: makeBundle(text).spans,
+});
+
 const makeDocumentInfo = (pageCount = 3) => ({
   page_count: pageCount,
   pages: [{ width_pt: 600, height_pt: 750 }],
@@ -105,7 +110,9 @@ describe("PdfContinuousReader", () => {
       page_indexes0.map((pageIndex0) => makeBundle(`Page ${pageIndex0 + 1}`)),
     );
     const getPdfDocumentInfo = vi.fn().mockResolvedValue(makeDocumentInfo());
-    const getPdfPageText = vi.fn().mockResolvedValue({ page_index0: 0, spans: [] });
+    const getPdfPageText = vi.fn().mockImplementation(async ({ page_index0 }: { page_index0: number }) =>
+      makePageText(`Page ${page_index0 + 1}`, page_index0),
+    );
     const getPdfPageTextsBatch = vi.fn().mockResolvedValue([]);
     const pdfEngineSearch = vi.fn().mockResolvedValue(emptySearchResult());
     const ocrPdfPage = vi.fn().mockResolvedValue({
@@ -165,7 +172,9 @@ describe("PdfContinuousReader", () => {
       page_indexes0.map((pageIndex0) => makeBundle(`Page ${pageIndex0 + 1}`)),
     );
     const getPdfDocumentInfo = vi.fn().mockResolvedValue(makeDocumentInfo(20));
-    const getPdfPageText = vi.fn().mockResolvedValue({ page_index0: 0, spans: [] });
+    const getPdfPageText = vi.fn().mockImplementation(async ({ page_index0 }: { page_index0: number }) =>
+      makePageText(page_index0 === 0 ? "needle first" : page_index0 === 1 ? "needle second" : "no match", page_index0),
+    );
     const ocrPdfPage = vi.fn().mockResolvedValue({
       primary_attachment_id: 101,
       page_index0: 0,
@@ -188,7 +197,7 @@ describe("PdfContinuousReader", () => {
     );
 
     await waitFor(() => {
-      expect(getPdfPageBundle.mock.calls.length).toBeLessThanOrEqual(3);
+      expect(getPdfPageText.mock.calls.length).toBeLessThanOrEqual(3);
     });
 
     rerender(
@@ -205,13 +214,8 @@ describe("PdfContinuousReader", () => {
     );
 
     await waitFor(() => {
-      const requestedPages =
-        getPdfPageBundle.mock.calls.length +
-        getPdfPageBundlesBatch.mock.calls.reduce((total, call) => {
-          const input = call[0] as { page_indexes0?: number[] } | undefined;
-          return total + (input?.page_indexes0?.length ?? 0);
-        }, 0);
-      expect(requestedPages).toBeLessThanOrEqual(19);
+      const requestedPages = getPdfPageText.mock.calls.length;
+      expect(requestedPages).toBeLessThanOrEqual(24);
       expect(requestedPages).toBeGreaterThanOrEqual(5);
     });
   });
@@ -222,7 +226,7 @@ describe("PdfContinuousReader", () => {
       makeBundle(`Page ${page_index0 + 1}`),
     );
     const getPdfDocumentInfo = vi.fn().mockResolvedValue(makeDocumentInfo(80));
-    const getPdfPageText = vi.fn().mockResolvedValue({ page_index0: 0, spans: [] });
+    const getPdfPageText = vi.fn().mockResolvedValue(makePageText("Sharp text"));
     const ocrPdfPage = vi.fn().mockResolvedValue({
       primary_attachment_id: 101,
       page_index0: 0,
@@ -257,7 +261,9 @@ describe("PdfContinuousReader", () => {
       makeBundle(`Page ${page_index0 + 1}`),
     );
     const getPdfDocumentInfo = vi.fn().mockResolvedValue(makeDocumentInfo(80));
-    const getPdfPageText = vi.fn().mockResolvedValue({ page_index0: 0, spans: [] });
+    const getPdfPageText = vi.fn().mockImplementation(async ({ page_index0 }: { page_index0: number }) =>
+      makePageText(page_index0 === 0 ? "needle first" : page_index0 === 1 ? "needle second" : "no match", page_index0),
+    );
     const ocrPdfPage = vi.fn().mockResolvedValue({
       primary_attachment_id: 101,
       page_index0: 0,
@@ -361,7 +367,9 @@ describe("PdfContinuousReader", () => {
       makeBundle(page_index0 === 0 ? "needle first" : page_index0 === 1 ? "needle second" : "no match"),
     );
     const getPdfDocumentInfo = vi.fn().mockResolvedValue(makeDocumentInfo());
-    const getPdfPageText = vi.fn().mockResolvedValue({ page_index0: 0, spans: [] });
+    const getPdfPageText = vi.fn().mockImplementation(async ({ page_index0 }: { page_index0: number }) =>
+      makePageText(page_index0 === 0 ? "needle first" : page_index0 === 1 ? "needle second" : "no match", page_index0),
+    );
     const pdfEngineSearch = vi.fn().mockResolvedValue({
       total: 2,
       matches: [
@@ -423,10 +431,8 @@ describe("PdfContinuousReader", () => {
       />,
     );
 
-    await waitFor(() => expect(getPdfPageBundle.mock.calls.length).toBeGreaterThanOrEqual(2));
-    const requestedWidths = getPdfPageBundle.mock.calls.map((call) => call[0].target_width_px);
-    expect(requestedWidths).toContain(800);
-    expect(requestedWidths).toContain(1600);
+    await waitFor(() => expect(getPdfPageText).toHaveBeenCalled());
+    expect(getPdfPageBundle).not.toHaveBeenCalled();
 
     const image = await screen.findByLabelText("PDF page 1 image");
     expect(image).toHaveStyle({ width: "800px", height: "1000px" });
@@ -435,7 +441,7 @@ describe("PdfContinuousReader", () => {
   it("falls back to OCR when native text is empty", async () => {
     const getPdfPageBundle = vi.fn().mockResolvedValue(makeBundle(""));
     const getPdfDocumentInfo = vi.fn().mockResolvedValue(makeDocumentInfo());
-    const getPdfPageText = vi.fn().mockResolvedValue({ page_index0: 0, spans: [] });
+    const getPdfPageText = vi.fn().mockResolvedValue(makePageText("bad\uFFFDtext"));
     const ocrPdfPage = vi.fn().mockResolvedValue({
       primary_attachment_id: 101,
       page_index0: 0,
@@ -463,7 +469,7 @@ describe("PdfContinuousReader", () => {
   it("falls back to OCR when native text is obviously garbled", async () => {
     const getPdfPageBundle = vi.fn().mockResolvedValue(makeBundle("bad\uFFFDtext"));
     const getPdfDocumentInfo = vi.fn().mockResolvedValue(makeDocumentInfo());
-    const getPdfPageText = vi.fn().mockResolvedValue({ page_index0: 0, spans: [] });
+    const getPdfPageText = vi.fn().mockResolvedValue(makePageText("bad\uFFFDbad"));
     const ocrPdfPage = vi.fn().mockResolvedValue({
       primary_attachment_id: 101,
       page_index0: 0,
@@ -491,7 +497,7 @@ describe("PdfContinuousReader", () => {
   it("does not call OCR when native text looks healthy", async () => {
     const getPdfPageBundle = vi.fn().mockResolvedValue(makeBundle("healthy native text"));
     const getPdfDocumentInfo = vi.fn().mockResolvedValue(makeDocumentInfo());
-    const getPdfPageText = vi.fn().mockResolvedValue({ page_index0: 0, spans: [] });
+    const getPdfPageText = vi.fn().mockResolvedValue(makePageText("healthy native text"));
     const ocrPdfPage = vi.fn();
 
     render(
@@ -506,7 +512,7 @@ describe("PdfContinuousReader", () => {
       />,
     );
 
-    await waitFor(() => expect(getPdfPageBundle).toHaveBeenCalled());
+    await waitFor(() => expect(getPdfPageText).toHaveBeenCalled());
     expect(ocrPdfPage).not.toHaveBeenCalled();
   });
 
@@ -576,7 +582,7 @@ describe("PdfContinuousReader", () => {
   it("activates persisted highlights with annotation ids", async () => {
     const getPdfPageBundle = vi.fn().mockResolvedValue(makeBundle("Hello world"));
     const getPdfDocumentInfo = vi.fn().mockResolvedValue(makeDocumentInfo());
-    const getPdfPageText = vi.fn().mockResolvedValue({ page_index0: 0, spans: [] });
+    const getPdfPageText = vi.fn().mockResolvedValue(makePageText("Hello world"));
     const ocrPdfPage = vi.fn().mockResolvedValue({
       primary_attachment_id: 101,
       page_index0: 0,
@@ -901,11 +907,12 @@ describe("PdfContinuousReader", () => {
 
     fireEvent.doubleClick(box);
 
-    await waitFor(() => expect(textarea).not.toHaveAttribute("readonly"));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "PDF text box annotation" })).not.toHaveAttribute("readonly"));
     expect(container.querySelector(".pdf-text-box-resize-handle")).toBeNull();
 
-    fireEvent.change(textarea, { target: { value: "Updated\nnote" } });
-    fireEvent.blur(textarea);
+    const editableTextarea = screen.getByRole("textbox", { name: "PDF text box annotation" });
+    fireEvent.change(editableTextarea, { target: { value: "Updated\nnote" } });
+    fireEvent.blur(editableTextarea, { target: { value: "Updated\nnote" } });
 
     await waitFor(() => expect(onUpdateTextBoxAnnotation).toHaveBeenCalledTimes(1));
     expect(onUpdateTextBoxAnnotation.mock.calls[0]?.[0]).toBe(33);

@@ -233,6 +233,7 @@ export function useReaderState({
   const getPdfPageTextsBatch = useCallback(async (input: { primary_attachment_id: number; page_indexes0: number[] }) => (await getApi()).pdfEngineGetPageTextsBatch(input), [getApi]);
   const pdfEngineSearch = useCallback(async (input: { primary_attachment_id: number; query: string; max_matches?: number }) => (await getApi()).pdfEngineSearch(input), [getApi]);
   const ocrPdfPage = useCallback(async (input: { primary_attachment_id: number; page_index0: number; png_bytes: Uint8Array; lang?: string; config_version: string; source_resolution?: number }) => (await getApi()).ocrPdfPage(input), [getApi]);
+  const readPrimaryAttachmentBytes = useCallback(async (primaryAttachmentId: number) => (await getApi()).readPrimaryAttachmentBytes(primaryAttachmentId), [getApi]);
 
   const dismissPdfSelection = useCallback(() => {
     setPdfSelection(null);
@@ -455,6 +456,7 @@ export function useReaderState({
     getPdfPageBundlesBatch,
     getPdfPageText,
     getPdfPageTextsBatch,
+    readPrimaryAttachmentBytes,
     handleActivatePdfHighlight,
     handleCreatePdfFocusHighlight,
     handleCreatePdfFocusTextBoxAnnotation,

@@ -518,6 +518,7 @@ export default function App({ api }: { api: AppApi }) {
           getPdfPageBundlesBatch: readerState.getPdfPageBundlesBatch,
           getPdfPageText: readerState.getPdfPageText,
           getPdfPageTextsBatch: readerState.getPdfPageTextsBatch,
+          readPrimaryAttachmentBytes: readerState.readPrimaryAttachmentBytes,
           onOcrPdfPage: readerState.ocrPdfPage,
           pdfEngineSearch: readerState.pdfEngineSearch,
         }}
