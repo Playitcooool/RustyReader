@@ -544,6 +544,27 @@ describe("App reading workspace", () => {
     expect(await screen.findByRole("treeitem", { name: /ML Library/i })).toBeInTheDocument();
   });
 
+  it("dismisses empty inline collection creation without creating a collection", async () => {
+    const user = userEvent.setup();
+    const createCollectionSpy = vi.spyOn(fakeApi, "createCollection");
+    render(<App api={fakeApi} />);
+
+    await user.click(await screen.findByRole("button", { name: "New folder" }));
+    const blurredCreateInput = await screen.findByRole("textbox", { name: "New collection name" });
+    fireEvent.blur(blurredCreateInput);
+    await waitFor(() => {
+      expect(screen.queryByRole("textbox", { name: "New collection name" })).not.toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "New folder" }));
+    const escapedCreateInput = await screen.findByRole("textbox", { name: "New collection name" });
+    fireEvent.keyDown(escapedCreateInput, { key: "Escape" });
+    await waitFor(() => {
+      expect(screen.queryByRole("textbox", { name: "New collection name" })).not.toBeInTheDocument();
+    });
+    expect(createCollectionSpy).not.toHaveBeenCalled();
+  });
+
   it("shows resource context menus for collections and items", async () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);

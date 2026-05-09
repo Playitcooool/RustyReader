@@ -472,6 +472,7 @@ export default function App({ api }: { api: AppApi }) {
           onBatchMoveTargetChange={library.setBatchMoveTargetId}
           onBatchTag={library.handleBatchTag}
           onBatchTagNameChange={library.setBatchTagName}
+          onCancelCollectionInlineEdit={library.cancelCollectionInlineEdit}
           onContextMenu={library.openResourceContextMenu}
           onCreateCollection={library.handleCreateCollection}
           onCreateTag={() => library.handleCreateTag(activePaper)}

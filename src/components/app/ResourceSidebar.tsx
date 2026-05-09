@@ -29,6 +29,7 @@ type Props = {
   onContextMenu: (event: ReactMouseEvent<HTMLElement>, detail: Exclude<ResourceContextMenuState, null>) => void;
   onCreateCollection: (parentId: number | null) => void | Promise<void>;
   onCreateTag: () => void | Promise<void>;
+  onCancelCollectionInlineEdit: () => void;
   onDragCountChange: (value: number) => void;
   onImportPaths: (paths: string[], sourceLabel: string) => void | Promise<void>;
   onNewTagNameChange: (value: string) => void;
@@ -77,6 +78,7 @@ export function ResourceSidebar(props: Props) {
     onContextMenu,
     onCreateCollection,
     onCreateTag,
+    onCancelCollectionInlineEdit,
     onDragCountChange,
     onImportPaths,
     onNewTagNameChange,
@@ -115,6 +117,9 @@ export function ResourceSidebar(props: Props) {
           if (event.key === "Enter") {
             event.preventDefault();
             renamingCollectionId ? void onSubmitCollectionRename() : void onCreateCollection(parentId);
+          } else if (event.key === "Escape") {
+            event.preventDefault();
+            onCancelCollectionInlineEdit();
           }
         }}
         placeholder={renamingCollectionId ? "Rename collection" : "New collection"}
@@ -142,7 +147,22 @@ export function ResourceSidebar(props: Props) {
                 {isExpanded ? "▾" : "▸"}
               </button>
               {isRenaming ? (
-                <input aria-label="Rename collection" autoFocus className="resource-tree-inline-input" value={collectionDraftName} onBlur={() => void onSubmitCollectionRename()} onChange={(event) => onSetCollectionDraftName(event.target.value)} onKeyDown={(event) => event.key === "Enter" && void onSubmitCollectionRename()} />
+                <input
+                  aria-label="Rename collection"
+                  autoFocus
+                  className="resource-tree-inline-input"
+                  value={collectionDraftName}
+                  onBlur={() => void onSubmitCollectionRename()}
+                  onChange={(event) => onSetCollectionDraftName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      void onSubmitCollectionRename();
+                    } else if (event.key === "Escape") {
+                      event.preventDefault();
+                      onCancelCollectionInlineEdit();
+                    }
+                  }}
+                />
               ) : (
                 <button className="resource-tree-label resource-tree-collection-button" type="button" onClick={() => onSelectedCollectionChange(collection.id)}>
                   {collection.name}

@@ -321,7 +321,8 @@ export function useLibraryState({
   const handleCreateCollection = useCallback(async (parentId: number | null) => {
     const name = collectionDraftName.trim();
     if (!name) {
-      setStatusMessage("Enter a collection name first.");
+      setCollectionDraftName("");
+      setCreatingCollectionParentId(null);
       return;
     }
     const collection = await (await getApi()).createCollection({ name, parent_id: parentId });
