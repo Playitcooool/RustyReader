@@ -204,6 +204,7 @@ export async function createTauriApi(): Promise<AppApi> {
       }),
     queryEvidenceChunks: (input) => invoke("query_evidence_chunks", { input }),
     getEvidenceChunk: (evidenceId) => invoke("get_evidence_chunk", { evidenceId }),
+    locateEvidenceChunk: (evidenceId) => invoke("locate_evidence_chunk", { evidenceId }),
     getAiSessionArtifact: (sessionId) =>
       invoke("get_ai_session_artifact", {
         sessionId,

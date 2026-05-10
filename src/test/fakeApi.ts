@@ -1605,6 +1605,23 @@ export const fakeApi: AppApi = {
     };
   },
 
+  async locateEvidenceChunk(evidenceId) {
+    const chunk = await fakeApi.getEvidenceChunk(evidenceId);
+    if (!chunk) return null;
+    return {
+      evidence_id: chunk.id,
+      item_id: chunk.item_id,
+      item_title: chunk.item_title,
+      page_number: chunk.page_start ?? chunk.page_number,
+      page_start: chunk.page_start ?? chunk.page_number,
+      page_end: chunk.page_end ?? chunk.page_start ?? chunk.page_number,
+      text_prefix: chunk.text.slice(0, 160),
+      section_title: chunk.section_title,
+      content_kind: chunk.content_kind,
+      source_kind: chunk.source_kind,
+    };
+  },
+
   async getArtifact(input) {
     return (
       state.artifacts.find((artifact) => {

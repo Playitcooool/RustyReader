@@ -138,25 +138,25 @@ export default function App({ api }: { api: AppApi }) {
   }, [ai, closeReaderFloatingUi, readerState.workspaceMode]);
 
   const handleOpenEvidenceCitation = useCallback(async (evidenceId: number) => {
-    const chunk = await (await getApi()).getEvidenceChunk(evidenceId);
-    if (!chunk) {
+    const target = await (await getApi()).locateEvidenceChunk(evidenceId);
+    if (!target) {
       setStatusMessage(`Evidence E${evidenceId} is no longer available.`);
       return;
     }
-    const item = library.libraryItems.find((entry) => entry.id === chunk.item_id);
+    const item = library.libraryItems.find((entry) => entry.id === target.item_id);
     if (!item) {
       setStatusMessage(`Evidence E${evidenceId} belongs to a paper outside the current library view.`);
       return;
     }
     readerState.activateItem(item, { focusPdf: item.attachment_format === "pdf" });
-    if (item.attachment_format === "pdf" && chunk.page_number) {
-      readerState.setReaderPageClamped(chunk.page_number);
-    } else {
-      const prefix = chunk.text.slice(0, 80).trim();
-      if (prefix) {
-        readerState.setReaderSearchQuery(prefix);
-        readerState.openFindHud();
-      }
+    if (item.attachment_format === "pdf" && target.page_number) {
+      readerState.setReaderPageClamped(target.page_number - 1);
+    }
+    const prefix = target.text_prefix.slice(0, 80).trim();
+    if (prefix) {
+      readerState.setReaderSearchQuery(prefix);
+      readerState.setReaderSearchMatchIndex(0);
+      readerState.openFindHud();
     }
   }, [getApi, library.libraryItems, readerState]);
 

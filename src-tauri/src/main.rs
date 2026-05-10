@@ -614,6 +614,7 @@ fn main() {
             commands::list_ai_session_task_runs,
             commands::query_evidence_chunks,
             commands::get_evidence_chunk,
+            commands::locate_evidence_chunk,
             commands::get_ai_session_artifact,
             commands::list_ai_session_notes,
             commands::create_ai_session_note_from_artifact,

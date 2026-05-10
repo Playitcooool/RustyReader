@@ -1,7 +1,8 @@
 use app_core::service::{
     AIArtifact, AISession, AISessionReference, AISessionReferenceKind, AISettings, AITask,
-    Annotation, EvidenceChunk, EvidenceQueryOptions, ImportBatchResult, ImportMode, LibraryItem,
-    ResearchNote, Tag, TranslateSelectionResult, TranslationProvider, UpdateAISettingsInput,
+    Annotation, EvidenceChunk, EvidenceCitationTarget, EvidenceQueryOptions, ImportBatchResult,
+    ImportMode, LibraryItem, ResearchNote, Tag, TranslateSelectionResult, TranslationProvider,
+    UpdateAISettingsInput,
 };
 use serde::Deserialize;
 use std::path::PathBuf;
@@ -466,6 +467,16 @@ pub(crate) fn get_evidence_chunk(
 ) -> Result<Option<EvidenceChunk>, String> {
     service(&state)
         .get_evidence_chunk(evidence_id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) fn locate_evidence_chunk(
+    state: State<'_, AppState>,
+    evidence_id: i64,
+) -> Result<Option<EvidenceCitationTarget>, String> {
+    service(&state)
+        .locate_evidence_chunk(evidence_id)
         .map_err(|error| error.to_string())
 }
 

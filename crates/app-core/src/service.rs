@@ -108,6 +108,20 @@ pub struct EvidenceChunk {
     pub extractor_version: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvidenceCitationTarget {
+    pub evidence_id: i64,
+    pub item_id: i64,
+    pub item_title: String,
+    pub page_number: Option<i64>,
+    pub page_start: Option<i64>,
+    pub page_end: Option<i64>,
+    pub text_prefix: String,
+    pub section_title: Option<String>,
+    pub content_kind: String,
+    pub source_kind: String,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct EvidenceQueryOptions {
     pub scope: Option<String>,
@@ -465,6 +479,12 @@ struct ExtractedChunkDraft {
     anchor_json: String,
     text: String,
     source_kind: String,
+}
+
+#[derive(Debug, Clone)]
+struct ContentBlock {
+    text: String,
+    heading_level: Option<usize>,
 }
 
 impl ExtractedDocument {
@@ -1291,7 +1311,7 @@ impl LibraryService {
             "INSERT INTO search_index(item_id, title, plain_text) VALUES (?1, ?2, ?3)",
             params![item_id, title, plain_text],
         )?;
-        let chunks = build_paragraph_chunks(&plain_text, None, "markdown");
+        let chunks = build_structured_chunks(&markdown_content_blocks(markdown), "markdown");
         rebuild_evidence_chunks_conn(&tx, item_id, title, &chunks, EXTRACTOR_VERSION)?;
         tx.commit()?;
 
@@ -1655,6 +1675,25 @@ impl LibraryService {
         )
         .optional()
         .map_err(Into::into)
+    }
+
+    pub fn locate_evidence_chunk(&self, evidence_id: i64) -> Result<Option<EvidenceCitationTarget>> {
+        let chunk = match self.get_evidence_chunk(evidence_id)? {
+            Some(chunk) => chunk,
+            None => return Ok(None),
+        };
+        Ok(Some(EvidenceCitationTarget {
+            evidence_id: chunk.id,
+            item_id: chunk.item_id,
+            item_title: chunk.item_title,
+            page_number: chunk.page_start.or(chunk.page_number),
+            page_start: chunk.page_start.or(chunk.page_number),
+            page_end: chunk.page_end.or(chunk.page_start).or(chunk.page_number),
+            text_prefix: evidence_text_prefix(&chunk.anchor_json, &chunk.text),
+            section_title: chunk.section_title,
+            content_kind: chunk.content_kind,
+            source_kind: chunk.source_kind,
+        }))
     }
 
     pub fn remove_annotation(&self, annotation_id: i64) -> Result<()> {
@@ -2633,12 +2672,12 @@ impl LibraryService {
 
     pub fn export_note_markdown(&self, note_id: i64) -> Result<String> {
         let conn = self.connect()?;
-        conn.query_row(
+        let markdown: String = conn.query_row(
             "SELECT markdown FROM research_notes WHERE id = ?1",
             [note_id],
             |row| row.get(0),
-        )
-        .map_err(Into::into)
+        )?;
+        append_evidence_references(&conn, &markdown)
     }
 
     pub fn export_citation(&self, item_id: i64, format: &str) -> Result<String> {
@@ -3297,7 +3336,13 @@ fn query_evidence_chunks_conn(
     let query_text = query
         .map(fts_query)
         .filter(|value| !value.trim().is_empty());
-    if options.group_by_item {
+    let rank_expression = if options.rerank.as_deref() == Some("none") {
+        "bm25(evidence_chunk_index)"
+    } else {
+        "(bm25(evidence_chunk_index) / c.retrieval_weight)"
+    };
+    let scoped_grouping = matches!(options.scope.as_deref(), Some("collection")) && item_ids.len() > 1;
+    if options.group_by_item || scoped_grouping {
         return query_evidence_chunks_grouped_conn(conn, item_ids, query, limit, options);
     }
     let mut args: Vec<rusqlite::types::Value> = item_ids.iter().copied().map(Into::into).collect();
@@ -3314,7 +3359,7 @@ fn query_evidence_chunks_conn(
             JOIN evidence_chunks c ON c.id = idx.chunk_id
             JOIN items i ON i.id = c.item_id
             WHERE c.item_id IN ({placeholders}) {content_filter} AND evidence_chunk_index MATCH ?
-            ORDER BY (bm25(evidence_chunk_index) / c.retrieval_weight), c.item_id ASC, c.chunk_index ASC
+            ORDER BY {rank_expression}, c.item_id ASC, c.chunk_index ASC
             LIMIT ?
             "
         )
@@ -3347,11 +3392,11 @@ fn query_evidence_chunks_grouped_conn(
     options: &EvidenceQueryOptions,
 ) -> Result<Vec<EvidenceChunk>> {
     let per_item_limit = ((limit as usize / item_ids.len().max(1)) + 1).clamp(1, 8) as i64;
-    let mut grouped = Vec::new();
+    let mut per_item = Vec::new();
     for item_id in item_ids {
         let mut item_options = options.clone();
         item_options.group_by_item = false;
-        grouped.extend(query_evidence_chunks_conn(
+        per_item.push(query_evidence_chunks_conn(
             conn,
             &[*item_id],
             query_text,
@@ -3359,15 +3404,18 @@ fn query_evidence_chunks_grouped_conn(
             &item_options,
         )?);
     }
-    grouped.sort_by(|a, b| {
-        a.score
-            .partial_cmp(&b.score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| a.item_id.cmp(&b.item_id))
-            .then_with(|| a.chunk_index.cmp(&b.chunk_index))
-    });
-    grouped.truncate(limit as usize);
-    Ok(grouped)
+    let mut merged = Vec::new();
+    for index in 0..per_item_limit as usize {
+        for chunks in &per_item {
+            if let Some(chunk) = chunks.get(index) {
+                merged.push(chunk.clone());
+                if merged.len() >= limit as usize {
+                    return Ok(merged);
+                }
+            }
+        }
+    }
+    Ok(merged)
 }
 
 fn content_kind_filter_sql(
@@ -3491,6 +3539,119 @@ fn extracted_chunk(page_number: Option<i64>, source_kind: &str, text: &str) -> E
     }
 }
 
+fn build_structured_chunks(blocks: &[ContentBlock], source_kind: &str) -> Vec<ExtractedChunkDraft> {
+    let mut chunks = Vec::new();
+    let mut heading_path: Vec<String> = Vec::new();
+    let mut current = String::new();
+    let mut current_heading_path: Vec<String> = Vec::new();
+    let mut current_section_title: Option<String> = None;
+
+    let flush = |chunks: &mut Vec<ExtractedChunkDraft>,
+                 current: &mut String,
+                 current_heading_path: &[String],
+                 current_section_title: &Option<String>| {
+        if current.trim().is_empty() {
+            return;
+        }
+        chunks.push(extracted_structured_chunk(
+            source_kind,
+            current,
+            current_heading_path,
+            current_section_title.clone(),
+        ));
+        current.clear();
+    };
+
+    for block in blocks {
+        let text = normalize_whitespace(&block.text);
+        if text.is_empty() {
+            continue;
+        }
+        if let Some(level) = block.heading_level {
+            flush(
+                &mut chunks,
+                &mut current,
+                &current_heading_path,
+                &current_section_title,
+            );
+            let level = level.clamp(1, 6);
+            if heading_path.len() >= level {
+                heading_path.truncate(level - 1);
+            }
+            heading_path.push(text);
+            continue;
+        }
+        if !current.is_empty()
+            && current.chars().count() + text.chars().count() > EVIDENCE_CHUNK_MAX_CHARS
+        {
+            flush(
+                &mut chunks,
+                &mut current,
+                &current_heading_path,
+                &current_section_title,
+            );
+        }
+        if current.is_empty() {
+            current_heading_path = heading_path.clone();
+            current_section_title = heading_path.last().cloned();
+        } else {
+            current.push_str("\n\n");
+        }
+        current.push_str(&text);
+        if current.chars().count() >= EVIDENCE_CHUNK_TARGET_CHARS {
+            flush(
+                &mut chunks,
+                &mut current,
+                &current_heading_path,
+                &current_section_title,
+            );
+        }
+    }
+    flush(
+        &mut chunks,
+        &mut current,
+        &current_heading_path,
+        &current_section_title,
+    );
+    chunks
+}
+
+fn extracted_structured_chunk(
+    source_kind: &str,
+    text: &str,
+    heading_path: &[String],
+    section_title: Option<String>,
+) -> ExtractedChunkDraft {
+    let heading_path_json = if heading_path.is_empty() {
+        None
+    } else {
+        Some(serde_json::to_string(heading_path).unwrap_or_else(|_| "[]".into()))
+    };
+    let content_kind = infer_content_kind(text).to_string();
+    ExtractedChunkDraft {
+        page_number: None,
+        page_start: None,
+        page_end: None,
+        section_title,
+        heading_path_json: heading_path_json.clone(),
+        content_kind: content_kind.clone(),
+        metadata_json: None,
+        retrieval_weight: infer_retrieval_weight(text),
+        anchor_json: serde_json::json!({
+            "kind": "evidence_chunk",
+            "page_number": null,
+            "page_start": null,
+            "page_end": null,
+            "section_title": heading_path.last(),
+            "heading_path": heading_path,
+            "text_prefix": truncate_chars(text, 160),
+        })
+        .to_string(),
+        text: text.to_string(),
+        source_kind: source_kind.to_string(),
+    }
+}
+
 fn infer_content_kind(text: &str) -> &'static str {
     let trimmed = text.trim_start().to_lowercase();
     if trimmed.starts_with("figure ")
@@ -3510,6 +3671,19 @@ fn infer_retrieval_weight(text: &str) -> f64 {
         "figure_caption" | "table_caption" => 1.15,
         _ => 1.0,
     }
+}
+
+fn evidence_text_prefix(anchor_json: &str, text: &str) -> String {
+    serde_json::from_str::<serde_json::Value>(anchor_json)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("text_prefix")
+                .and_then(|prefix| prefix.as_str())
+                .map(str::to_string)
+        })
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| truncate_chars(text, 160))
 }
 
 fn generate_connector_token() -> String {
@@ -4311,6 +4485,68 @@ fn evidence_context(chunks: &[EvidenceChunk]) -> String {
         .join("\n\n")
 }
 
+fn append_evidence_references(conn: &Connection, markdown: &str) -> Result<String> {
+    let citation_re = Regex::new(r"\[E(\d+)\]").unwrap();
+    let mut seen = HashSet::new();
+    let mut ids = Vec::new();
+    for capture in citation_re.captures_iter(markdown) {
+        let Some(id) = capture.get(1).and_then(|value| value.as_str().parse::<i64>().ok()) else {
+            continue;
+        };
+        if seen.insert(id) {
+            ids.push(id);
+        }
+    }
+    if ids.is_empty() || markdown.contains("## Evidence References") {
+        return Ok(markdown.to_string());
+    }
+    let mut references = Vec::new();
+    for id in ids {
+        if let Some(chunk) = conn
+            .query_row(
+                "
+                SELECT c.id, c.item_id, i.title, c.chunk_index, c.page_number, c.page_start, c.page_end,
+                       c.section_title, c.heading_path_json, c.content_kind, c.metadata_json, c.retrieval_weight,
+                       NULL, c.anchor_json, c.text, c.source_kind, c.extractor_version
+                FROM evidence_chunks c
+                JOIN items i ON i.id = c.item_id
+                WHERE c.id = ?1
+                ",
+                [id],
+                map_evidence_chunk,
+            )
+            .optional()?
+        {
+            let page = match (chunk.page_start.or(chunk.page_number), chunk.page_end) {
+                (Some(start), Some(end)) if start != end => format!("pp. {start}-{end}"),
+                (Some(start), _) => format!("p. {start}"),
+                _ => "no page".into(),
+            };
+            let section = chunk
+                .section_title
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or("no section");
+            references.push(format!(
+                "- [E{}] {}, {}, {}; {}",
+                chunk.id,
+                chunk.item_title,
+                page,
+                section,
+                truncate_chars(&chunk.text, 240)
+            ));
+        }
+    }
+    if references.is_empty() {
+        return Ok(markdown.to_string());
+    }
+    Ok(format!(
+        "{}\n\n## Evidence References\n\n{}",
+        markdown.trim_end(),
+        references.join("\n")
+    ))
+}
+
 fn literature_review_template(target: &str) -> &'static str {
     match target {
         "{title}" => "# Literature Review: {title}\n\n## Research Problem and Scope\n- ...\n\n## Main Themes\n- ...\n\n## Method and Evidence Comparison\n- ...\n\n## Agreements, Tensions, and Gaps\n- ...\n\n## Suggested Review Narrative\n...\n\n## Open Questions\n- ...",
@@ -4661,6 +4897,60 @@ fn markdown_to_plain_text(markdown: &str) -> String {
     text.trim().to_string()
 }
 
+fn markdown_content_blocks(markdown: &str) -> Vec<ContentBlock> {
+    let mut blocks = Vec::new();
+    let mut in_fence = false;
+    for line in markdown.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("```") {
+            in_fence = !in_fence;
+            continue;
+        }
+        if trimmed.is_empty() {
+            continue;
+        }
+        if !in_fence && trimmed.starts_with('#') {
+            let level = trimmed.chars().take_while(|ch| *ch == '#').count();
+            let text = trimmed.trim_start_matches('#').trim();
+            if !text.is_empty() {
+                blocks.push(ContentBlock {
+                    text: text.to_string(),
+                    heading_level: Some(level),
+                });
+            }
+            continue;
+        }
+        let mut text = trimmed
+            .trim_start_matches('>')
+            .trim_start_matches("- ")
+            .trim_start_matches("* ")
+            .to_string();
+        if !in_fence {
+            text = Regex::new(r"!\[([^\]]*)\]\([^)]+\)")
+                .unwrap()
+                .replace_all(&text, "$1")
+                .to_string();
+            text = Regex::new(r"\[([^\]]+)\]\([^)]+\)")
+                .unwrap()
+                .replace_all(&text, "$1")
+                .to_string();
+            text = text
+                .replace("**", "")
+                .replace("__", "")
+                .replace('`', "")
+                .replace('*', "");
+        }
+        let normalized = normalize_whitespace(&text);
+        if !normalized.is_empty() {
+            blocks.push(ContentBlock {
+                text: normalized,
+                heading_level: None,
+            });
+        }
+    }
+    blocks
+}
+
 fn markdown_to_safe_html(title: &str, markdown: &str) -> String {
     let mut html = format!("<article><h1>{}</h1>", encode_safe(title));
     let mut paragraph = Vec::new();
@@ -4890,7 +5180,11 @@ fn extract_pdf(path: &Path, bytes: &[u8]) -> Result<ExtractedDocument> {
 fn extract_docx(path: &Path, bytes: &[u8]) -> Result<ExtractedDocument> {
     let mut archive = ZipArchive::new(Cursor::new(bytes))?;
     let document_xml = read_zip_entry(&mut archive, "word/document.xml")?;
-    let paragraphs = extract_docx_paragraphs(&document_xml)?;
+    let blocks = extract_docx_blocks(&document_xml)?;
+    let paragraphs = blocks
+        .iter()
+        .map(|block| block.text.clone())
+        .collect::<Vec<_>>();
     let title = read_docx_title(&mut archive)?.unwrap_or_else(|| {
         path.file_stem()
             .map(|value| value.to_string_lossy().to_string())
@@ -4900,7 +5194,7 @@ fn extract_docx(path: &Path, bytes: &[u8]) -> Result<ExtractedDocument> {
     });
     let authors = read_docx_author(&mut archive)?.unwrap_or_else(|| "Imported Author".into());
     let plain_text = join_plain_text(&paragraphs);
-    let chunks = build_paragraph_chunks(&plain_text, None, "docx");
+    let chunks = build_structured_chunks(&blocks, "docx");
 
     Ok(ExtractedDocument {
         normalized_html: article_from_paragraphs(&title, &paragraphs),
@@ -4925,7 +5219,7 @@ fn extract_epub(path: &Path, bytes: &[u8]) -> Result<ExtractedDocument> {
     let container_xml = read_zip_entry(&mut archive, "META-INF/container.xml")?;
     let rootfile = find_epub_rootfile(&container_xml)?;
     let package_xml = read_zip_entry(&mut archive, &rootfile)?;
-    let (title, authors, sections) = extract_epub_sections(&mut archive, &rootfile, &package_xml)?;
+    let (title, authors, blocks) = extract_epub_sections(&mut archive, &rootfile, &package_xml)?;
     let resolved_title = title.unwrap_or_else(|| {
         path.file_stem()
             .map(|value| value.to_string_lossy().to_string())
@@ -4933,8 +5227,12 @@ fn extract_epub(path: &Path, bytes: &[u8]) -> Result<ExtractedDocument> {
             .map(|value| title_from_slug(&value))
             .unwrap_or_else(|| "Untitled".into())
     });
+    let sections = blocks
+        .iter()
+        .map(|block| block.text.clone())
+        .collect::<Vec<_>>();
     let plain_text = join_plain_text(&sections);
-    let chunks = build_paragraph_chunks(&plain_text, None, "epub");
+    let chunks = build_structured_chunks(&blocks, "epub");
 
     Ok(ExtractedDocument {
         normalized_html: article_from_paragraphs(&resolved_title, &sections),
@@ -4961,9 +5259,9 @@ fn read_zip_entry<R: Read + Seek>(archive: &mut ZipArchive<R>, path: &str) -> Re
     Ok(contents)
 }
 
-fn extract_docx_paragraphs(xml: &str) -> Result<Vec<String>> {
+fn extract_docx_blocks(xml: &str) -> Result<Vec<ContentBlock>> {
     let document = Document::parse(xml)?;
-    let mut paragraphs = Vec::new();
+    let mut blocks = Vec::new();
     for paragraph in document.descendants().filter(|node| {
         node.has_tag_name((
             "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
@@ -4983,13 +5281,51 @@ fn extract_docx_paragraphs(xml: &str) -> Result<Vec<String>> {
             .join("");
         let normalized = normalize_whitespace(&text);
         if !normalized.is_empty() {
-            paragraphs.push(normalized);
+            blocks.push(ContentBlock {
+                text: normalized,
+                heading_level: docx_heading_level(paragraph),
+            });
         }
     }
-    if paragraphs.is_empty() {
-        paragraphs.push("DOCX imported, but no readable paragraphs were extracted.".into());
+    if blocks.is_empty() {
+        blocks.push(ContentBlock {
+            text: "DOCX imported, but no readable paragraphs were extracted.".into(),
+            heading_level: None,
+        });
     }
-    Ok(paragraphs)
+    Ok(blocks)
+}
+
+fn docx_heading_level(paragraph: roxmltree::Node<'_, '_>) -> Option<usize> {
+    paragraph
+        .descendants()
+        .find(|node| {
+            node.has_tag_name((
+                "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+                "pStyle",
+            ))
+        })
+        .and_then(|node| {
+            node.attribute((
+                "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+                "val",
+            ))
+            .or_else(|| node.attribute("val"))
+        })
+        .and_then(|value| {
+            let lower = value.to_ascii_lowercase();
+            lower
+                .strip_prefix("heading")
+                .and_then(|suffix| suffix.parse::<usize>().ok())
+                .or_else(|| {
+                    if lower == "title" {
+                        Some(1)
+                    } else {
+                        None
+                    }
+                })
+        })
+        .map(|level| level.clamp(1, 6))
 }
 
 fn read_docx_title<R: Read + Seek>(archive: &mut ZipArchive<R>) -> Result<Option<String>> {
@@ -5040,7 +5376,7 @@ fn extract_epub_sections<R: Read + Seek>(
     archive: &mut ZipArchive<R>,
     rootfile: &str,
     package_xml: &str,
-) -> Result<(Option<String>, Option<String>, Vec<String>)> {
+) -> Result<(Option<String>, Option<String>, Vec<ContentBlock>)> {
     let document = Document::parse(package_xml)?;
     let title = document
         .descendants()
@@ -5081,12 +5417,15 @@ fn extract_epub_sections<R: Read + Seek>(
     }
 
     if sections.is_empty() {
-        sections.push("EPUB imported, but no readable sections were extracted.".into());
+        sections.push(ContentBlock {
+            text: "EPUB imported, but no readable sections were extracted.".into(),
+            heading_level: None,
+        });
     }
     Ok((title, author, sections))
 }
 
-fn extract_xhtml_sections(xml: &str) -> Result<Vec<String>> {
+fn extract_xhtml_sections(xml: &str) -> Result<Vec<ContentBlock>> {
     let document = Document::parse(xml)?;
     let mut sections = Vec::new();
     for node in document.descendants().filter(|node| {
@@ -5097,7 +5436,19 @@ fn extract_xhtml_sections(xml: &str) -> Result<Vec<String>> {
     }) {
         let text = normalize_whitespace(node.text().unwrap_or_default());
         if !text.is_empty() {
-            sections.push(text);
+            let heading_level = match node.tag_name().name() {
+                "h1" => Some(1),
+                "h2" => Some(2),
+                "h3" => Some(3),
+                "h4" => Some(4),
+                "h5" => Some(5),
+                "h6" => Some(6),
+                _ => None,
+            };
+            sections.push(ContentBlock {
+                text,
+                heading_level,
+            });
         }
     }
     Ok(sections)

@@ -91,10 +91,16 @@ export type EvidenceChunk = {
 };
 
 export type EvidenceCitationTarget = {
-  evidenceId: number;
-  itemId: number;
-  pageNumber: number | null;
-  textPrefix: string;
+  evidence_id: number;
+  item_id: number;
+  item_title: string;
+  page_number: number | null;
+  page_start: number | null;
+  page_end: number | null;
+  text_prefix: string;
+  section_title: string | null;
+  content_kind: string;
+  source_kind: string;
 };
 
 export type AnnotationFilter = "all" | "current_page" | "search_matches";
@@ -420,6 +426,7 @@ export type AppApi = {
     rerank?: "none" | "local";
   }) => Promise<EvidenceChunk[]>;
   getEvidenceChunk: (evidenceId: number) => Promise<EvidenceChunk | null>;
+  locateEvidenceChunk: (evidenceId: number) => Promise<EvidenceCitationTarget | null>;
   getAiSessionArtifact: (sessionId: number) => Promise<AIArtifact | null>;
   listAiSessionNotes: (sessionId: number) => Promise<ResearchNote[]>;
   createAiSessionNoteFromArtifact: (artifactId: number) => Promise<ResearchNote>;

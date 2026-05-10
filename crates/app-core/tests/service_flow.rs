@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     fs,
     io::Write,
     path::{Path, PathBuf},
@@ -6,8 +7,8 @@ use std::{
 };
 
 use app_core::service::{
-    AIProvider, AISessionReferenceKind, AiCompletionRequest, AiTransport, ImportMode,
-    LibraryService, TranslationProvider, UpdateAISettingsInput,
+    AIProvider, AISessionReferenceKind, AiCompletionRequest, AiTransport, EvidenceQueryOptions,
+    ImportMode, LibraryService, TranslationProvider, UpdateAISettingsInput,
 };
 use flate2::{write::ZlibEncoder, Compression};
 use rusqlite::Connection;
@@ -302,6 +303,145 @@ fn review_draft_prompts_use_literature_review_template_and_evidence_rules() {
         assert!(prompt.contains("Use only the evidence chunks below"));
         assert!(prompt.contains("not established by retrieved evidence"));
     }
+}
+
+#[test]
+fn evidence_chunks_preserve_heading_metadata_and_locate_targets() {
+    let root = tempdir().unwrap();
+    let service = LibraryService::new(root.path()).unwrap();
+    let collection = service.create_collection("RAG", None).unwrap();
+    let result = service
+        .import_markdown_item(
+            collection.id,
+            "Evidence Notes",
+            "# Methods\n\nThe retrieval method uses grouped candidate recall.\n\n## Results\n\nFigure 1. Grouped retrieval improves coverage.",
+            Some("https://example.test/evidence-notes"),
+        )
+        .unwrap();
+    let item_id = result.imported[0].id;
+
+    let method_chunks = service
+        .query_evidence_chunks(
+            &[item_id],
+            Some("retrieval method"),
+            Some(8),
+            EvidenceQueryOptions::default(),
+        )
+        .unwrap();
+    let method_chunk = method_chunks
+        .iter()
+        .find(|chunk| chunk.text.contains("retrieval method"))
+        .expect("method chunk");
+    assert_eq!(method_chunk.section_title.as_deref(), Some("Methods"));
+    assert_eq!(method_chunk.content_kind, "body");
+    assert!(method_chunk
+        .heading_path_json
+        .as_deref()
+        .unwrap_or_default()
+        .contains("Methods"));
+
+    let caption_chunks = service
+        .query_evidence_chunks(
+            &[item_id],
+            Some("grouped coverage"),
+            Some(8),
+            EvidenceQueryOptions {
+                content_kinds: vec!["figure_caption".into()],
+                ..EvidenceQueryOptions::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(caption_chunks.len(), 1);
+    assert_eq!(caption_chunks[0].section_title.as_deref(), Some("Results"));
+    assert_eq!(caption_chunks[0].content_kind, "figure_caption");
+
+    let target = service
+        .locate_evidence_chunk(method_chunk.id)
+        .unwrap()
+        .expect("citation target");
+    assert_eq!(target.item_id, item_id);
+    assert_eq!(target.section_title.as_deref(), Some("Methods"));
+    assert!(target.text_prefix.contains("retrieval method"));
+}
+
+#[test]
+fn grouped_evidence_retrieval_preserves_cross_paper_diversity() {
+    let root = tempdir().unwrap();
+    let service = LibraryService::new(root.path()).unwrap();
+    let collection = service.create_collection("Compare", None).unwrap();
+    let first = service
+        .import_markdown_item(
+            collection.id,
+            "Alpha",
+            "# Method\n\nshared retrieval signal alpha one.\n\nshared retrieval signal alpha two.",
+            Some("https://example.test/alpha"),
+        )
+        .unwrap()
+        .imported[0]
+        .id;
+    let second = service
+        .import_markdown_item(
+            collection.id,
+            "Beta",
+            "# Method\n\nshared retrieval signal beta one.\n\nshared retrieval signal beta two.",
+            Some("https://example.test/beta"),
+        )
+        .unwrap()
+        .imported[0]
+        .id;
+
+    let chunks = service
+        .query_evidence_chunks(
+            &[first, second],
+            Some("shared retrieval signal"),
+            Some(2),
+            EvidenceQueryOptions {
+                group_by_item: true,
+                ..EvidenceQueryOptions::default()
+            },
+        )
+        .unwrap();
+    let item_ids = chunks.iter().map(|chunk| chunk.item_id).collect::<HashSet<_>>();
+    assert_eq!(item_ids.len(), 2);
+}
+
+#[test]
+fn markdown_export_appends_evidence_references() {
+    let root = tempdir().unwrap();
+    let service = LibraryService::new(root.path()).unwrap();
+    let collection = service.create_collection("Export", None).unwrap();
+    let item_id = service
+        .import_markdown_item(
+            collection.id,
+            "Export Paper",
+            "# Findings\n\nExported notes should retain evidence references.",
+            Some("https://example.test/export"),
+        )
+        .unwrap()
+        .imported[0]
+        .id;
+    let chunk = service
+        .query_evidence_chunks(
+            &[item_id],
+            Some("retain evidence"),
+            Some(1),
+            EvidenceQueryOptions::default(),
+        )
+        .unwrap()
+        .remove(0);
+    let note = service
+        .create_research_note(
+            Some(collection.id),
+            None,
+            "Export Note",
+            &format!("The exported claim cites evidence [E{}].", chunk.id),
+        )
+        .unwrap();
+
+    let exported = service.export_note_markdown(note.id).unwrap();
+    assert!(exported.contains("## Evidence References"));
+    assert!(exported.contains(&format!("[E{}] Export Paper", chunk.id)));
+    assert!(exported.contains("retain evidence references"));
 }
 
 #[test]

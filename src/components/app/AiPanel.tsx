@@ -19,6 +19,18 @@ const citationHrefPrefix = "evidence://";
 const withCitationLinks = (markdown: string) =>
   markdown.replace(/\[E(\d+)\]/g, (_match, id) => `[[E${id}]](${citationHrefPrefix}${id})`);
 
+const evidenceIdsFromMarkdown = (markdown: string) =>
+  Array.from(new Set(Array.from(markdown.matchAll(/\[E(\d+)\]/g), (match) => Number(match[1])).filter(Number.isFinite)));
+
+const hasCitationLintWarning = (markdown: string) => {
+  if (!/review|comparison|compare|method|gap|theme/i.test(markdown)) return false;
+  return markdown
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 80 && !line.startsWith("#") && !line.startsWith("|"))
+    .some((line) => !/\[E\d+\]/.test(line));
+};
+
 const markdownComponents = (onCitationClick?: (evidenceId: number) => void) => ({
   a: ({ href, children, ...props }: ComponentProps<"a">) => {
     if (href?.startsWith(citationHrefPrefix)) {
@@ -118,11 +130,29 @@ export const DeleteSessionIcon = () => (
 );
 
 export function MarkdownMessage({ markdown, onCitationClick }: { markdown: string; onCitationClick?: (evidenceId: number) => void }) {
+  const evidenceIds = evidenceIdsFromMarkdown(markdown);
+  const showCitationWarning = hasCitationLintWarning(markdown);
   return (
-    <div className="ai-markdown">
-      <ReactMarkdown components={markdownComponents(onCitationClick)} remarkPlugins={[remarkGfm]}>
-        {withCitationLinks(markdown)}
-      </ReactMarkdown>
+    <div className="ai-message-with-evidence">
+      <div className="ai-markdown">
+        <ReactMarkdown components={markdownComponents(onCitationClick)} remarkPlugins={[remarkGfm]}>
+          {withCitationLinks(markdown)}
+        </ReactMarkdown>
+      </div>
+      {evidenceIds.length > 0 ? (
+        <div className="ai-evidence-strip" aria-label="Evidence references">
+          {evidenceIds.map((evidenceId) => (
+            <button className="ai-evidence-strip-chip" key={evidenceId} type="button" onClick={() => onCitationClick?.(evidenceId)}>
+              E{evidenceId}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {showCitationWarning ? (
+        <div className="ai-citation-warning" role="note">
+          Some synthesis sentences do not include evidence citations.
+        </div>
+      ) : null}
     </div>
   );
 }
