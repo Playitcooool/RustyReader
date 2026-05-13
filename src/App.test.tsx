@@ -144,6 +144,9 @@ vi.mock("./components/readers/PdfContinuousReader", () => {
         >
           Select
         </button>
+        <button type="button" aria-label="Mock clear PDF text" onClick={() => onSelectionChange?.(null)}>
+          Clear
+        </button>
         <button
           type="button"
           aria-label="Mock activate highlight"
@@ -455,6 +458,22 @@ describe("App reading workspace", () => {
 
     fireEvent.contextMenu(await screen.findByTestId("pdf-reader"), { clientX: 140, clientY: 150 });
 
+    expect(screen.queryByRole("menu", { name: "Reader selection actions" })).not.toBeInTheDocument();
+  });
+
+  it("hides PDF selection actions when the text selection is cleared", async () => {
+    const user = userEvent.setup();
+    render(<App api={fakeApi} />);
+    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(screen.getByRole("button", { name: "Mock select PDF text" }));
+
+    expect(screen.getByRole("toolbar", { name: "PDF highlight colors" })).toBeInTheDocument();
+    fireEvent.contextMenu(screen.getByTestId("pdf-reader"), { clientX: 140, clientY: 150 });
+    expect(screen.getByRole("menu", { name: "Reader selection actions" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Mock clear PDF text" }));
+
+    expect(screen.queryByRole("toolbar", { name: "PDF highlight colors" })).not.toBeInTheDocument();
     expect(screen.queryByRole("menu", { name: "Reader selection actions" })).not.toBeInTheDocument();
   });
 

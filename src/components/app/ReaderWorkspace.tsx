@@ -215,6 +215,11 @@ export function ReaderWorkspace(props: Props) {
   }, [pdfSelection, showPdfFocusHighlightBar, viewportSize.height, viewportSize.width]);
   const selectionForActions = translationSelection ?? (pdfSelection ? { quote: pdfSelection.quote, rect: pdfSelection.rect } : null);
   const showPdfHighlightActions = workspaceMode === "pdf_focus" && Boolean(pdfSelection);
+
+  useEffect(() => {
+    if (!selectionForActions?.quote.trim()) setReaderContextMenu(null);
+  }, [selectionForActions]);
+
   const readerContextMenuStyle = useMemo(() => {
     if (!readerContextMenu) return {};
     const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
