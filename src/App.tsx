@@ -695,7 +695,7 @@ export default function App({ api }: { api: AppApi }) {
 
       {ai.isAiPanelOpen ? (
         <>
-          {readerState.workspaceMode !== "pdf_focus" ? <div aria-hidden="true" className="pane-resizer" onPointerDown={(event) => startPaneResize("ai", event)} /> : null}
+          <div aria-hidden="true" className="pane-resizer" onPointerDown={(event) => startPaneResize("ai", event)} />
           <ErrorBoundary
             resetKey={ai.activeAiSessionId}
             fallback={

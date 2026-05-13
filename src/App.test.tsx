@@ -694,6 +694,20 @@ describe("App reading workspace", () => {
     expect(screen.getByLabelText("AI panel")).toBeInTheDocument();
   });
 
+  it("places the focus AI panel after the resize gutter", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<App api={fakeApi} />);
+
+    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(screen.getByRole("button", { name: "Open AI panel" }));
+
+    const shell = container.querySelector(".app-shell-focus.app-shell-ai-open");
+    expect(shell).not.toBeNull();
+    expect(shell?.children[0]).toHaveClass("reader-shell-focus");
+    expect(shell?.children[1]).toHaveClass("pane-resizer");
+    expect(shell?.children[2]).toHaveClass("ai-shell");
+  });
+
   it("sends freeform prompts to the active AI session", async () => {
     const user = userEvent.setup();
     const runSessionTaskSpy = vi.spyOn(fakeApi, "runAiSessionTask");
