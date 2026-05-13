@@ -236,6 +236,26 @@ impl AiTransport for StubTransport {
     }
 }
 
+#[derive(Default)]
+struct InternalMetadataTransport {
+    requests: Mutex<Vec<AiCompletionRequest>>,
+}
+
+impl AiTransport for InternalMetadataTransport {
+    fn stream_completion(
+        &self,
+        request: AiCompletionRequest,
+        on_delta: &mut dyn FnMut(&str) -> anyhow::Result<()>,
+    ) -> anyhow::Result<String> {
+        self.requests.lock().unwrap().push(request);
+        let output = "Target title: SlimQwen\nCollection: LLM\nTask kind: session.ask\n\n合并是通过专家重要性评估、相似度识别和部分保留策略完成的。";
+        for chunk in output.split_inclusive('\n') {
+            on_delta(chunk)?;
+        }
+        Ok(output.to_string())
+    }
+}
+
 #[test]
 fn starts_with_an_empty_library() {
     let root = tempdir().unwrap();
@@ -299,10 +319,69 @@ fn review_draft_prompts_use_literature_review_template_and_evidence_rules() {
         assert!(prompt.contains("## Agreements, Tensions, and Gaps"));
         assert!(prompt.contains("## Suggested Review Narrative"));
         assert!(prompt.contains("## Open Questions"));
-        assert!(prompt.contains("Every key judgment, comparison, and gap analysis must cite evidence with [E{id}]"));
+        assert!(prompt.contains(
+            "Every key judgment, comparison, and gap analysis must cite evidence with [E{id}]"
+        ));
         assert!(prompt.contains("Use only the evidence chunks below"));
         assert!(prompt.contains("not established by retrieved evidence"));
     }
+}
+
+#[test]
+fn session_ask_does_not_expose_internal_prompt_metadata() {
+    let root = tempdir().unwrap();
+    let transport = Arc::new(InternalMetadataTransport::default());
+    let service = service_with_transport(root.path(), transport.clone());
+    let collection = service.create_collection("LLM", None).unwrap();
+    let pdf = fixture_path(root.path(), "slimqwen.pdf");
+    write_pdf_fixture(&pdf);
+    let item_id = service
+        .import_files(collection.id, &[pdf], ImportMode::ManagedCopy)
+        .unwrap()
+        .imported[0]
+        .id;
+    let session = service.create_ai_session().unwrap();
+    service
+        .add_ai_session_reference(session.id, AISessionReferenceKind::Item, item_id)
+        .unwrap();
+    service
+        .update_ai_settings(UpdateAISettingsInput {
+            active_provider: AIProvider::OpenAI,
+            openai_model: "gpt-4.1-mini".into(),
+            openai_base_url: "".into(),
+            openai_api_key: Some("openai-secret".into()),
+            clear_openai_api_key: None,
+            anthropic_model: "".into(),
+            anthropic_base_url: "".into(),
+            anthropic_api_key: None,
+            clear_anthropic_api_key: None,
+            translation_provider: TranslationProvider::OpenAI,
+            translation_openai_model: "".into(),
+            translation_anthropic_model: "".into(),
+            translation_target_lang: "ZH-HANS".into(),
+            deepl_base_url: "https://api-free.deepl.com".into(),
+            deepl_api_key: None,
+            clear_deepl_api_key: None,
+        })
+        .unwrap();
+
+    let task = service
+        .run_ai_session_task(session.id, "session.ask", Some("合并是怎么做到的呢？"))
+        .unwrap();
+
+    assert!(!task.output_markdown.contains("Target title:"));
+    assert!(!task.output_markdown.contains("Collection: LLM"));
+    assert!(!task.output_markdown.contains("Task kind:"));
+    assert!(task
+        .output_markdown
+        .starts_with("合并是通过专家重要性评估、相似度识别和部分保留策略完成的。"));
+    let requests = transport.requests.lock().unwrap();
+    assert_eq!(requests.len(), 1);
+    assert!(!requests[0].prompt.contains("Target title:"));
+    assert!(!requests[0].prompt.contains("Task kind: session.ask"));
+    assert!(requests[0]
+        .prompt
+        .contains("User question:\n合并是怎么做到的呢？"));
 }
 
 #[test]
@@ -401,7 +480,10 @@ fn grouped_evidence_retrieval_preserves_cross_paper_diversity() {
             },
         )
         .unwrap();
-    let item_ids = chunks.iter().map(|chunk| chunk.item_id).collect::<HashSet<_>>();
+    let item_ids = chunks
+        .iter()
+        .map(|chunk| chunk.item_id)
+        .collect::<HashSet<_>>();
     assert_eq!(item_ids.len(), 2);
 }
 

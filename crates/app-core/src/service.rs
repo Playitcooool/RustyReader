@@ -1677,7 +1677,10 @@ impl LibraryService {
         .map_err(Into::into)
     }
 
-    pub fn locate_evidence_chunk(&self, evidence_id: i64) -> Result<Option<EvidenceCitationTarget>> {
+    pub fn locate_evidence_chunk(
+        &self,
+        evidence_id: i64,
+    ) -> Result<Option<EvidenceCitationTarget>> {
         let chunk = match self.get_evidence_chunk(evidence_id)? {
             Some(chunk) => chunk,
             None => return Ok(None),
@@ -2199,6 +2202,7 @@ impl LibraryService {
         let output = self
             .ai_transport
             .stream_completion(request, &mut on_delta)?;
+        let output = strip_internal_prompt_metadata(&output);
 
         let tx = conn.transaction()?;
         tx.execute(
@@ -2325,6 +2329,7 @@ impl LibraryService {
         let markdown = self
             .ai_transport
             .stream_completion(request, &mut on_delta)?;
+        let markdown = strip_internal_prompt_metadata(&markdown);
 
         let tx = conn.transaction()?;
         let scope_json = serde_json::to_string(scope_item_ids)?;
@@ -2557,6 +2562,7 @@ impl LibraryService {
         let markdown = self
             .ai_transport
             .stream_completion(request, &mut on_delta)?;
+        let markdown = strip_internal_prompt_metadata(&markdown);
         let display_title = derive_session_title(kind, prompt_text);
         let session_title = conn.query_row(
             "SELECT title FROM ai_sessions WHERE id = ?1",
@@ -3341,7 +3347,8 @@ fn query_evidence_chunks_conn(
     } else {
         "(bm25(evidence_chunk_index) / c.retrieval_weight)"
     };
-    let scoped_grouping = matches!(options.scope.as_deref(), Some("collection")) && item_ids.len() > 1;
+    let scoped_grouping =
+        matches!(options.scope.as_deref(), Some("collection")) && item_ids.len() > 1;
     if options.group_by_item || scoped_grouping {
         return query_evidence_chunks_grouped_conn(conn, item_ids, query, limit, options);
     }
@@ -3654,9 +3661,7 @@ fn extracted_structured_chunk(
 
 fn infer_content_kind(text: &str) -> &'static str {
     let trimmed = text.trim_start().to_lowercase();
-    if trimmed.starts_with("figure ")
-        || trimmed.starts_with("fig. ")
-        || trimmed.starts_with("fig ")
+    if trimmed.starts_with("figure ") || trimmed.starts_with("fig. ") || trimmed.starts_with("fig ")
     {
         "figure_caption"
     } else if trimmed.starts_with("table ") {
@@ -4242,6 +4247,40 @@ fn derive_session_title(kind: &str, prompt: Option<&str>) -> Option<String> {
     Some(label.to_string())
 }
 
+fn strip_internal_prompt_metadata(markdown: &str) -> String {
+    let lines = markdown.lines().collect::<Vec<_>>();
+    let first_content = lines.iter().position(|line| !line.trim().is_empty());
+    let Some(first_content) = first_content else {
+        return markdown.to_string();
+    };
+    let has_internal_header = lines.iter().skip(first_content).take(8).any(|line| {
+        let trimmed = line.trim_start();
+        trimmed.starts_with("Target title:") || trimmed.starts_with("Task kind:")
+    });
+    if !has_internal_header {
+        return markdown.to_string();
+    }
+
+    let mut cleaned = Vec::with_capacity(lines.len());
+    let mut in_opening_metadata = true;
+    for (index, line) in lines.iter().enumerate() {
+        if index < first_content {
+            continue;
+        }
+        let trimmed = line.trim_start();
+        let is_internal_line = trimmed.starts_with("Target title:")
+            || trimmed.starts_with("Task kind:")
+            || trimmed.starts_with("Collection:");
+        if in_opening_metadata && (is_internal_line || trimmed.is_empty()) {
+            continue;
+        }
+        in_opening_metadata = false;
+        cleaned.push(*line);
+    }
+
+    cleaned.join("\n").trim_start().to_string()
+}
+
 fn touch_ai_session(conn: &Connection, session_id: i64, title: Option<&str>) -> Result<()> {
     if let Some(title) = title {
         conn.execute(
@@ -4270,7 +4309,10 @@ fn build_session_prompt(
         evidence_query,
         EVIDENCE_QUERY_LIMIT,
         &EvidenceQueryOptions {
-            group_by_item: matches!(kind, "session.review_draft" | "session.compare_methods" | "session.theme_map"),
+            group_by_item: matches!(
+                kind,
+                "session.review_draft" | "session.compare_methods" | "session.theme_map"
+            ),
             ..EvidenceQueryOptions::default()
         },
     )?;
@@ -4289,16 +4331,26 @@ fn build_session_prompt(
             "session.ask" => "...",
             _ => return Err(anyhow!("unsupported session task kind")),
         };
+        let prompt_suffix = if kind == "session.ask" {
+            format!(
+                "\nUser question:\n{}",
+                prompt.unwrap_or("No question provided.")
+            )
+        } else {
+            String::new()
+        };
+        let task_kind_context = if kind == "session.ask" {
+            String::new()
+        } else {
+            format!("Task kind: {kind}\n")
+        };
         return Ok(format!(
-            "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nPreserve the heading and section style shown below.\nCite evidence for key claims, comparisons, and synthesis using the provided bracket ids like [E23]. Use only the evidence chunks below.\n{}\n\nTask kind: {kind}\n{}\n\nEvidence chunks:\n\n{}\n{}",
+            "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nDo not include internal metadata such as target title, collection, or task kind in the answer.\nPreserve the heading and section style shown below.\nCite evidence for key claims, comparisons, and synthesis using the provided bracket ids like [E23]. Use only the evidence chunks below.\n{}\n\n{}{}\n\nEvidence chunks:\n\n{}\n{}",
             review_draft_rules(kind),
+            task_kind_context,
             task_instructions,
             evidence,
-            if kind == "session.ask" {
-                format!("\nUser question:\n{}", prompt.unwrap_or("No question provided."))
-            } else {
-                String::new()
-            }
+            prompt_suffix
         ));
     }
     if expansion.item_ids.len() == 1 && !expansion.has_collection_reference {
@@ -4387,9 +4439,15 @@ fn build_session_prompt(
     } else {
         String::new()
     };
+    let task_kind_context = if kind == "session.ask" {
+        String::new()
+    } else {
+        format!("Task kind: {kind}\n")
+    };
     Ok(format!(
-        "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nPreserve the heading and section style shown below.\n{}\n\nTask kind: {kind}\n{}\n\nUse only this extracted evidence in the exact paper order provided:\n\n{}\n{}",
+        "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nDo not include internal metadata such as target title, collection, or task kind in the answer.\nPreserve the heading and section style shown below.\n{}\n\n{}{}\n\nUse only this extracted evidence in the exact paper order provided:\n\n{}\n{}",
         review_draft_rules(kind),
+        task_kind_context,
         task_instructions,
         sections.join("\n\n"),
         prompt_suffix
@@ -4412,18 +4470,25 @@ fn build_single_session_prompt(
         "session.review_draft" => literature_review_template("{title}"),
         _ => return Err(anyhow!("unsupported session task kind")),
     };
+    let prompt_suffix = if kind == "session.ask" {
+        format!("\nUser question:\n{}", prompt.unwrap_or(""))
+    } else {
+        String::new()
+    };
+    let internal_context = if kind == "session.ask" {
+        String::new()
+    } else {
+        format!("\nTarget title: {title}\nCollection: {collection_name}\nTask kind: {kind}")
+    };
     Ok(format!(
-        "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nPreserve the heading and section style shown below.\n{}\n\nTarget title: {title}\nCollection: {collection_name}\nTask kind: {kind}\n{}\n\nUse only this extracted paper text:\n\"\"\"\n{}\n\"\"\"\n{}",
+        "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nDo not include internal metadata such as target title, collection, or task kind in the answer.\nPreserve the heading and section style shown below.\n{}\n{}{}\n\nUse only this extracted paper text:\n\"\"\"\n{}\n\"\"\"\n{}",
         review_draft_rules(kind),
         task_instructions
             .replace("{title}", title)
             .replace("{collection}", collection_name),
+        internal_context,
         excerpt,
-        if kind == "session.ask" {
-            format!("\nUser question:\n{}", prompt.unwrap_or(""))
-        } else {
-            String::new()
-        }
+        prompt_suffix
     ))
 }
 
@@ -4490,7 +4555,10 @@ fn append_evidence_references(conn: &Connection, markdown: &str) -> Result<Strin
     let mut seen = HashSet::new();
     let mut ids = Vec::new();
     for capture in citation_re.captures_iter(markdown) {
-        let Some(id) = capture.get(1).and_then(|value| value.as_str().parse::<i64>().ok()) else {
+        let Some(id) = capture
+            .get(1)
+            .and_then(|value| value.as_str().parse::<i64>().ok())
+        else {
             continue;
         };
         if seen.insert(id) {
@@ -4582,7 +4650,10 @@ fn build_collection_prompt(
         evidence_query,
         EVIDENCE_QUERY_LIMIT,
         &EvidenceQueryOptions {
-            group_by_item: matches!(kind, "collection.review_draft" | "collection.compare_methods" | "collection.theme_map"),
+            group_by_item: matches!(
+                kind,
+                "collection.review_draft" | "collection.compare_methods" | "collection.theme_map"
+            ),
             ..EvidenceQueryOptions::default()
         },
     )?;
@@ -5317,13 +5388,7 @@ fn docx_heading_level(paragraph: roxmltree::Node<'_, '_>) -> Option<usize> {
             lower
                 .strip_prefix("heading")
                 .and_then(|suffix| suffix.parse::<usize>().ok())
-                .or_else(|| {
-                    if lower == "title" {
-                        Some(1)
-                    } else {
-                        None
-                    }
-                })
+                .or_else(|| if lower == "title" { Some(1) } else { None })
         })
         .map(|level| level.clamp(1, 6))
 }
