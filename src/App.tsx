@@ -506,6 +506,7 @@ export default function App({ api }: { api: AppApi }) {
   }, [ai, deleteTarget, getApi, library, readerState]);
 
   const showActivePdfHighlightBar = Boolean(readerState.activePdfHighlight);
+  const isPdfFocusMode = readerState.workspaceMode === "pdf_focus";
   const activePdfHighlightBarStyle = useMemo(() => {
     const rect = readerState.activePdfHighlight?.rect;
     if (!rect) return {};
@@ -524,7 +525,7 @@ export default function App({ api }: { api: AppApi }) {
   return (
     <div
       ref={appShellRef}
-      className={`app-shell ${readerState.workspaceMode === "pdf_focus" ? "app-shell-focus" : "app-shell-workspace"} ${ai.isAiPanelOpen ? "app-shell-ai-open" : ""}`}
+      className={`app-shell ${isPdfFocusMode ? "app-shell-focus" : "app-shell-workspace"} ${isPdfFocusMode && isSidebarVisible ? "app-shell-focus-sidebar-open" : ""} ${ai.isAiPanelOpen ? "app-shell-ai-open" : ""}`}
       style={{ "--sidebar-width": `${clamp(sidebarWidth, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH)}px`, "--ai-panel-width": `${clamp(aiPanelWidth, AI_PANEL_MIN_WIDTH, AI_PANEL_MAX_WIDTH)}px` } as CSSProperties}
     >
       {!ai.isAiPanelOpen ? (
@@ -771,6 +772,19 @@ export default function App({ api }: { api: AppApi }) {
             />
           </ErrorBoundary>
         </>
+      ) : null}
+
+      {isPdfFocusMode ? (
+        <button
+          aria-label={isSidebarVisible ? "Hide collections" : "Show collections"}
+          aria-pressed={isSidebarVisible}
+          className="focus-sidebar-toggle"
+          title={isSidebarVisible ? "Hide collections" : "Show collections"}
+          type="button"
+          onClick={() => setIsSidebarVisible((current) => !current)}
+        >
+          {isSidebarVisible ? "<" : "☰"}
+        </button>
       ) : null}
 
       {deleteTarget ? <DeleteConfirmDialog target={deleteTarget} onCancel={() => setDeleteTarget(null)} onConfirm={() => void handleConfirmDelete()} /> : null}

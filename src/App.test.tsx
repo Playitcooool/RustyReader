@@ -249,6 +249,25 @@ describe("App reading workspace", () => {
     expect(window.localStorage.getItem("paper-reader.sidebar-open")).toBe("true");
   });
 
+  it("opens the collection sidebar from pdf focus without leaving focus", async () => {
+    const user = userEvent.setup();
+    render(<App api={fakeApi} />);
+
+    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    expect(await screen.findByRole("toolbar", { name: /pdf focus toolbar/i })).toBeInTheDocument();
+    expect(screen.queryByRole("tree", { name: "Library resources" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Show collections" }));
+
+    expect(screen.getByRole("toolbar", { name: /pdf focus toolbar/i })).toBeInTheDocument();
+    expect(screen.getByRole("tree", { name: "Library resources" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hide collections" })).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(screen.getByRole("button", { name: "Hide collections" }));
+    expect(screen.queryByRole("tree", { name: "Library resources" })).not.toBeInTheDocument();
+    expect(screen.getByRole("toolbar", { name: /pdf focus toolbar/i })).toBeInTheDocument();
+  });
+
   it("single-clicking a pdf opens workspace preview while double-click enters focus", async () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
