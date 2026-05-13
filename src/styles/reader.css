@@ -366,17 +366,21 @@
   box-shadow: 0 0 0 2px rgba(102, 164, 212, 0.35);
 }
 
-.reader-selection-menu .nav-item {
-  width: 100%;
-  justify-content: flex-start;
-  padding: 8px 10px;
-  white-space: nowrap;
+.reader-selection-menu {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 252px;
+}
+
+.reader-selection-menu .icon-button {
+  border-radius: 12px;
 }
 
 .reader-selection-color-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  padding: 0;
 }
 
 .reader-selection-color-swatch {

@@ -28,14 +28,24 @@
     inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 
-.resource-context-menu .nav-item {
-  width: 100%;
-  padding: 10px 12px;
+.resource-context-menu {
+  min-width: 0;
+  display: flex;
+  gap: 8px;
+}
+
+.resource-context-menu .icon-button {
   border-radius: 12px;
 }
 
 .resource-context-menu-delete {
   color: #ffb4a7;
+}
+
+.danger-icon-button {
+  color: #ffb4a7;
+  border-color: rgba(255, 180, 167, 0.32);
+  background: rgba(255, 92, 92, 0.12);
 }
 
 .settings-dialog-hero,
@@ -236,4 +246,3 @@
     max-width: none;
   }
 }
-

@@ -3,6 +3,7 @@ import { isTauriRuntime } from "../../lib/api";
 import type { Collection, ImportBatchResult, LibraryItem, Tag } from "../../lib/contracts";
 import type { ResourceContextMenuState } from "../../hooks/useLibraryState";
 import type { MouseEvent as ReactMouseEvent, RefObject } from "react";
+import { ChevronDownIcon, ChevronRightIcon, MoveIcon, PlusIcon, SettingsIcon, TagIcon } from "./Icons";
 
 type Props = {
   activePaperId: number | null;
@@ -144,7 +145,7 @@ export function ResourceSidebar(props: Props) {
           <div key={`collection-${collection.id}`} role="none">
             <div className={`resource-tree-row resource-tree-collection ${selectedCollectionId === collection.id ? "resource-tree-row-active" : ""}`} role="treeitem" aria-expanded={isExpanded} aria-label={collection.name} style={{ paddingLeft: `${10 + depth * 18}px` }} onContextMenu={(event) => onContextMenu(event, { x: event.clientX, y: event.clientY, kind: "collection", targetId: collection.id })}>
               <button aria-label={isExpanded ? `Collapse ${collection.name}` : `Expand ${collection.name}`} className="resource-tree-toggle" type="button" onClick={() => onToggleCollectionExpanded(collection.id)}>
-                {isExpanded ? "▾" : "▸"}
+                {isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
               </button>
               {isRenaming ? (
                 <input
@@ -191,8 +192,8 @@ export function ResourceSidebar(props: Props) {
           <p className="eyebrow">Workspace</p>
           <h1>Library</h1>
         </div>
-        <button aria-label="Manage library" className="icon-button" type="button" ref={manageButtonRef} onClick={onToggleManage}>
-          ⚙
+        <button aria-label="Manage library" className="icon-button" title="Manage library" type="button" ref={manageButtonRef} onClick={onToggleManage}>
+          <SettingsIcon />
         </button>
       </div>
       <div className="toolbar-row">
@@ -203,8 +204,8 @@ export function ResourceSidebar(props: Props) {
           <h2>Resources</h2>
           <div className="section-title-actions">
             <span className="meta-count">{libraryItems.length}</span>
-            <button aria-label="New folder" className="icon-button icon-button-small" type="button" onClick={() => onStartCreateCollection(null)}>
-              ＋
+            <button aria-label="New folder" className="icon-button icon-button-small" title="New folder" type="button" onClick={() => onStartCreateCollection(null)}>
+              <PlusIcon />
             </button>
           </div>
         </div>
@@ -243,20 +244,20 @@ export function ResourceSidebar(props: Props) {
             </div>
             <div className="collection-create-row">
               <input aria-label="New tag name" className="search-input" placeholder="Tag the active paper..." value={newTagName} onChange={(event) => onNewTagNameChange(event.target.value)} />
-              <button className="ghost-button" type="button" onClick={() => void onCreateTag()}>Add Tag</button>
+              <button aria-label="Add Tag" className="icon-button" title="Add Tag" type="button" onClick={() => void onCreateTag()}><TagIcon /></button>
             </div>
             {selectedItemIds.length > 0 ? (
               <div className="selection-toolbar">
                 <div className="collection-create-row">
                   <input aria-label="Batch tag papers" className="search-input" placeholder="Tag selected papers..." value={batchTagName} onChange={(event) => onBatchTagNameChange(event.target.value)} />
-                  <button className="ghost-button" type="button" onClick={() => void onBatchTag()}>Tag Selected</button>
+                  <button aria-label="Tag Selected" className="icon-button" title="Tag Selected" type="button" onClick={() => void onBatchTag()}><TagIcon /></button>
                 </div>
                 <div className="collection-create-row">
                   <select aria-label="Batch move papers" className="mode-select" value={batchMoveTargetId} onChange={(event) => onBatchMoveTargetChange(event.target.value)}>
                     <option value="current">Current Collection</option>
                     {collections.filter((collection) => collection.id !== selectedCollectionId).map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}
                   </select>
-                  <button className="ghost-button" type="button" onClick={() => void onBatchMove()}>Move Selected</button>
+                  <button aria-label="Move Selected" className="icon-button" title="Move Selected" type="button" onClick={() => void onBatchMove()}><MoveIcon /></button>
                 </div>
               </div>
             ) : null}

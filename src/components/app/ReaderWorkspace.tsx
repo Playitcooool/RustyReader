@@ -1,4 +1,18 @@
 import { FindHud } from "./FindHud";
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  CloseIcon,
+  CopyIcon,
+  FitWidthIcon,
+  HighlightIcon,
+  MessageIcon,
+  NoteIcon,
+  SearchIcon,
+  TranslateIcon,
+  ZoomInIcon,
+  ZoomOutIcon,
+} from "./Icons";
 import { PdfFocusHighlightBar } from "./PdfHighlightBars";
 import { NormalizedReader } from "../readers/NormalizedReader";
 import { PdfContinuousReader } from "../readers/PdfContinuousReader";
@@ -266,7 +280,7 @@ export function ReaderWorkspace(props: Props) {
       <div className={`reader-tabs ${workspaceMode === "pdf_focus" ? "reader-tabs-focus" : ""}`} role="tablist" aria-label="Open papers">
         {workspaceMode === "pdf_focus" && activePaper?.attachment_format === "pdf" ? (
           <button aria-label="Back to library" className="reader-back-button" title="Back to library" type="button" onClick={onExitFocus}>
-            &lt;
+            <ChevronLeftIcon />
           </button>
         ) : null}
         {openPapers.map((paper) => (
@@ -275,12 +289,12 @@ export function ReaderWorkspace(props: Props) {
               {paper.title}
             </button>
             <button aria-label={`Close tab ${paper.title}`} className="tab-close-button" type="button" onClick={() => onCloseTab(paper.id)}>
-              x
+              <CloseIcon />
             </button>
           </div>
         ))}
-        <button aria-label={isAiPanelOpen ? "Close AI panel" : "Open AI panel"} aria-pressed={isAiPanelOpen} className="icon-button reader-ai-toggle" type="button" onClick={() => void onAiToggle()}>
-          ✦
+        <button aria-label={isAiPanelOpen ? "Close AI panel" : "Open AI panel"} aria-pressed={isAiPanelOpen} className="icon-button reader-ai-toggle" title={isAiPanelOpen ? "Close AI panel" : "Open AI panel"} type="button" onClick={() => void onAiToggle()}>
+          <MessageIcon />
         </button>
       </div>
 
@@ -288,25 +302,25 @@ export function ReaderWorkspace(props: Props) {
         <section className="reader-panel reader-panel-focus">
           <div className="reader-toolbar reader-toolbar-focus" role="toolbar" aria-label="PDF focus toolbar">
             <div className="reader-control-group reader-control-group-page">
-              <button aria-label="Previous Page" className="ghost-button" disabled={readerPage === 0} type="button" onClick={() => onReaderPageChange(readerPage - 1)}>
-                Prev
+              <button aria-label="Previous Page" className="icon-button" disabled={readerPage === 0} title="Previous Page" type="button" onClick={() => onReaderPageChange(readerPage - 1)}>
+                <ChevronLeftIcon />
               </button>
               <input aria-label="Reader page input" className="reader-page-input" value={readerPageInput} onChange={(event) => onReaderPageInputChange(event.target.value)} onKeyDown={(event) => event.key === "Enter" && onReaderPageSubmit()} />
               <span className="reader-control-divider">/ {readerPageCount}</span>
-              <button aria-label="Next Page" className="ghost-button" disabled={readerPage >= readerPageCount - 1} type="button" onClick={() => onReaderPageChange(readerPage + 1)}>
-                Next
+              <button aria-label="Next Page" className="icon-button" disabled={readerPage >= readerPageCount - 1} title="Next Page" type="button" onClick={() => onReaderPageChange(readerPage + 1)}>
+                <ChevronRightIcon />
               </button>
             </div>
             <div className="reader-control-group reader-control-group-zoom">
-              <button aria-pressed={readerFitMode === "fit_width"} className="ghost-button" type="button" onClick={() => onReaderFitModeChange("fit_width")}>
-                Fit
+              <button aria-label="Fit width" aria-pressed={readerFitMode === "fit_width"} className="icon-button" title="Fit width" type="button" onClick={() => onReaderFitModeChange("fit_width")}>
+                <FitWidthIcon />
               </button>
-              <button aria-label="Zoom out" className="ghost-button" type="button" onClick={() => onPdfZoomChange(readerZoom - 10)}>
-                -
+              <button aria-label="Zoom out" className="icon-button" title="Zoom out" type="button" onClick={() => onPdfZoomChange(readerZoom - 10)}>
+                <ZoomOutIcon />
               </button>
               <span className="reader-zoom-label">{readerFitMode === "fit_width" ? "Fit width" : `${readerZoom}%`}</span>
-              <button aria-label="Zoom in" className="ghost-button" type="button" onClick={() => onPdfZoomChange(readerZoom + 10)}>
-                +
+              <button aria-label="Zoom in" className="icon-button" title="Zoom in" type="button" onClick={() => onPdfZoomChange(readerZoom + 10)}>
+                <ZoomInIcon />
               </button>
             </div>
             <div className="reader-control-group">
@@ -408,18 +422,18 @@ export function ReaderWorkspace(props: Props) {
             <div className="reader-toolbar">
               {textToolsEnabled ? (
                 <div className="reader-control-group">
-                  <button aria-label="Find in document" className="ghost-button" type="button" onClick={openFindHud}>
-                    Search
+                  <button aria-label="Find in document" className="icon-button" title="Find in document" type="button" onClick={openFindHud}>
+                    <SearchIcon />
                   </button>
                 </div>
               ) : null}
               <div className="reader-control-group">
-                <button aria-label="Zoom out" className="ghost-button" type="button" onClick={() => onStepNormalizedZoom(-1)}>
-                  -
+                <button aria-label="Zoom out" className="icon-button" title="Zoom out" type="button" onClick={() => onStepNormalizedZoom(-1)}>
+                  <ZoomOutIcon />
                 </button>
                 <span className="reader-zoom-label">{readerZoom}%</span>
-                <button aria-label="Zoom in" className="ghost-button" type="button" onClick={() => onStepNormalizedZoom(1)}>
-                  +
+                <button aria-label="Zoom in" className="icon-button" title="Zoom in" type="button" onClick={() => onStepNormalizedZoom(1)}>
+                  <ZoomInIcon />
                 </button>
               </div>
               {readerView && readerView.content_status !== "ready" ? <span className="meta-count">{readerView.content_notice ?? readerView.content_status}</span> : null}
@@ -456,77 +470,91 @@ export function ReaderWorkspace(props: Props) {
       {readerContextMenu && selectionForActions ? (
         <div aria-label="Reader selection actions" className="floating-menu reader-selection-menu" role="menu" style={readerContextMenuStyle}>
           <button
-            className="nav-item"
+            aria-label="Copy"
+            className="icon-button"
             role="menuitem"
+            title="Copy"
             type="button"
             onClick={() => {
               setReaderContextMenu(null);
               void onCopyReaderSelection();
             }}
           >
-            Copy
+            <CopyIcon />
           </button>
           <button
-            className="nav-item"
+            aria-label="Search Selection"
+            className="icon-button"
             role="menuitem"
+            title="Search Selection"
             type="button"
             onClick={() => {
               setReaderContextMenu(null);
               onSearchReaderSelection();
             }}
           >
-            Search Selection
+            <SearchIcon />
           </button>
           <button
-            className="nav-item"
+            aria-label="Translate"
+            className="icon-button"
             role="menuitem"
+            title="Translate"
             type="button"
             onClick={() => {
               setReaderContextMenu(null);
               void onRequestSelectionTranslation();
             }}
           >
-            Translate
+            <TranslateIcon />
           </button>
           <button
-            className="nav-item"
+            aria-label="Ask with Selection"
+            className="icon-button"
             role="menuitem"
+            title="Ask with Selection"
             type="button"
             onClick={() => {
               setReaderContextMenu(null);
               void onAskWithSelection();
             }}
           >
-            Ask with Selection
+            <MessageIcon />
           </button>
           <button
-            className="nav-item"
+            aria-label="Add Highlight to Session"
+            className="icon-button"
             role="menuitem"
+            title="Add Highlight to Session"
             type="button"
             onClick={() => {
               setReaderContextMenu(null);
               void onAddHighlightToSession();
             }}
           >
-            Add Highlight to Session
+            <HighlightIcon />
           </button>
           <button
-            className="nav-item"
+            aria-label="Save as Note"
+            className="icon-button"
             role="menuitem"
+            title="Save as Note"
             type="button"
             onClick={() => {
               setReaderContextMenu(null);
               void onSaveSelectionAsNote();
             }}
           >
-            Save as Note
+            <NoteIcon />
           </button>
           {showPdfHighlightActions
             ? pdfHighlightColors.map((color) => (
                 <button
                   key={color}
-                  className="nav-item reader-selection-color-item"
+                  aria-label={`Highlight ${color}`}
+                  className="icon-button reader-selection-color-item"
                   role="menuitem"
+                  title={`Highlight ${color}`}
                   type="button"
                   onClick={() => {
                     setReaderContextMenu(null);
@@ -534,20 +562,21 @@ export function ReaderWorkspace(props: Props) {
                   }}
                 >
                   <span className="pdf-focus-highlight-swatch reader-selection-color-swatch" data-color={color} aria-hidden="true" />
-                  <span>Highlight {color}</span>
                 </button>
               ))
             : null}
           <button
-            className="nav-item"
+            aria-label="Clear Selection"
+            className="icon-button"
             role="menuitem"
+            title="Clear Selection"
             type="button"
             onClick={() => {
               setReaderContextMenu(null);
               onClearReaderSelection();
             }}
           >
-            Clear Selection
+            <CloseIcon />
           </button>
         </div>
       ) : null}
@@ -556,7 +585,7 @@ export function ReaderWorkspace(props: Props) {
           <div className="translation-popover-header">
             <span>Translate</span>
             <button aria-label="Close translation" className="icon-button" type="button" onClick={onCloseTranslationPopover}>
-              x
+              <CloseIcon />
             </button>
           </div>
           {translationLoading ? <p className="translation-popover-status">Translating...</p> : null}

@@ -101,6 +101,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex: 0 0 auto;
+  padding: 0;
   transition:
     transform 120ms ease,
     background 120ms ease,
@@ -348,11 +350,34 @@ p {
   border-radius: 9px;
 }
 
-.ai-icon {
-  width: 15px;
-  height: 15px;
+.app-icon {
+  width: 18px;
+  height: 18px;
   display: block;
   flex: 0 0 auto;
+}
+
+.icon-button-small .app-icon,
+.ai-reference-chip-remove .app-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.icon-command-button {
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex: 0 0 auto;
+}
+
+.icon-button:disabled,
+.icon-command-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  transform: none;
 }
 
 .status-pill,

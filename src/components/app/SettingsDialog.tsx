@@ -1,5 +1,6 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 
+import { CloseIcon, RefreshIcon, SaveIcon, TrashIcon } from "./Icons";
 import type { AIProvider, AISettings, ConnectorSettings, TranslationProvider, UpdateAISettingsInput } from "../../lib/contracts";
 import type { AttachmentFilter, ItemSort, ReaderFitMode } from "../../lib/appView";
 
@@ -67,7 +68,9 @@ export function SettingsDialog({
   };
   const renderClearKeyButton = (provider: AIProvider | "deepl", label: string) => (
     <button
-      className="ghost-button"
+      aria-label={pendingClearKeyProvider === provider ? "Confirm clear key" : label}
+      className={`icon-button ${pendingClearKeyProvider === provider ? "danger-icon-button" : ""}`}
+      title={pendingClearKeyProvider === provider ? "Confirm clear key" : label}
       type="button"
       onClick={() => {
         if (pendingClearKeyProvider === provider) {
@@ -78,7 +81,7 @@ export function SettingsDialog({
         setPendingClearKeyProvider(provider);
       }}
     >
-      {pendingClearKeyProvider === provider ? "Confirm clear key" : label}
+      <TrashIcon />
     </button>
   );
 
@@ -93,8 +96,8 @@ export function SettingsDialog({
               Tune the library workspace and keep one AI provider ready without exposing more controls than needed.
             </p>
           </div>
-          <button className="ghost-button" type="button" onClick={cancelSettings}>
-            Cancel
+          <button aria-label="Cancel" className="icon-button" title="Cancel" type="button" onClick={cancelSettings}>
+            <CloseIcon />
           </button>
         </div>
 
@@ -195,8 +198,8 @@ export function SettingsDialog({
               </label>
             </div>
             <div className="settings-provider-actions">
-              <button className="ghost-button" type="button" onClick={onResetLayoutWidths}>
-                Reset layout widths
+              <button aria-label="Reset layout widths" className="icon-button" title="Reset layout widths" type="button" onClick={onResetLayoutWidths}>
+                <RefreshIcon />
               </button>
             </div>
           </section>
@@ -336,8 +339,8 @@ export function SettingsDialog({
               <span className="settings-inline-note">
                 Paste this token into the Chrome extension popup to enable local imports.
               </span>
-              <button className="ghost-button" type="button" onClick={onRegenerateConnectorToken}>
-                Regenerate token
+              <button aria-label="Regenerate token" className="icon-button" title="Regenerate token" type="button" onClick={onRegenerateConnectorToken}>
+                <RefreshIcon />
               </button>
             </div>
           </section>
@@ -469,11 +472,11 @@ export function SettingsDialog({
         </div>
 
         <div className="settings-dialog-actions">
-          <button className="ghost-button" type="button" onClick={cancelSettings}>
-            Cancel
+          <button aria-label="Cancel" className="icon-button" title="Cancel" type="button" onClick={cancelSettings}>
+            <CloseIcon />
           </button>
-          <button className="primary-button" type="button" onClick={onSave}>
-            Save
+          <button aria-label="Save" className="primary-button icon-command-button" title="Save" type="button" onClick={onSave}>
+            <SaveIcon />
           </button>
         </div>
       </section>

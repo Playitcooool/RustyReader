@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AiPanel } from "./components/app/AiPanel";
 import { DeleteConfirmDialog, type DeleteConfirmTarget } from "./components/app/DeleteConfirmDialog";
 import { ErrorBoundary } from "./components/app/ErrorBoundary";
+import { ChevronLeftIcon, CloseIcon, EditIcon, OpenIcon, PlusIcon, SidebarIcon, TrashIcon } from "./components/app/Icons";
 import { ActivePdfHighlightBar } from "./components/app/PdfHighlightBars";
 import { ReaderWorkspace } from "./components/app/ReaderWorkspace";
 import { ResourceSidebar } from "./components/app/ResourceSidebar";
@@ -537,15 +538,15 @@ export default function App({ api }: { api: AppApi }) {
         <div ref={library.resourceContextMenuRef} aria-label="Resource actions" className="floating-menu resource-context-menu" role="menu" style={{ left: library.resourceContextMenu.x, top: library.resourceContextMenu.y }}>
           {library.contextMenuCollection ? (
             <>
-              <button className="nav-item" role="menuitem" type="button" onClick={() => library.startCreateCollection(library.contextMenuCollection?.id ?? null)}>New Folder</button>
-              <button className="nav-item" role="menuitem" type="button" onClick={() => library.contextMenuCollection && library.startRenameCollection(library.contextMenuCollection)}>Rename</button>
-              <button className="nav-item resource-context-menu-delete" role="menuitem" type="button" onClick={() => library.contextMenuCollection && handleRequestDeleteCollection(library.contextMenuCollection)}>Delete</button>
+              <button aria-label="New Folder" className="icon-button" role="menuitem" title="New Folder" type="button" onClick={() => library.startCreateCollection(library.contextMenuCollection?.id ?? null)}><PlusIcon /></button>
+              <button aria-label="Rename" className="icon-button" role="menuitem" title="Rename" type="button" onClick={() => library.contextMenuCollection && library.startRenameCollection(library.contextMenuCollection)}><EditIcon /></button>
+              <button aria-label="Delete" className="icon-button resource-context-menu-delete" role="menuitem" title="Delete" type="button" onClick={() => library.contextMenuCollection && handleRequestDeleteCollection(library.contextMenuCollection)}><TrashIcon /></button>
             </>
           ) : null}
           {library.contextMenuItem ? (
             <>
-              <button className="nav-item" role="menuitem" type="button" onClick={() => { readerState.activateItem(library.contextMenuItem!); library.setResourceContextMenu(null); }}>Open</button>
-              <button className="nav-item resource-context-menu-delete" role="menuitem" type="button" onClick={() => handleRequestDeleteItem(library.contextMenuItem!)}>Delete</button>
+              <button aria-label="Open" className="icon-button" role="menuitem" title="Open" type="button" onClick={() => { readerState.activateItem(library.contextMenuItem!); library.setResourceContextMenu(null); }}><OpenIcon /></button>
+              <button aria-label="Delete" className="icon-button resource-context-menu-delete" role="menuitem" title="Delete" type="button" onClick={() => handleRequestDeleteItem(library.contextMenuItem!)}><TrashIcon /></button>
             </>
           ) : null}
         </div>
@@ -708,7 +709,7 @@ export default function App({ api }: { api: AppApi }) {
                       <span className="meta-count">Panel crashed</span>
                     </div>
                     <button className="icon-button" type="button" aria-label="Close AI panel" onClick={closeAiPanel}>
-                      ×
+                      <CloseIcon />
                     </button>
                   </div>
                 </div>
@@ -783,7 +784,7 @@ export default function App({ api }: { api: AppApi }) {
           type="button"
           onClick={() => setIsSidebarVisible((current) => !current)}
         >
-          {isSidebarVisible ? "<" : "☰"}
+          {isSidebarVisible ? <ChevronLeftIcon /> : <SidebarIcon />}
         </button>
       ) : null}
 

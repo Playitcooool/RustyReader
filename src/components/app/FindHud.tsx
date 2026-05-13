@@ -1,4 +1,5 @@
 import type { RefObject } from "react";
+import { ChevronLeftIcon, ChevronRightIcon, CloseIcon } from "./Icons";
 
 export function FindHud({
   inputRef,
@@ -42,22 +43,24 @@ export function FindHud({
       </span>
       <button
         aria-label="Previous match"
-        className="ghost-button"
+        className="icon-button icon-button-small"
+        title="Previous match"
         type="button"
         onClick={() => onMoveMatch(-1, "button")}
       >
-        Prev
+        <ChevronLeftIcon />
       </button>
       <button
         aria-label="Next match"
-        className="ghost-button"
+        className="icon-button icon-button-small"
+        title="Next match"
         type="button"
         onClick={() => onMoveMatch(1, "button")}
       >
-        Next
+        <ChevronRightIcon />
       </button>
-      <button aria-label="Close find" className="ghost-button" type="button" onClick={onClose}>
-        Close
+      <button aria-label="Close find" className="icon-button icon-button-small" title="Close find" type="button" onClick={onClose}>
+        <CloseIcon />
       </button>
     </div>
   );

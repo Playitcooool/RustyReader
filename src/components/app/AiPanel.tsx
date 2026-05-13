@@ -1,7 +1,17 @@
-import type { ComponentProps, ReactNode, RefObject } from "react";
+import type { ComponentProps, RefObject } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import {
+  CloseIcon,
+  DownloadIcon,
+  MessageIcon,
+  NoteIcon,
+  PlusIcon,
+  SaveIcon,
+  SendIcon,
+  TrashIcon,
+} from "./Icons";
 import { noteHeading, sessionActions, sessionReferenceLabel, taskLabel } from "../../lib/appView";
 import type {
   AIArtifact,
@@ -57,77 +67,14 @@ const markdownComponents = (onCitationClick?: (evidenceId: number) => void) => (
   },
 });
 
-function AiIcon({
-  children,
-  viewBox = "0 0 20 20",
-}: {
-  children: ReactNode;
-  viewBox?: string;
-}) {
-  return (
-    <svg aria-hidden="true" className="ai-icon" viewBox={viewBox}>
-      {children}
-    </svg>
-  );
-}
-
-export const ChatHistoryIcon = () => (
-  <AiIcon>
-    <path d="M4 5.5h7.5A2.5 2.5 0 0 1 14 8v2A2.5 2.5 0 0 1 11.5 12.5H8l-3 2v-2H4A2.5 2.5 0 0 1 1.5 10V8A2.5 2.5 0 0 1 4 5.5Z" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
-    <circle cx="15.25" cy="6.25" r="3.25" fill="none" stroke="currentColor" strokeWidth="1.6" />
-    <path d="M15.25 4.75v1.7l1.15.7" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
-  </AiIcon>
-);
-
-export const NewSessionIcon = () => (
-  <AiIcon>
-    <path d="M10 4v12M4 10h12" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
-  </AiIcon>
-);
-
-export const ArtifactIcon = () => (
-  <AiIcon>
-    <path d="M6 2.5h5l3 3V16A1.5 1.5 0 0 1 12.5 17.5h-6A1.5 1.5 0 0 1 5 16V4A1.5 1.5 0 0 1 6.5 2.5Z" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.6" />
-    <path d="M11 2.5V6h3" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.6" />
-    <path d="M7.5 9.25h4.5M7.5 12h4.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
-  </AiIcon>
-);
-
-export const TaskHistoryIcon = () => (
-  <AiIcon>
-    <rect x="3" y="3.5" width="14" height="13" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-    <path d="M6.5 7.5h7M6.5 10.5h7M6.5 13.5h4" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
-  </AiIcon>
-);
-
-export const ResearchNotesIcon = () => (
-  <AiIcon>
-    <path d="M5 3.5h8A2 2 0 0 1 15 5.5v11l-4-2-4 2v-11A2 2 0 0 1 9 3.5Z" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.6" />
-    <path d="M8 7.5h5M8 10.25h4" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
-  </AiIcon>
-);
-
-export const CloseCopilotIcon = () => (
-  <AiIcon>
-    <path d="m5 5 10 10M15 5 5 15" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
-  </AiIcon>
-);
-
-export const ClosePanelIcon = () => (
-  <AiIcon>
-    <path d="m6 6 8 8M14 6l-8 8" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
-  </AiIcon>
-);
-
-export const DeleteSessionIcon = () => (
-  <AiIcon>
-    <path d="M8 5.5h4" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
-    <path d="M9 5.5l.75-1.5h.5L11 5.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
-    <path d="M5.5 7.5h9" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
-    <path d="m7 7.5.75 8h4.5l.75-8" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.6" />
-    <path d="M9.25 10.25v3M10.75 10.25v3" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.4" />
-  </AiIcon>
-);
+export const ChatHistoryIcon = MessageIcon;
+export const NewSessionIcon = PlusIcon;
+export const ArtifactIcon = NoteIcon;
+export const TaskHistoryIcon = NoteIcon;
+export const ResearchNotesIcon = NoteIcon;
+export const CloseCopilotIcon = CloseIcon;
+export const ClosePanelIcon = CloseIcon;
+export const DeleteSessionIcon = TrashIcon;
 
 export function MarkdownMessage({ markdown, onCitationClick }: { markdown: string; onCitationClick?: (evidenceId: number) => void }) {
   const evidenceIds = evidenceIdsFromMarkdown(markdown);
@@ -306,8 +253,8 @@ export function AiPanel(props: Props) {
             <div className="management-panel-body ai-dock-panel-body ai-floating-panel" aria-label="Artifacts panel">
               {aiSessionArtifact ? <MarkdownMessage markdown={aiSessionArtifact.markdown} onCitationClick={onOpenEvidenceCitation} /> : <p>No artifact yet.</p>}
               {aiSessionArtifact ? (
-                <button className="ghost-button" type="button" onClick={() => void onCreateResearchNote()}>
-                  Save as Research Note
+                <button aria-label="Save as Research Note" className="icon-button" title="Save as Research Note" type="button" onClick={() => void onCreateResearchNote()}>
+                  <SaveIcon />
                 </button>
               ) : null}
             </div>
@@ -332,11 +279,11 @@ export function AiPanel(props: Props) {
                 <>
                   <textarea aria-label="Research note editor" className="note-editor" value={noteDraft} onChange={(event) => onUpdateNoteDraft(event.target.value)} />
                   <div className="export-row">
-                    <button className="ghost-button" type="button" onClick={() => void onSaveNoteEdits()}>
-                      Save Note Edits
+                    <button aria-label="Save Note Edits" className="icon-button" title="Save Note Edits" type="button" onClick={() => void onSaveNoteEdits()}>
+                      <SaveIcon />
                     </button>
-                    <button className="ghost-button" type="button" onClick={() => void onExportMarkdown()}>
-                      Export Markdown
+                    <button aria-label="Export Markdown" className="icon-button" title="Export Markdown" type="button" onClick={() => void onExportMarkdown()}>
+                      <DownloadIcon />
                     </button>
                   </div>
                 </>
@@ -432,7 +379,7 @@ export function AiPanel(props: Props) {
                   <span key={reference.id} className="annotation-chip ai-reference-chip" title={referenceLabel}>
                     <span className="ai-reference-chip-label">{referenceLabel}</span>
                     <button aria-label={`Remove ${referenceLabel}`} className="ai-reference-chip-remove" type="button" onClick={() => void onRemoveReference(reference.id)}>
-                      ×
+                      <CloseIcon />
                     </button>
                   </span>
                 );
@@ -497,8 +444,8 @@ export function AiPanel(props: Props) {
               }
             }}
           />
-          <button aria-label="Send AI prompt" className="primary-button" disabled={!aiPanelCanSend || aiComposerValue.trim().length === 0} type="button" onClick={() => void onSendPrompt()}>
-            Send
+          <button aria-label="Send AI prompt" className="primary-button icon-command-button" disabled={!aiPanelCanSend || aiComposerValue.trim().length === 0} title="Send AI prompt" type="button" onClick={() => void onSendPrompt()}>
+            <SendIcon />
           </button>
         </div>
       </div>
