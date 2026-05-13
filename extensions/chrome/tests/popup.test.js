@@ -41,13 +41,26 @@ test("popup does not expose connector token setup", () => {
   assert.doesNotMatch(source, /connectorTokenInput/);
 });
 
-test("popup no longer auto-imports a single detected file", () => {
+test("popup quick-saves a single detected file after a countdown", () => {
   const source = readFileSync(join(testDir, "../extension/popup/popup.js"), "utf8");
   const scanPage = extractFunctionSource(source, "scanPage");
+  const scheduleAutoImport = extractFunctionSource(source, "scheduleAutoImport");
+  const updateAutoImportCountdown = extractFunctionSource(source, "updateAutoImportCountdown");
+  const autoImportIsEligible = extractFunctionSource(source, "autoImportIsEligible");
 
-  assert.doesNotMatch(source, /Importing automatically/);
-  assert.doesNotMatch(scanPage, /importCandidate/);
+  assert.match(source, /AUTO_IMPORT_DELAY_MS = 5000/);
+  assert.match(scanPage, /await sendMessage/);
+  assert.match(scanPage, /renderCandidates\(\);/);
+  assert.match(scanPage, /scheduleAutoImport\(\);/);
   assert.match(scanPage, /Choose Import when ready/);
+  assert.match(autoImportIsEligible, /state\.collectionsLoaded/);
+  assert.match(autoImportIsEligible, /state\.candidates\.length === 1/);
+  assert.match(autoImportIsEligible, /hasValidSelectedCollection\(\)/);
+  assert.match(scheduleAutoImport, /cancelAutoImport\(\)/);
+  assert.match(scheduleAutoImport, /setTimeout/);
+  assert.match(scheduleAutoImport, /AUTO_IMPORT_DELAY_MS/);
+  assert.match(scheduleAutoImport, /importCandidate\(state\.candidates\[0\]\)/);
+  assert.match(updateAutoImportCountdown, /Auto-saving in \$\{secondsRemaining\}s/);
 });
 
 test("popup discovers connector and requests import capabilities", () => {
@@ -90,7 +103,37 @@ test("popup disables imports until collections are loaded", () => {
   const updateActionAvailability = extractFunctionSource(source, "updateActionAvailability");
   const renderCandidates = extractFunctionSource(source, "renderCandidates");
 
-  assert.match(updateActionAvailability, /state\.collectionsLoaded && Number\(collectionSelect\.value\) > 0/);
+  assert.match(updateActionAvailability, /hasValidSelectedCollection\(\)/);
   assert.match(updateActionAvailability, /button\.disabled = state\.busy \|\| !hasCollection/);
   assert.match(renderCandidates, /button\.disabled = state\.busy \|\| !state\.collectionsLoaded/);
+});
+
+test("popup requires a valid saved collection before quick-save", () => {
+  const source = readFileSync(join(testDir, "../extension/popup/popup.js"), "utf8");
+  const hasValidSelectedCollection = extractFunctionSource(source, "hasValidSelectedCollection");
+  const renderCollections = extractFunctionSource(source, "renderCollections");
+
+  assert.match(hasValidSelectedCollection, /state\.collectionsLoaded/);
+  assert.match(hasValidSelectedCollection, /state\.collections\.some\(\(collection\) => collection\.id === selectedId\)/);
+  assert.match(renderCollections, /hasLastCollection/);
+  assert.match(renderCollections, /Choose collection/);
+  assert.match(renderCollections, /hasLastCollection && row\.id === state\.config\?\.lastCollectionId/);
+});
+
+test("popup cancels and restarts quick-save on user actions", () => {
+  const source = readFileSync(join(testDir, "../extension/popup/popup.js"), "utf8");
+  const scheduleConnectorRetry = extractFunctionSource(source, "scheduleConnectorRetry");
+  const scanPage = extractFunctionSource(source, "scanPage");
+  const importCandidate = extractFunctionSource(source, "importCandidate");
+  const cancelAutoImport = extractFunctionSource(source, "cancelAutoImport");
+
+  assert.match(cancelAutoImport, /clearTimeout\(state\.autoImportTimer\)/);
+  assert.match(scheduleConnectorRetry, /cancelAutoImport\(\)/);
+  assert.match(scanPage, /cancelAutoImport\(\)/);
+  assert.match(importCandidate, /cancelAutoImport\(\)/);
+  assert.match(source, /#refreshButton[\s\S]*cancelAutoImport\(\);[\s\S]*scheduleConnectorRetry\(0\)/);
+  assert.match(source, /#scanButton[\s\S]*cancelAutoImport\(\);[\s\S]*scanPage\(\)/);
+  assert.match(source, /#rescanButton[\s\S]*cancelAutoImport\(\);[\s\S]*scanPage\(\)/);
+  assert.match(source, /retryButton\.addEventListener[\s\S]*cancelAutoImport\(\);/);
+  assert.match(source, /collectionSelect\.addEventListener[\s\S]*saveConfig\(\{ quiet: true \}\)[\s\S]*\.then\(\(\) => scheduleAutoImport\(\)\)/);
 });

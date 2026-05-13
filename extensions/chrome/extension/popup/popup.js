@@ -17,6 +17,7 @@ const collectionCount = document.querySelector("#collectionCount");
 const retryButton = document.querySelector("#retryButton");
 
 const CONNECTOR_RETRY_DELAY_MS = 2000;
+const AUTO_IMPORT_DELAY_MS = 5000;
 
 const state = {
   config: null,
@@ -30,6 +31,8 @@ const state = {
   busy: false,
   connectorTimer: null,
   connectorCycleRunning: false,
+  autoImportTimer: null,
+  autoImportDeadline: 0,
   importModeLabel: "Download then import"
 };
 
@@ -59,12 +62,51 @@ function setBusy(isBusy) {
 }
 
 function updateActionAvailability() {
-  const hasCollection = state.collectionsLoaded && Number(collectionSelect.value) > 0;
+  const hasCollection = hasValidSelectedCollection();
   collectionSelect.disabled = state.busy || !state.collectionsLoaded || state.collections.length === 0;
   for (const button of candidateList.querySelectorAll("button")) {
     button.disabled = state.busy || !hasCollection;
     button.title = hasCollection ? "" : "Paper Reader collections are still loading.";
   }
+}
+
+function hasValidSelectedCollection() {
+  const selectedId = Number(collectionSelect.value);
+  return state.collectionsLoaded && state.collections.some((collection) => collection.id === selectedId);
+}
+
+function selectedCollectionName() {
+  const selectedId = Number(collectionSelect.value);
+  const collection = state.collections.find((item) => item.id === selectedId);
+  return collection?.name || collectionSelect.selectedOptions[0]?.textContent?.trim() || "selected collection";
+}
+
+function cancelAutoImport() {
+  if (state.autoImportTimer) clearTimeout(state.autoImportTimer);
+  state.autoImportTimer = null;
+  state.autoImportDeadline = 0;
+}
+
+function autoImportIsEligible() {
+  return state.collectionsLoaded && state.candidates.length === 1 && hasValidSelectedCollection();
+}
+
+function updateAutoImportCountdown() {
+  const secondsRemaining = Math.max(1, Math.ceil((state.autoImportDeadline - Date.now()) / 1000));
+  setResult("Auto-saving", `Auto-saving in ${secondsRemaining}s to ${selectedCollectionName()}.`, "success");
+}
+
+function scheduleAutoImport() {
+  cancelAutoImport();
+  if (!autoImportIsEligible()) return;
+
+  state.autoImportDeadline = Date.now() + AUTO_IMPORT_DELAY_MS;
+  updateAutoImportCountdown();
+  state.autoImportTimer = setTimeout(() => {
+    state.autoImportTimer = null;
+    state.autoImportDeadline = 0;
+    if (autoImportIsEligible()) void importCandidate(state.candidates[0]);
+  }, AUTO_IMPORT_DELAY_MS);
 }
 
 async function sendMessage(message) {
@@ -154,17 +196,26 @@ function renderCollections() {
     return;
   }
 
+  const hasLastCollection = rows.some((row) => row.id === state.config?.lastCollectionId);
+  if (!hasLastCollection) {
+    const option = document.createElement("option");
+    option.textContent = "Choose collection";
+    option.value = "";
+    collectionSelect.append(option);
+  }
+
   for (const row of rows) {
     const option = document.createElement("option");
     option.value = String(row.id);
     option.textContent = collectionLabel(row, row.depth);
-    if (row.id === state.config?.lastCollectionId) option.selected = true;
+    if (hasLastCollection && row.id === state.config?.lastCollectionId) option.selected = true;
     collectionSelect.append(option);
   }
   updateActionAvailability();
 }
 
 function scheduleConnectorRetry(delayMs = CONNECTOR_RETRY_DELAY_MS) {
+  cancelAutoImport();
   if (state.connectorTimer) clearTimeout(state.connectorTimer);
   state.connectorTimer = setTimeout(() => {
     state.connectorTimer = null;
@@ -194,6 +245,7 @@ async function runConnectorCycle() {
 }
 
 async function scanPage() {
+  cancelAutoImport();
   if (!state.activeTabId) return;
   if (!state.collectionsLoaded) {
     setResult("Waiting for Paper Reader", "Collections will load automatically when Paper Reader is reachable.", "error");
@@ -219,6 +271,7 @@ async function scanPage() {
     }
 
     setResult("Ready to import", `${state.candidates.length} option${state.candidates.length === 1 ? "" : "s"} found. Choose Import when ready.`, "success");
+    scheduleAutoImport();
   } catch (error) {
     setResult("Scan failed", error.message, "error", { retry: true });
   } finally {
@@ -277,6 +330,7 @@ function renderCandidates() {
 }
 
 async function importCandidate(candidate) {
+  cancelAutoImport();
   const collectionId = Number(collectionSelect.value);
   if (!collectionId) {
     setResult("Collection required", "Select a target collection before importing.", "error");
@@ -316,22 +370,28 @@ async function importCandidate(candidate) {
 }
 
 document.querySelector("#refreshButton").addEventListener("click", () => {
+  cancelAutoImport();
   scheduleConnectorRetry(0);
 });
 document.querySelector("#scanButton").addEventListener("click", () => {
+  cancelAutoImport();
   void scanPage();
 });
 document.querySelector("#rescanButton").addEventListener("click", () => {
+  cancelAutoImport();
   void scanPage();
 });
 retryButton.addEventListener("click", () => {
+  cancelAutoImport();
   if (state.lastImportCandidate) void importCandidate(state.lastImportCandidate);
   else scheduleConnectorRetry(0);
 });
 collectionSelect.addEventListener("change", () => {
   state.config = { ...(state.config || {}), lastCollectionId: Number(collectionSelect.value) || null };
   updateActionAvailability();
-  void saveConfig({ quiet: true }).catch((error) => setConnection("Save failed", error.message, "error"));
+  void saveConfig({ quiet: true })
+    .then(() => scheduleAutoImport())
+    .catch((error) => setConnection("Save failed", error.message, "error"));
 });
 
 void initialize().catch((error) => {
