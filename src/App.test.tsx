@@ -799,6 +799,25 @@ describe("App reading workspace", () => {
     expect(screen.queryByText("Transformer Scaling Laws", { selector: ".ai-reference-chip-label" })).not.toBeInTheDocument();
   });
 
+  it("does not reuse another paper's AI chat history when opening a new paper", async () => {
+    const user = userEvent.setup();
+    render(<App api={fakeApi} />);
+
+    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(screen.getByRole("button", { name: "Open AI panel" }));
+    await user.type(screen.getByRole("textbox", { name: "AI prompt" }), "What is the key result?");
+    await user.click(screen.getByRole("button", { name: "Send AI prompt" }));
+    expect(await screen.findByText(/Reading Q&A: Transformer Scaling Laws/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Close AI panel" }));
+    await user.click(await screen.findByRole("treeitem", { name: /Graph Neural Survey/i }));
+    await user.click(screen.getByRole("button", { name: "Open AI panel" }));
+
+    expect(await screen.findByText("Graph Neural Survey", { selector: ".ai-reference-chip-label" })).toBeInTheDocument();
+    expect(screen.queryByText(/Reading Q&A: Transformer Scaling Laws/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Transformer Scaling Laws", { selector: ".ai-reference-chip-label" })).not.toBeInTheDocument();
+  });
+
   it("hides AI history and dock overlays when the AI panel is closed and reopened", async () => {
     const user = userEvent.setup();
     const { container } = render(<App api={fakeApi} />);

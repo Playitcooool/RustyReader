@@ -591,20 +591,19 @@ export function useAiSessionState({
     if (activeAiSessionId) await refreshActiveAiSession(activeAiSessionId);
   }, [activeAiSessionId, getApi, refreshActiveAiSession]);
 
-  const replaceSessionReferencesWithCurrentPaper = useCallback(async (sessionId: number) => {
-    if (!activePaper) return;
+  const findSessionForCurrentPaper = useCallback(async (sessions: AISession[]) => {
+    if (!activePaper) return null;
     const runtimeApi = await getApi();
-    const references = await runtimeApi.listAiSessionReferences(sessionId);
-    const hasCurrentPaper = references.some((reference) => reference.kind === "item" && reference.target_id === activePaper.id);
-    const staleReferences = references.filter(
-      (reference) => reference.kind === "collection" || reference.target_id !== activePaper.id,
-    );
-    await Promise.all(staleReferences.map((reference) => runtimeApi.removeAiSessionReference(reference.id)));
-    if (!hasCurrentPaper) {
-      await runtimeApi.addAiSessionReference({ session_id: sessionId, kind: "item", target_id: activePaper.id });
+    for (const session of sessions) {
+      const references = await runtimeApi.listAiSessionReferences(session.id);
+      const hasOnlyCurrentPaper =
+        references.length === 1 &&
+        references[0]?.kind === "item" &&
+        references[0]?.target_id === activePaper.id;
+      if (hasOnlyCurrentPaper) return session;
     }
-    await refreshActiveAiSession(sessionId);
-  }, [activePaper, getApi, refreshActiveAiSession]);
+    return null;
+  }, [activePaper, getApi]);
 
   const resetAiPanelOverlays = useCallback(() => {
     setIsAiSessionHistoryOpen(false);
@@ -620,18 +619,30 @@ export function useAiSessionState({
   const ensureSessionReady = useCallback(async () => {
     resetAiPanelOverlays();
     setIsAiPanelOpen(true);
-    if (activeAiSessionId) {
-      await replaceSessionReferencesWithCurrentPaper(activeAiSessionId);
-      return activeAiSessionId;
-    }
     const runtimeApi = await getApi();
+    if (!activePaper) {
+      if (activeAiSessionId) return activeAiSessionId;
+      const existing = await runtimeApi.listAiSessions();
+      const session = existing[0] ?? (await runtimeApi.createAiSession());
+      setAiSessions(existing[0] ? existing : [session]);
+      setActiveAiSessionId(session.id);
+      await refreshActiveAiSession(session.id);
+      return session.id;
+    }
+
     const existing = await runtimeApi.listAiSessions();
-    const session = existing[0] ?? (await runtimeApi.createAiSession());
-    setAiSessions(existing[0] ? existing : [session]);
+    const sessionForPaper = await findSessionForCurrentPaper(existing);
+    const session = sessionForPaper ?? (await runtimeApi.createAiSession());
+    setAiSessions(sessionForPaper ? existing : [session, ...existing]);
     setActiveAiSessionId(session.id);
-    await replaceSessionReferencesWithCurrentPaper(session.id);
+    if (sessionForPaper) {
+      await refreshActiveAiSession(session.id);
+    } else {
+      await runtimeApi.addAiSessionReference({ session_id: session.id, kind: "item", target_id: activePaper.id });
+      await refreshActiveAiSession(session.id);
+    }
     return session.id;
-  }, [activeAiSessionId, getApi, replaceSessionReferencesWithCurrentPaper, resetAiPanelOverlays]);
+  }, [activeAiSessionId, activePaper, findSessionForCurrentPaper, getApi, refreshActiveAiSession, resetAiPanelOverlays]);
 
   const cleanupAfterItemDelete = useCallback((deletedItemId: number) => {
     setAiSessionReferences((current) => current.filter((reference) => !(reference.kind === "item" && reference.target_id === deletedItemId)));
