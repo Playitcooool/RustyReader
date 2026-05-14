@@ -275,9 +275,15 @@ export function useLibraryState({
       if (!hasCollections) setStatusMessage("Create a collection before importing files.");
       return;
     }
-    const paths = await (await getApi()).pickImportPaths();
-    if (paths.length === 0) {
-      setStatusMessage("Import cancelled.");
+    let paths: string[];
+    try {
+      paths = await (await getApi()).pickImportPaths();
+      if (paths.length === 0) {
+        setStatusMessage("Import cancelled.");
+        return;
+      }
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Could not open the import picker.");
       return;
     }
     await importPaths(paths, "picker");
@@ -289,15 +295,19 @@ export function useLibraryState({
       return;
     }
     const runtimeApi = await getApi();
-    const paths = await runtimeApi.pickCitationPaths();
-    if (paths.length === 0) {
-      setStatusMessage("Citation import cancelled.");
-      return;
+    try {
+      const paths = await runtimeApi.pickCitationPaths();
+      if (paths.length === 0) {
+        setStatusMessage("Citation import cancelled.");
+        return;
+      }
+      const result = await runtimeApi.importCitations({ collection_id: selectedCollectionId, paths });
+      setLastImportResult(result);
+      await loadLibrary();
+      setStatusMessage(`Imported ${result.imported.length} citation records (duplicates ${result.duplicates.length}, failed ${result.failed.length}) into ${activeCollection.name}.`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Citation import failed.");
     }
-    const result = await runtimeApi.importCitations({ collection_id: selectedCollectionId, paths });
-    setLastImportResult(result);
-    await loadLibrary();
-    setStatusMessage(`Imported ${result.imported.length} citation records (duplicates ${result.duplicates.length}, failed ${result.failed.length}) into ${activeCollection.name}.`);
   }, [activeCollection, getApi, hasCollections, isImporting, loadLibrary, selectedCollectionId, setStatusMessage]);
 
   const toggleCollectionExpanded = useCallback((collectionId: number) => {
