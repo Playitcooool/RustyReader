@@ -2184,7 +2184,7 @@ impl LibraryService {
             |row| row.get(0),
         )?;
         let prompt_text = prompt.map(str::trim).filter(|value| !value.is_empty());
-        let chunks = query_evidence_chunks_conn(
+        let mut chunks = query_evidence_chunks_conn(
             &conn,
             &[item_id],
             if kind == "item.ask" {
@@ -2195,6 +2195,15 @@ impl LibraryService {
             EVIDENCE_QUERY_LIMIT,
             &EvidenceQueryOptions::default(),
         )?;
+        if chunks.is_empty() && kind == "item.ask" && prompt_text.is_some() {
+            chunks = query_evidence_chunks_conn(
+                &conn,
+                &[item_id],
+                None,
+                EVIDENCE_QUERY_LIMIT,
+                &EvidenceQueryOptions::default(),
+            )?;
+        }
         let evidence = evidence_context(&chunks);
         let prompt_body =
             build_item_prompt(kind, &title, &collection_name, &evidence, prompt_text)?;
@@ -2203,6 +2212,7 @@ impl LibraryService {
             .ai_transport
             .stream_completion(request, &mut on_delta)?;
         let output = strip_internal_prompt_metadata(&output);
+        let output = append_evidence_references_for_chunks(&output, &chunks);
 
         let tx = conn.transaction()?;
         tx.execute(
@@ -2317,6 +2327,7 @@ impl LibraryService {
             |row| row.get(0),
         )?;
         let prompt_text = prompt.map(str::trim).filter(|value| !value.is_empty());
+        let chunks = query_collection_prompt_chunks(&conn, kind, scope_item_ids, prompt_text)?;
         let prompt_body = build_collection_prompt(
             &conn,
             collection_id,
@@ -2330,6 +2341,7 @@ impl LibraryService {
             .ai_transport
             .stream_completion(request, &mut on_delta)?;
         let markdown = strip_internal_prompt_metadata(&markdown);
+        let markdown = append_evidence_references_for_chunks(&markdown, &chunks);
 
         let tx = conn.transaction()?;
         let scope_json = serde_json::to_string(scope_item_ids)?;
@@ -2557,12 +2569,14 @@ impl LibraryService {
             return Err(anyhow!("compare requires at least 2 unique papers"));
         }
         let prompt_text = prompt.map(str::trim).filter(|value| !value.is_empty());
+        let chunks = query_session_prompt_chunks(&conn, kind, &expanded.item_ids, prompt_text)?;
         let prompt_body = build_session_prompt(&conn, kind, &expanded, prompt_text)?;
         let request = self.build_provider_request(&settings, prompt_body)?;
         let markdown = self
             .ai_transport
             .stream_completion(request, &mut on_delta)?;
         let markdown = strip_internal_prompt_metadata(&markdown);
+        let markdown = append_evidence_references_for_chunks(&markdown, &chunks);
         let display_title = derive_session_title(kind, prompt_text);
         let session_title = conn.query_row(
             "SELECT title FROM ai_sessions WHERE id = ?1",
@@ -4302,20 +4316,7 @@ fn build_session_prompt(
     expansion: &SessionPromptExpansion,
     prompt: Option<&str>,
 ) -> Result<String> {
-    let evidence_query = if kind == "session.ask" { prompt } else { None };
-    let chunks = query_evidence_chunks_conn(
-        conn,
-        &expansion.item_ids,
-        evidence_query,
-        EVIDENCE_QUERY_LIMIT,
-        &EvidenceQueryOptions {
-            group_by_item: matches!(
-                kind,
-                "session.review_draft" | "session.compare_methods" | "session.theme_map"
-            ),
-            ..EvidenceQueryOptions::default()
-        },
-    )?;
+    let chunks = query_session_prompt_chunks(conn, kind, &expansion.item_ids, prompt)?;
     if !chunks.is_empty() {
         let evidence = evidence_context(&chunks);
         let task_instructions = match kind {
@@ -4345,7 +4346,7 @@ fn build_session_prompt(
             format!("Task kind: {kind}\n")
         };
         return Ok(format!(
-            "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nDo not include internal metadata such as target title, collection, or task kind in the answer.\nPreserve the heading and section style shown below.\nCite evidence for key claims, comparisons, and synthesis using the provided bracket ids like [E23]. Use only the evidence chunks below.\n{}\n\n{}{}\n\nEvidence chunks:\n\n{}\n{}",
+            "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nDo not include internal metadata such as target title, collection, or task kind in the answer.\nPreserve the heading and section style shown below.\nCite evidence for key claims, comparisons, and synthesis using the provided bracket ids like [E23]. Use only the evidence chunks below.\nWhen answering a user question, include the cited paper location in natural language when helpful, such as section/chapter, page, or paragraph block; the [E] ids are clickable in the reader.\n{}\n\n{}{}\n\nEvidence chunks:\n\n{}\n{}",
             review_draft_rules(kind),
             task_kind_context,
             task_instructions,
@@ -4445,13 +4446,40 @@ fn build_session_prompt(
         format!("Task kind: {kind}\n")
     };
     Ok(format!(
-        "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nDo not include internal metadata such as target title, collection, or task kind in the answer.\nPreserve the heading and section style shown below.\n{}\n\n{}{}\n\nUse only this extracted evidence in the exact paper order provided:\n\n{}\n{}",
+        "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nDo not include internal metadata such as target title, collection, or task kind in the answer.\nPreserve the heading and section style shown below.\nWhen answering a user question, cite the paper location in natural language when possible, such as section/chapter, page, or paragraph block. Prefer evidence chunks with clickable [E] ids when they are provided.\n{}\n\n{}{}\n\nUse only this extracted evidence in the exact paper order provided:\n\n{}\n{}",
         review_draft_rules(kind),
         task_kind_context,
         task_instructions,
         sections.join("\n\n"),
         prompt_suffix
     ))
+}
+
+fn query_session_prompt_chunks(
+    conn: &Connection,
+    kind: &str,
+    item_ids: &[i64],
+    prompt: Option<&str>,
+) -> Result<Vec<EvidenceChunk>> {
+    let evidence_query = if kind == "session.ask" { prompt } else { None };
+    let options = EvidenceQueryOptions {
+        group_by_item: matches!(
+            kind,
+            "session.review_draft" | "session.compare" | "session.theme_map"
+        ),
+        ..EvidenceQueryOptions::default()
+    };
+    let chunks = query_evidence_chunks_conn(
+        conn,
+        item_ids,
+        evidence_query,
+        EVIDENCE_QUERY_LIMIT,
+        &options,
+    )?;
+    if chunks.is_empty() && kind == "session.ask" && prompt.is_some() {
+        return query_evidence_chunks_conn(conn, item_ids, None, EVIDENCE_QUERY_LIMIT, &options);
+    }
+    Ok(chunks)
 }
 
 fn build_single_session_prompt(
@@ -4481,7 +4509,7 @@ fn build_single_session_prompt(
         format!("\nTarget title: {title}\nCollection: {collection_name}\nTask kind: {kind}")
     };
     Ok(format!(
-        "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nDo not include internal metadata such as target title, collection, or task kind in the answer.\nPreserve the heading and section style shown below.\n{}\n{}{}\n\nUse only this extracted paper text:\n\"\"\"\n{}\n\"\"\"\n{}",
+        "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nDo not include internal metadata such as target title, collection, or task kind in the answer.\nPreserve the heading and section style shown below.\nWhen answering a user question, cite the paper location in natural language when possible, such as section/chapter, page, or paragraph block. Prefer evidence chunks with clickable [E] ids when they are provided.\n{}\n{}{}\n\nUse only this extracted paper text:\n\"\"\"\n{}\n\"\"\"\n{}",
         review_draft_rules(kind),
         task_instructions
             .replace("{title}", title)
@@ -4508,7 +4536,7 @@ fn build_item_prompt(
     };
     let prompt_text = prompt.unwrap_or("");
     Ok(format!(
-        "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nPreserve the heading and section style shown below.\nCite evidence for key claims using the provided bracket ids like [E23]. Use only the evidence chunks below.\n\nTarget title: {title}\nCollection: {collection_name}\nTask kind: {kind}\n{}\n\nEvidence chunks:\n\n{}\n{}",
+        "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nPreserve the heading and section style shown below.\nCite evidence for key claims using the provided bracket ids like [E23]. Use only the evidence chunks below.\nWhen answering a user question, include the cited paper location in natural language when helpful, such as section/chapter, page, or paragraph block; the [E] ids are clickable in the reader.\n\nTarget title: {title}\nCollection: {collection_name}\nTask kind: {kind}\n{}\n\nEvidence chunks:\n\n{}\n{}",
         task_instructions
             .replace("{title}", title)
             .replace("{collection}", collection_name),
@@ -4536,18 +4564,66 @@ fn evidence_context(chunks: &[EvidenceChunk]) -> String {
                 .filter(|value| !value.trim().is_empty())
                 .map(|value| format!(", section: {value}"))
                 .unwrap_or_default();
+            let paragraph = format!(", paragraph block {}", chunk.chunk_index + 1);
             format!(
-                "[E{}] {}{}{}; kind: {}\n{}",
+                "[E{}] {}{}{}{}; kind: {}\n{}",
                 chunk.id,
                 chunk.item_title,
                 page,
                 section,
+                paragraph,
                 chunk.content_kind,
                 truncate_chars(&chunk.text, EVIDENCE_CHUNK_MAX_CHARS)
             )
         })
         .collect::<Vec<_>>()
         .join("\n\n")
+}
+
+fn evidence_reference_line(chunk: &EvidenceChunk) -> String {
+    let page = match (chunk.page_start.or(chunk.page_number), chunk.page_end) {
+        (Some(start), Some(end)) if start != end => format!("pp. {start}-{end}"),
+        (Some(start), _) => format!("p. {start}"),
+        _ => "no page".into(),
+    };
+    let section = chunk
+        .section_title
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or("no section");
+    format!(
+        "- [E{}] {}, {}, {}, paragraph block {}; {}",
+        chunk.id,
+        chunk.item_title,
+        page,
+        section,
+        chunk.chunk_index + 1,
+        truncate_chars(&chunk.text, 240)
+    )
+}
+
+fn append_evidence_references_for_chunks(markdown: &str, chunks: &[EvidenceChunk]) -> String {
+    if chunks.is_empty() || markdown.contains("## Evidence References") {
+        return markdown.to_string();
+    }
+    let citation_re = Regex::new(r"\[E(\d+)\]").unwrap();
+    let cited_ids = citation_re
+        .captures_iter(markdown)
+        .filter_map(|capture| capture.get(1)?.as_str().parse::<i64>().ok())
+        .collect::<HashSet<_>>();
+    let references = chunks
+        .iter()
+        .filter(|chunk| cited_ids.is_empty() || cited_ids.contains(&chunk.id))
+        .map(evidence_reference_line)
+        .collect::<Vec<_>>();
+    if references.is_empty() {
+        return markdown.to_string();
+    }
+    format!(
+        "{}\n\n## Evidence References\n\n{}",
+        markdown.trim_end(),
+        references.join("\n")
+    )
 }
 
 fn append_evidence_references(conn: &Connection, markdown: &str) -> Result<String> {
@@ -4585,24 +4661,7 @@ fn append_evidence_references(conn: &Connection, markdown: &str) -> Result<Strin
             )
             .optional()?
         {
-            let page = match (chunk.page_start.or(chunk.page_number), chunk.page_end) {
-                (Some(start), Some(end)) if start != end => format!("pp. {start}-{end}"),
-                (Some(start), _) => format!("p. {start}"),
-                _ => "no page".into(),
-            };
-            let section = chunk
-                .section_title
-                .as_deref()
-                .filter(|value| !value.trim().is_empty())
-                .unwrap_or("no section");
-            references.push(format!(
-                "- [E{}] {}, {}, {}; {}",
-                chunk.id,
-                chunk.item_title,
-                page,
-                section,
-                truncate_chars(&chunk.text, 240)
-            ));
+            references.push(evidence_reference_line(&chunk));
         }
     }
     if references.is_empty() {
@@ -4639,24 +4698,7 @@ fn build_collection_prompt(
     scope_item_ids: &[i64],
     prompt: Option<&str>,
 ) -> Result<String> {
-    let evidence_query = if kind == "collection.ask" {
-        prompt
-    } else {
-        None
-    };
-    let chunks = query_evidence_chunks_conn(
-        conn,
-        scope_item_ids,
-        evidence_query,
-        EVIDENCE_QUERY_LIMIT,
-        &EvidenceQueryOptions {
-            group_by_item: matches!(
-                kind,
-                "collection.review_draft" | "collection.compare_methods" | "collection.theme_map"
-            ),
-            ..EvidenceQueryOptions::default()
-        },
-    )?;
+    let chunks = query_collection_prompt_chunks(conn, kind, scope_item_ids, prompt)?;
     if !chunks.is_empty() {
         let task_instructions = match kind {
             "collection.bulk_summarize" => "# Bulk Summary: {collection}\n\n## Paper Capsules\n- ...\n\n## Synthesis\n...",
@@ -4667,7 +4709,7 @@ fn build_collection_prompt(
             _ => return Err(anyhow!("unsupported collection task kind")),
         };
         return Ok(format!(
-            "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nPreserve the heading and section style shown below.\nCite evidence for key claims, comparisons, and synthesis using the provided bracket ids like [E23]. Use only the evidence chunks below.\n{}\n\nCollection: {collection_name}\nTask kind: {kind}\n{}\n\nEvidence chunks:\n\n{}\n{}",
+            "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nPreserve the heading and section style shown below.\nCite evidence for key claims, comparisons, and synthesis using the provided bracket ids like [E23]. Use only the evidence chunks below.\nWhen answering a user question, include the cited paper location in natural language when helpful, such as section/chapter, page, or paragraph block; the [E] ids are clickable in the reader.\n{}\n\nCollection: {collection_name}\nTask kind: {kind}\n{}\n\nEvidence chunks:\n\n{}\n{}",
             review_draft_rules(kind),
             task_instructions.replace("{collection}", collection_name),
             evidence_context(&chunks),
@@ -4734,6 +4776,43 @@ fn build_collection_prompt(
         sections.join("\n\n"),
         prompt_suffix
     ))
+}
+
+fn query_collection_prompt_chunks(
+    conn: &Connection,
+    kind: &str,
+    scope_item_ids: &[i64],
+    prompt: Option<&str>,
+) -> Result<Vec<EvidenceChunk>> {
+    let evidence_query = if kind == "collection.ask" {
+        prompt
+    } else {
+        None
+    };
+    let options = EvidenceQueryOptions {
+        group_by_item: matches!(
+            kind,
+            "collection.review_draft" | "collection.compare_methods" | "collection.theme_map"
+        ),
+        ..EvidenceQueryOptions::default()
+    };
+    let chunks = query_evidence_chunks_conn(
+        conn,
+        scope_item_ids,
+        evidence_query,
+        EVIDENCE_QUERY_LIMIT,
+        &options,
+    )?;
+    if chunks.is_empty() && kind == "collection.ask" && prompt.is_some() {
+        return query_evidence_chunks_conn(
+            conn,
+            scope_item_ids,
+            None,
+            EVIDENCE_QUERY_LIMIT,
+            &options,
+        );
+    }
+    Ok(chunks)
 }
 
 fn extract_openai_content(value: &serde_json::Value) -> Option<String> {
