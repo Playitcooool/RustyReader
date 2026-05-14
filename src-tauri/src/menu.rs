@@ -11,6 +11,8 @@ pub(crate) fn install_menu(app: &mut App) -> Result<(), Box<dyn std::error::Erro
         .quit()
         .build()?;
     let app_menu = SubmenuBuilder::new(&*app, "Paper Reader")
+        .text("app_import_documents", "Import")
+        .separator()
         .text("open_settings", "Settings…")
         .build()?;
     let edit_menu = SubmenuBuilder::new(&*app, "Edit")
@@ -29,7 +31,7 @@ pub(crate) fn install_menu(app: &mut App) -> Result<(), Box<dyn std::error::Erro
         .build()?;
     app.set_menu(menu)?;
     app.on_menu_event(|app_handle, event| match event.id().0.as_str() {
-        "import_documents" => {
+        "app_import_documents" | "import_documents" => {
             let _ = app_handle.emit("menu:import-documents", ());
         }
         "import_citations" => {
