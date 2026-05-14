@@ -31,6 +31,7 @@ type PdfReaderProps = {
   zoom: number;
   fitMode?: "manual" | "fit_width";
   mode?: "workspace" | "focus";
+  showChrome?: boolean;
   getPdfDocumentInfo: (primaryAttachmentId: number) => Promise<PdfDocumentInfo>;
   getPdfPageBundle: (input: PdfEngineGetPageBundleInput) => Promise<{
     png_bytes: Uint8Array;
@@ -56,6 +57,7 @@ export function PdfReader({
   zoom,
   fitMode = "fit_width",
   mode = "workspace",
+  showChrome = false,
   getPdfDocumentInfo,
   getPdfPageBundle,
   onPageCountChange,
@@ -480,16 +482,16 @@ export function PdfReader({
     return () => document.removeEventListener("selectionchange", onSelectionChangeEvent);
   }, [onSelectionChange, page]);
 
-  const showChrome = mode === "workspace";
+  const hasChrome = showChrome && mode === "workspace";
   const pageShellStyleVars = useMemo((): CSSProperties => ({ width: `${renderedWidthCssPx}px` }), [renderedWidthCssPx]);
 
   return (
     <section
-      className={`pdf-reader ${showChrome ? "pdf-reader-workspace" : "pdf-reader-focus"}`}
+      className={`pdf-reader ${mode === "workspace" ? "pdf-reader-workspace" : "pdf-reader-focus"}`}
       data-testid="pdf-reader"
     >
-      <div className={showChrome ? "citation-card" : "pdf-stage"} ref={stageRef}>
-        {showChrome ? (
+      <div className={hasChrome ? "citation-card" : "pdf-stage"} ref={stageRef}>
+        {hasChrome ? (
           <>
             <p className="eyebrow">Native PDF Reader</p>
             <h3>{view.title}</h3>

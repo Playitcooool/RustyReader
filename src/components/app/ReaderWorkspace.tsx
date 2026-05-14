@@ -408,16 +408,18 @@ export function ReaderWorkspace(props: Props) {
         </section>
       ) : (
         <section className="reader-panel reader-panel-workspace">
-          <div className="reader-meta-row">
-            <div>
-              <p className="eyebrow">Reader</p>
-              <h2>{activePaper?.title ?? "No paper selected"}</h2>
-              <p className="secondary-copy">{activePaper ? activePaperMetadata ?? "No metadata" : "No metadata"}</p>
-              <p className="secondary-copy">
-                {[activePaper?.collection_id ? null : null, activePaper && activePaper.attachment_status !== "ready" ? activePaper.attachment_status : null, activePaper ? attachmentFormatLabel(activePaper.attachment_format) : "Document"].filter(Boolean).join(" · ")}
-              </p>
+          {readerView?.reader_kind === "pdf" ? null : (
+            <div className="reader-meta-row">
+              <div>
+                <p className="eyebrow">Reader</p>
+                <h2>{activePaper?.title ?? "No paper selected"}</h2>
+                <p className="secondary-copy">{activePaper ? activePaperMetadata ?? "No metadata" : "No metadata"}</p>
+                <p className="secondary-copy">
+                  {[activePaper?.collection_id ? null : null, activePaper && activePaper.attachment_status !== "ready" ? activePaper.attachment_status : null, activePaper ? attachmentFormatLabel(activePaper.attachment_format) : "Document"].filter(Boolean).join(" · ")}
+                </p>
+              </div>
             </div>
-          </div>
+          )}
           {readerView?.reader_kind !== "pdf" ? (
             <div className="reader-toolbar">
               {textToolsEnabled ? (

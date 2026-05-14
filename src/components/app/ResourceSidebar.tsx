@@ -201,7 +201,7 @@ export function ResourceSidebar(props: Props) {
       </div>
       <section aria-label="Collection drop zone" className={`section-block resource-panel ${draggedFileCount > 0 ? "drop-zone-active" : ""}`} role="region" onDragEnter={(event) => event.dataTransfer?.files && onDragCountChange(droppedPathsFromFileList(event.dataTransfer.files).length)} onDragOver={(event) => { event.preventDefault(); if (event.dataTransfer) event.dataTransfer.dropEffect = "copy"; }} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onDragCountChange(0); }} onDrop={(event) => { event.preventDefault(); onDragCountChange(0); if (isTauriRuntime()) return; const files = event.dataTransfer?.files; void Promise.resolve(onImportPaths(files ? droppedPathsFromFileList(files) : [], "drag & drop")).finally(() => onDragCountChange(0)); }}>
         <div className="section-title-row">
-          <h2>Resources</h2>
+          <h2>Collections</h2>
           <div className="section-title-actions">
             <span className="meta-count">{libraryItems.length}</span>
             <button aria-label="New folder" className="icon-button icon-button-small" title="New folder" type="button" onClick={() => onStartCreateCollection(null)}>
