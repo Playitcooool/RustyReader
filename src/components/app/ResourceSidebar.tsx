@@ -3,14 +3,13 @@ import { isTauriRuntime } from "../../lib/api";
 import type { Collection, ImportBatchResult, LibraryItem } from "../../lib/contracts";
 import type { ResourceContextMenuState } from "../../hooks/useLibraryState";
 import type { MouseEvent as ReactMouseEvent } from "react";
-import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, PlusIcon } from "./Icons";
+import { ChevronLeftIcon, PlusIcon } from "./Icons";
 
 type Props = {
   collectionDraftName: string;
   collections: Collection[];
   creatingCollectionParentId: number | "root" | null;
   draggedFileCount: number;
-  expandedCollectionIds: number[];
   lastImportResult: ImportBatchResult | null;
   libraryItems: LibraryItem[];
   onHideFocusSidebar?: () => void;
@@ -25,7 +24,6 @@ type Props = {
   onStartCreateCollection: (parentId: number | null) => void;
   onStartRenameCollection: (collection: Collection) => void;
   onSubmitCollectionRename: () => void | Promise<void>;
-  onToggleCollectionExpanded: (collectionId: number) => void;
   renamingCollectionId: number | null;
   search: string;
   selectedCollectionId: number | null;
@@ -52,7 +50,6 @@ export function ResourceSidebar(props: Props) {
     onStartCreateCollection,
     onStartRenameCollection,
     onSubmitCollectionRename,
-    onToggleCollectionExpanded,
     renamingCollectionId,
     search,
     selectedCollectionId,
@@ -88,15 +85,11 @@ export function ResourceSidebar(props: Props) {
     childCollectionsFor(collections, parentId)
       .filter((collection) => (treeSearchFilter ? treeSearchFilter.allowedCollectionIds.has(collection.id) : true))
       .flatMap((collection) => {
-        const isExpanded = props.expandedCollectionIds.includes(collection.id);
         const collectionChildren = renderTreeNodes(collection.id, depth + 1);
         const isRenaming = renamingCollectionId === collection.id;
         return [
           <div key={`collection-${collection.id}`} role="none">
-            <div className={`resource-tree-row resource-tree-collection ${selectedCollectionId === collection.id ? "resource-tree-row-active" : ""}`} role="treeitem" aria-expanded={isExpanded} aria-label={collection.name} style={{ paddingLeft: `${10 + depth * 18}px` }} onContextMenu={(event) => onContextMenu(event, { x: event.clientX, y: event.clientY, kind: "collection", targetId: collection.id })}>
-              <button aria-label={isExpanded ? `Collapse ${collection.name}` : `Expand ${collection.name}`} className="resource-tree-toggle" type="button" onClick={() => onToggleCollectionExpanded(collection.id)}>
-                {isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
-              </button>
+            <div className={`resource-tree-row resource-tree-collection ${selectedCollectionId === collection.id ? "resource-tree-row-active" : ""}`} role="treeitem" aria-label={collection.name} style={{ paddingLeft: `${10 + depth * 18}px` }} onContextMenu={(event) => onContextMenu(event, { x: event.clientX, y: event.clientY, kind: "collection", targetId: collection.id })}>
               {isRenaming ? (
                 <input
                   aria-label="Rename collection"
@@ -120,12 +113,10 @@ export function ResourceSidebar(props: Props) {
                 </button>
               )}
             </div>
-            {isExpanded ? (
-              <div className="resource-tree-group" role="group">
-                {creatingCollectionParentId === collection.id ? renderInlineCollectionEditor(collection.id) : null}
-                {collectionChildren}
-              </div>
-            ) : null}
+            <div className="resource-tree-group" role="group">
+              {creatingCollectionParentId === collection.id ? renderInlineCollectionEditor(collection.id) : null}
+              {collectionChildren}
+            </div>
           </div>,
         ];
       });

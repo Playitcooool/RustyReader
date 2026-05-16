@@ -213,7 +213,8 @@ describe("App reading workspace", () => {
     expect(screen.getByRole("button", { name: "New folder" })).toBeInTheDocument();
     expect(screen.getByRole("listitem", { name: /Transformer Scaling Laws/i })).toBeInTheDocument();
     expect(container.querySelectorAll(".resource-tree-leading-icon")).toHaveLength(0);
-    expect(screen.getByRole("button", { name: /Collapse Machine Learning/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Collapse Machine Learning/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Expand Machine Learning/i })).not.toBeInTheDocument();
   });
 
   it("reopens the library on startup when saved sidebar state is hidden with no active paper", async () => {
@@ -1751,7 +1752,6 @@ describe("App reading workspace", () => {
 
     expect(screen.getByRole("treeitem", { name: /Machine Learning/i })).toBeInTheDocument();
     expect(screen.getByRole("treeitem", { name: /Transformers/i })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /Expand Transformers/i }));
     expect(screen.getByRole("listitem", { name: /Transformer Scaling Laws/i })).toBeInTheDocument();
     expect(screen.queryByRole("listitem", { name: /Graph Neural Survey/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("treeitem", { name: /Systems/i })).not.toBeInTheDocument();

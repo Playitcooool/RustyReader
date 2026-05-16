@@ -176,7 +176,7 @@
   }
 
   .resource-tree-row {
-    grid-template-columns: 18px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: 8px;
     padding: 8px 10px;
   }

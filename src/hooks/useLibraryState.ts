@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   applyTagFilter,
-  childCollectionsFor,
   collectionDeleteSummary,
   descendantIdsForCollection,
   droppedPathsFromFileList,
@@ -46,7 +45,6 @@ export function useLibraryState({
   const [libraryItems, setLibraryItems] = useState<LibraryItem[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [selectedCollectionId, setSelectedCollectionId] = useState<number | null>(null);
-  const [expandedCollectionIds, setExpandedCollectionIds] = useState<number[]>([]);
   const [selectedTagId, setSelectedTagId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [itemSort, setItemSort] = useState<ItemSort>(() =>
@@ -101,8 +99,6 @@ export function useLibraryState({
   const refreshCollections = useCallback(async (preferredCollectionId?: number | null) => {
     const loadedCollections = await (await getApi()).listCollections();
     setCollections(loadedCollections);
-    const rootIds = childCollectionsFor(loadedCollections, null).map((collection) => collection.id);
-    setExpandedCollectionIds((current) => (current.length > 0 ? Array.from(new Set([...current, ...rootIds])) : rootIds));
     setSelectedCollectionId((current) =>
       preferredCollectionId && loadedCollections.some((collection) => collection.id === preferredCollectionId)
         ? preferredCollectionId
@@ -267,10 +263,6 @@ export function useLibraryState({
     }
   }, [activeCollection, getApi, hasCollections, isImporting, loadLibrary, selectedCollectionId, setStatusMessage]);
 
-  const toggleCollectionExpanded = useCallback((collectionId: number) => {
-    setExpandedCollectionIds((current) => (current.includes(collectionId) ? current.filter((id) => id !== collectionId) : [...current, collectionId]));
-  }, []);
-
   const startCreateCollection = useCallback((parentId: number | null) => {
     setCreatingCollectionParentId(parentId === null ? "root" : parentId);
     setRenamingCollectionId(null);
@@ -355,7 +347,6 @@ export function useLibraryState({
     contextMenuItem,
     creatingCollectionParentId,
     draggedFileCount,
-    expandedCollectionIds,
     hasCollections,
     handleCreateCollection,
     handleImport,
@@ -390,7 +381,6 @@ export function useLibraryState({
     startRenameCollection,
     submitCollectionRename,
     tags,
-    toggleCollectionExpanded,
     treeSearchFilter,
     visibleItems,
   };

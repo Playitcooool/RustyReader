@@ -554,7 +554,6 @@ export default function App({ api }: { api: AppApi }) {
           collections={library.collections}
           creatingCollectionParentId={library.creatingCollectionParentId}
           draggedFileCount={library.draggedFileCount}
-          expandedCollectionIds={library.expandedCollectionIds}
           lastImportResult={library.lastImportResult}
           libraryItems={library.libraryItems}
           onCancelCollectionInlineEdit={library.cancelCollectionInlineEdit}
@@ -569,7 +568,6 @@ export default function App({ api }: { api: AppApi }) {
           onStartCreateCollection={library.startCreateCollection}
           onStartRenameCollection={library.startRenameCollection}
           onSubmitCollectionRename={library.submitCollectionRename}
-          onToggleCollectionExpanded={library.toggleCollectionExpanded}
           renamingCollectionId={library.renamingCollectionId}
           search={library.search}
           selectedCollectionId={library.selectedCollectionId}
