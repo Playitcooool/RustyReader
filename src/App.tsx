@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AiPanel } from "./components/app/AiPanel";
 import { DeleteConfirmDialog, type DeleteConfirmTarget } from "./components/app/DeleteConfirmDialog";
 import { ErrorBoundary } from "./components/app/ErrorBoundary";
-import { ChevronLeftIcon, CloseIcon, EditIcon, OpenIcon, PlusIcon, SidebarIcon, TrashIcon } from "./components/app/Icons";
+import { CloseIcon, EditIcon, OpenIcon, PlusIcon, SidebarIcon, TrashIcon } from "./components/app/Icons";
 import { ActivePdfHighlightBar } from "./components/app/PdfHighlightBars";
 import { ReaderWorkspace } from "./components/app/ReaderWorkspace";
 import { ResourceSidebar } from "./components/app/ResourceSidebar";
@@ -580,6 +580,7 @@ export default function App({ api }: { api: AppApi }) {
           onCreateCollection={library.handleCreateCollection}
           onCreateTag={() => library.handleCreateTag(activePaper)}
           onDragCountChange={library.setDraggedFileCount}
+          onHideFocusSidebar={isPdfFocusMode ? () => setIsSidebarVisible(false) : undefined}
           onImportPaths={library.importPaths}
           onNewTagNameChange={library.setNewTagName}
           onSearchChange={library.setSearch}
@@ -775,16 +776,16 @@ export default function App({ api }: { api: AppApi }) {
         </>
       ) : null}
 
-      {isPdfFocusMode ? (
+      {isPdfFocusMode && !isSidebarVisible ? (
         <button
-          aria-label={isSidebarVisible ? "Hide collections" : "Show collections"}
+          aria-label="Show collections"
           aria-pressed={isSidebarVisible}
           className="focus-sidebar-toggle"
-          title={isSidebarVisible ? "Hide collections" : "Show collections"}
+          title="Show collections"
           type="button"
           onClick={() => setIsSidebarVisible((current) => !current)}
         >
-          {isSidebarVisible ? <ChevronLeftIcon /> : <SidebarIcon />}
+          <SidebarIcon />
         </button>
       ) : null}
 

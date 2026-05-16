@@ -3,7 +3,7 @@ import { isTauriRuntime } from "../../lib/api";
 import type { Collection, ImportBatchResult, LibraryItem, Tag } from "../../lib/contracts";
 import type { ResourceContextMenuState } from "../../hooks/useLibraryState";
 import type { MouseEvent as ReactMouseEvent, RefObject } from "react";
-import { ChevronDownIcon, ChevronRightIcon, MoveIcon, PlusIcon, SettingsIcon, TagIcon } from "./Icons";
+import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, MoveIcon, PlusIcon, SettingsIcon, TagIcon } from "./Icons";
 
 type Props = {
   activePaperId: number | null;
@@ -22,6 +22,7 @@ type Props = {
   manageButtonRef: RefObject<HTMLButtonElement>;
   managePopoverRef: RefObject<HTMLDivElement>;
   newTagName: string;
+  onHideFocusSidebar?: () => void;
   onActivateItem: (item: LibraryItem, options?: { focusPdf?: boolean }) => void;
   onBatchMove: () => void | Promise<void>;
   onBatchMoveTargetChange: (value: string) => void;
@@ -81,6 +82,7 @@ export function ResourceSidebar(props: Props) {
     onCreateTag,
     onCancelCollectionInlineEdit,
     onDragCountChange,
+    onHideFocusSidebar,
     onImportPaths,
     onNewTagNameChange,
     onSearchChange,
@@ -207,6 +209,11 @@ export function ResourceSidebar(props: Props) {
             <button aria-label="New folder" className="icon-button icon-button-small" title="New folder" type="button" onClick={() => onStartCreateCollection(null)}>
               <PlusIcon />
             </button>
+            {onHideFocusSidebar ? (
+              <button aria-label="Hide collections" aria-pressed="true" className="icon-button icon-button-small focus-sidebar-embedded-toggle" title="Hide collections" type="button" onClick={onHideFocusSidebar}>
+                <ChevronLeftIcon />
+              </button>
+            ) : null}
           </div>
         </div>
         {collections.length === 0 ? (

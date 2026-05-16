@@ -58,8 +58,9 @@
   background: rgba(34, 38, 49, 0.94);
 }
 
-.app-shell-focus.app-shell-focus-sidebar-open .focus-sidebar-toggle {
-  left: min(var(--sidebar-width, 300px), calc(100vw - 56px));
+.app-shell-focus .focus-sidebar-embedded-toggle {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
 .reader-shell-focus {
