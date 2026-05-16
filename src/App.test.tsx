@@ -279,12 +279,14 @@ describe("App reading workspace", () => {
     expect(screen.queryByRole("toolbar", { name: /pdf focus toolbar/i })).not.toBeInTheDocument();
     expect(screen.queryByTestId("pdf-reader")).not.toBeInTheDocument();
     expect(pdfNode).toHaveAttribute("aria-current", "true");
+    expect(screen.queryByRole("tab", { name: "Transformer Scaling Laws" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Find in document" })).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Reader page input" })).not.toBeInTheDocument();
     expect(screen.queryByText(/Annotations/i)).not.toBeInTheDocument();
 
     await user.dblClick(pdfNode);
     expect(await screen.findByRole("toolbar", { name: /pdf focus toolbar/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Transformer Scaling Laws" })).toBeInTheDocument();
   });
 
   it("keeps non-pdf items in workspace mode", async () => {
@@ -335,7 +337,7 @@ describe("App reading workspace", () => {
     await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
 
     expect(await screen.findByText("Reader view exploded")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Transformer Scaling Laws/i })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /Transformer Scaling Laws/i })).not.toBeInTheDocument();
   });
 
   it("shows a focus highlight color bar and persists color into the anchor", async () => {
@@ -564,19 +566,20 @@ describe("App reading workspace", () => {
     expect(anchor).toContain('"fontSize":18');
   });
 
-  it("leaves pdf focus when switching to a non-pdf tab", async () => {
+  it("leaves pdf focus when returning to the document list and selecting a non-pdf item", async () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("listitem", { name: /Graph Neural Survey/i }));
     await user.dblClick(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     expect(await screen.findByRole("toolbar", { name: /pdf focus toolbar/i })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: "Graph Neural Survey" }));
+    await user.click(screen.getByRole("button", { name: "Back to library" }));
+    await user.click(await screen.findByRole("listitem", { name: /Graph Neural Survey/i }));
 
     await waitFor(() => {
       expect(screen.queryByRole("toolbar", { name: /pdf focus toolbar/i })).not.toBeInTheDocument();
     });
+    expect(screen.queryByRole("tab", { name: "Graph Neural Survey" })).not.toBeInTheDocument();
     expect(screen.queryByTestId("normalized-reader")).not.toBeInTheDocument();
     expect(screen.getByRole("listitem", { name: /Graph Neural Survey/i })).toHaveAttribute("aria-current", "true");
   });
@@ -622,6 +625,7 @@ describe("App reading workspace", () => {
     });
     expect(screen.queryByTestId("pdf-reader")).not.toBeInTheDocument();
     expect(screen.getByRole("list", { name: "Machine Learning documents" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Transformer Scaling Laws" })).toBeInTheDocument();
   });
 
   it("opens the find HUD with cmd-f in pdf focus", async () => {
@@ -754,7 +758,6 @@ describe("App reading workspace", () => {
     const prompt = screen.getByRole("textbox", { name: "AI prompt" });
     const sendButton = screen.getByRole("button", { name: "Send AI prompt" });
     const summarizeButton = screen.getByRole("button", { name: "Summarize" });
-    const readerTab = screen.getByRole("tab", { name: "Transformer Scaling Laws" });
 
     await user.type(prompt, "What is the key result?");
     await user.click(sendButton);
@@ -767,9 +770,6 @@ describe("App reading workspace", () => {
 
     await user.type(prompt, "Follow-up draft");
     expect(prompt).toHaveValue("Follow-up draft");
-
-    await user.click(readerTab);
-    expect(readerTab).toHaveAttribute("aria-selected", "true");
 
     expect((await screen.findAllByText(/Reading Q&A: Transformer Scaling Laws/i)).length).toBeGreaterThan(0);
     await waitFor(() => {

@@ -212,9 +212,12 @@ export function useReaderState({
   }, [readerPage, readerPageInput, setReaderPageClamped]);
 
   const activateItem = useCallback((item: LibraryItem, options?: { focusPdf?: boolean }) => {
+    const shouldEnterPdfFocus = Boolean(options?.focusPdf && item.attachment_format === "pdf");
     setActivePaperId(item.id);
-    setOpenPaperIds((current) => (current.includes(item.id) ? current : [...current, item.id]));
-    setWorkspaceMode(options?.focusPdf && item.attachment_format === "pdf" ? "pdf_focus" : "workspace");
+    if (shouldEnterPdfFocus) {
+      setOpenPaperIds((current) => (current.includes(item.id) ? current : [...current, item.id]));
+    }
+    setWorkspaceMode(shouldEnterPdfFocus ? "pdf_focus" : "workspace");
   }, [setActivePaperId]);
 
   const closePaperTab = useCallback((itemId: number) => {
