@@ -31,33 +31,6 @@
   z-index: 2;
 }
 
-.focus-sidebar-toggle {
-  display: none;
-}
-
-.app-shell-focus .focus-sidebar-toggle {
-  position: absolute;
-  top: 56px;
-  left: 8px;
-  z-index: 82;
-  width: 36px;
-  height: 44px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 0 12px 12px 0;
-  background: rgba(20, 23, 30, 0.9);
-  color: #f4efe6;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
-  backdrop-filter: blur(10px);
-  cursor: pointer;
-}
-
-.app-shell-focus .focus-sidebar-toggle:hover {
-  background: rgba(34, 38, 49, 0.94);
-}
-
 .app-shell-focus .focus-sidebar-embedded-toggle {
   background: rgba(255, 255, 255, 0.06);
   border-color: rgba(255, 255, 255, 0.12);
