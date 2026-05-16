@@ -117,22 +117,6 @@
   border-color: rgba(255, 255, 255, 0.12);
 }
 
-.manage-popover {
-  position: absolute;
-  top: 74px;
-  right: 18px;
-  left: 18px;
-  z-index: 50;
-  border: 1px solid var(--panel-border);
-  border-radius: 16px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.02)),
-    rgba(10, 12, 16, 0.82);
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(14px);
-  overflow: hidden;
-}
-
 .floating-menu {
   position: fixed;
   z-index: 55;
@@ -145,14 +129,6 @@
     rgba(10, 12, 16, 0.94);
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(14px);
-}
-
-.manage-popover-body {
-  display: grid;
-  gap: 12px;
-  padding: 14px;
-  max-height: min(520px, calc(100vh - 170px));
-  overflow: auto;
 }
 
 .eyebrow {
@@ -318,8 +294,7 @@ p {
 }
 
 .management-panel-body,
-.action-menu-body,
-.selection-toolbar {
+.action-menu-body {
   display: grid;
   gap: 12px;
   padding: 0 14px 14px;

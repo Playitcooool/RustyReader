@@ -484,7 +484,6 @@ export default function App({ api }: { api: AppApi }) {
         await library.loadLibrary();
         readerState.cleanupAfterItemDelete(deletedItemId, remainingOpenPaperIds);
         ai.cleanupAfterItemDelete(deletedItemId);
-        library.setSelectedItemIds((current: number[]) => current.filter((itemId) => itemId !== deletedItemId));
         if (ai.activeAiSessionId) await ai.refreshActiveAiSession(ai.activeAiSessionId);
         setStatusMessage(`Deleted ${deleteTarget.label}.`);
       } else {
@@ -496,7 +495,6 @@ export default function App({ api }: { api: AppApi }) {
         await library.refreshCollections(deleteTarget.parentCollectionId);
         readerState.cleanupAfterCollectionDelete(deletedItemIds, remainingOpenPaperIds);
         ai.cleanupAfterCollectionDelete(deletedCollectionIds, deletedItemIds);
-        library.setSelectedItemIds((current: number[]) => current.filter((itemId) => !deletedItemIds.has(itemId)));
         setStatusMessage(`Deleted ${deleteTarget.label}.`);
       }
     } catch (error) {
@@ -555,51 +553,30 @@ export default function App({ api }: { api: AppApi }) {
       {isSidebarVisible ? (
         <ResourceSidebar
           activePaperId={activePaper?.id ?? null}
-          attachmentFilter={library.attachmentFilter}
-          batchMoveTargetId={library.batchMoveTargetId}
-          batchTagName={library.batchTagName}
           collectionDraftName={library.collectionDraftName}
           collections={library.collections}
           creatingCollectionParentId={library.creatingCollectionParentId}
           draggedFileCount={library.draggedFileCount}
           expandedCollectionIds={library.expandedCollectionIds}
-          isManageOpen={library.isManageOpen}
-          itemSort={library.itemSort}
           lastImportResult={library.lastImportResult}
           libraryItems={library.libraryItems}
-          manageButtonRef={library.manageButtonRef}
-          managePopoverRef={library.managePopoverRef}
-          newTagName={library.newTagName}
           onActivateItem={(item, options) => readerState.activateItem(item, options)}
-          onBatchMove={library.handleBatchMove}
-          onBatchMoveTargetChange={library.setBatchMoveTargetId}
-          onBatchTag={library.handleBatchTag}
-          onBatchTagNameChange={library.setBatchTagName}
           onCancelCollectionInlineEdit={library.cancelCollectionInlineEdit}
           onContextMenu={library.openResourceContextMenu}
           onCreateCollection={library.handleCreateCollection}
-          onCreateTag={() => library.handleCreateTag(activePaper)}
           onDragCountChange={library.setDraggedFileCount}
           onHideFocusSidebar={isPdfFocusMode ? () => setIsSidebarVisible(false) : undefined}
           onImportPaths={library.importPaths}
-          onNewTagNameChange={library.setNewTagName}
           onSearchChange={library.setSearch}
           onSelectedCollectionChange={library.setSelectedCollectionId}
-          onSelectedTagChange={library.setSelectedTagId}
           onSetCollectionDraftName={library.setCollectionDraftName}
           onStartCreateCollection={library.startCreateCollection}
           onStartRenameCollection={library.startRenameCollection}
           onSubmitCollectionRename={library.submitCollectionRename}
           onToggleCollectionExpanded={library.toggleCollectionExpanded}
-          onToggleManage={() => library.setIsManageOpen((current: boolean) => !current)}
           renamingCollectionId={library.renamingCollectionId}
           search={library.search}
           selectedCollectionId={library.selectedCollectionId}
-          selectedItemIds={library.selectedItemIds}
-          selectedTagId={library.selectedTagId}
-          setAttachmentFilter={library.setAttachmentFilter}
-          setItemSort={library.setItemSort}
-          tags={library.tags}
           treeSearchFilter={library.treeSearchFilter}
         />
       ) : null}

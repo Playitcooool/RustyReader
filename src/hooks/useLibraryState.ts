@@ -41,8 +41,6 @@ export function useLibraryState({
   const importDocumentsRef = useRef<() => void>(() => {});
   const importCitationsRef = useRef<() => void>(() => {});
   const importPathsRef = useRef<(paths: string[], sourceLabel: string) => void>(() => {});
-  const manageButtonRef = useRef<HTMLButtonElement | null>(null);
-  const managePopoverRef = useRef<HTMLDivElement | null>(null);
   const resourceContextMenuRef = useRef<HTMLDivElement | null>(null);
   const selectedCollectionIdRef = useRef<number | null>(null);
 
@@ -52,7 +50,6 @@ export function useLibraryState({
   const [selectedCollectionId, setSelectedCollectionId] = useState<number | null>(null);
   const [expandedCollectionIds, setExpandedCollectionIds] = useState<number[]>([]);
   const [selectedTagId, setSelectedTagId] = useState<number | null>(null);
-  const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
   const [search, setSearch] = useState("");
   const [itemSort, setItemSort] = useState<ItemSort>(() =>
     readStoredString(ITEM_SORT_KEY, DEFAULT_ITEM_SORT, ["recent", "title", "year_desc"] as const),
@@ -63,10 +60,6 @@ export function useLibraryState({
   const [lastImportResult, setLastImportResult] = useState<ImportBatchResult | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [draggedFileCount, setDraggedFileCount] = useState(0);
-  const [newTagName, setNewTagName] = useState("");
-  const [batchTagName, setBatchTagName] = useState("");
-  const [batchMoveTargetId, setBatchMoveTargetId] = useState("current");
-  const [isManageOpen, setIsManageOpen] = useState(false);
   const [creatingCollectionParentId, setCreatingCollectionParentId] = useState<number | "root" | null>(null);
   const [collectionDraftName, setCollectionDraftName] = useState("");
   const [renamingCollectionId, setRenamingCollectionId] = useState<number | null>(null);
@@ -176,35 +169,6 @@ export function useLibraryState({
       cancelled = true;
     };
   }, [getApi, selectedCollectionId]);
-
-  useEffect(() => {
-    setSelectedItemIds((current) => current.filter((itemId) => visibleItems.some((item) => item.id === itemId)));
-  }, [visibleItems]);
-
-  useEffect(() => {
-    if (!isManageOpen) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setIsManageOpen(false);
-      }
-    };
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      const popover = managePopoverRef.current;
-      const button = manageButtonRef.current;
-      if (popover && popover.contains(target)) return;
-      if (button && button.contains(target)) return;
-      setIsManageOpen(false);
-    };
-    window.addEventListener("keydown", onKeyDown, true);
-    window.addEventListener("pointerdown", onPointerDown, true);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown, true);
-      window.removeEventListener("pointerdown", onPointerDown, true);
-    };
-  }, [isManageOpen]);
 
   useEffect(() => {
     if (!resourceContextMenu) return;
@@ -368,60 +332,6 @@ export function useLibraryState({
     setResourceContextMenu(detail);
   }, []);
 
-  const handleCreateTag = useCallback(async (activePaper: LibraryItem | null) => {
-    if (!activePaper) {
-      setStatusMessage("Open a paper before tagging it.");
-      return;
-    }
-    const name = newTagName.trim();
-    if (!name) {
-      setStatusMessage("Enter a tag name first.");
-      return;
-    }
-    const runtimeApi = await getApi();
-    const tag = await runtimeApi.createTag({ name });
-    await runtimeApi.assignTag({ item_id: activePaper.id, tag_id: tag.id });
-    await loadLibrary();
-    setTags(await runtimeApi.listTags(selectedCollectionId ?? undefined));
-    setNewTagName("");
-    setStatusMessage(`Tagged ${activePaper.title} with ${tag.name}.`);
-  }, [getApi, loadLibrary, newTagName, selectedCollectionId, setStatusMessage]);
-
-  const handleBatchTag = useCallback(async () => {
-    if (selectedItemIds.length === 0) {
-      setStatusMessage("Select at least one paper first.");
-      return;
-    }
-    const name = batchTagName.trim();
-    if (!name) {
-      setStatusMessage("Enter a tag name first.");
-      return;
-    }
-    const runtimeApi = await getApi();
-    const tag = await runtimeApi.createTag({ name });
-    await Promise.all(selectedItemIds.map((itemId) => runtimeApi.assignTag({ item_id: itemId, tag_id: tag.id })));
-    await loadLibrary();
-    setBatchTagName("");
-    setStatusMessage(`Tagged ${selectedItemIds.length} papers with ${tag.name}.`);
-  }, [batchTagName, getApi, loadLibrary, selectedItemIds, setStatusMessage]);
-
-  const handleBatchMove = useCallback(async () => {
-    if (selectedItemIds.length === 0) {
-      setStatusMessage("Select at least one paper first.");
-      return;
-    }
-    const destinationId = batchMoveTargetId === "current" ? selectedCollectionId : Number(batchMoveTargetId);
-    if (!destinationId) {
-      setStatusMessage("Choose a destination collection first.");
-      return;
-    }
-    const runtimeApi = await getApi();
-    await Promise.all(selectedItemIds.map((itemId) => runtimeApi.moveItem({ item_id: itemId, collection_id: destinationId })));
-    await loadLibrary();
-    setSelectedItemIds([]);
-    setStatusMessage(`Moved ${selectedItemIds.length} papers.`);
-  }, [batchMoveTargetId, getApi, loadLibrary, selectedCollectionId, selectedItemIds, setStatusMessage]);
-
   const treeSearchFilter = useMemo(() => {
     const normalized = search.trim().toLowerCase();
     if (normalized.length === 0) return null;
@@ -445,8 +355,6 @@ export function useLibraryState({
   return {
     activeCollection,
     attachmentFilter,
-    batchMoveTargetId,
-    batchTagName,
     cancelCollectionInlineEdit,
     collectionDraftName,
     collections,
@@ -456,10 +364,7 @@ export function useLibraryState({
     draggedFileCount,
     expandedCollectionIds,
     hasCollections,
-    handleBatchMove,
-    handleBatchTag,
     handleCreateCollection,
-    handleCreateTag,
     handleImport,
     handleImportCitations,
     importCitationsRef,
@@ -468,14 +373,10 @@ export function useLibraryState({
     importPaths,
     importPathsRef,
     isImporting,
-    isManageOpen,
     itemSort,
     lastImportResult,
     libraryItems,
     loadLibrary,
-    manageButtonRef,
-    managePopoverRef,
-    newTagName,
     openResourceContextMenu,
     refreshCollections,
     renamingCollectionId,
@@ -483,20 +384,14 @@ export function useLibraryState({
     resourceContextMenuRef,
     search,
     selectedCollectionId,
-    selectedItemIds,
     selectedTagId,
     setAttachmentFilter,
-    setBatchMoveTargetId,
-    setBatchTagName,
     setCollectionDraftName,
     setDraggedFileCount,
-    setIsManageOpen,
     setItemSort,
-    setNewTagName,
     setResourceContextMenu,
     setSearch,
     setSelectedCollectionId,
-    setSelectedItemIds,
     setSelectedTagId,
     startCreateCollection,
     startRenameCollection,

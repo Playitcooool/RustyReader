@@ -1,107 +1,65 @@
-import { childCollectionsFor, droppedPathsFromFileList, sortItems, type AttachmentFilter, type ItemSort } from "../../lib/appView";
+import { childCollectionsFor, droppedPathsFromFileList, sortItems } from "../../lib/appView";
 import { isTauriRuntime } from "../../lib/api";
-import type { Collection, ImportBatchResult, LibraryItem, Tag } from "../../lib/contracts";
+import type { Collection, ImportBatchResult, LibraryItem } from "../../lib/contracts";
 import type { ResourceContextMenuState } from "../../hooks/useLibraryState";
-import type { MouseEvent as ReactMouseEvent, RefObject } from "react";
-import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, MoveIcon, PlusIcon, SettingsIcon, TagIcon } from "./Icons";
+import type { MouseEvent as ReactMouseEvent } from "react";
+import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, PlusIcon } from "./Icons";
 
 type Props = {
   activePaperId: number | null;
-  attachmentFilter: AttachmentFilter;
-  batchMoveTargetId: string;
-  batchTagName: string;
   collectionDraftName: string;
   collections: Collection[];
   creatingCollectionParentId: number | "root" | null;
   draggedFileCount: number;
   expandedCollectionIds: number[];
-  isManageOpen: boolean;
-  itemSort: ItemSort;
   lastImportResult: ImportBatchResult | null;
   libraryItems: LibraryItem[];
-  manageButtonRef: RefObject<HTMLButtonElement>;
-  managePopoverRef: RefObject<HTMLDivElement>;
-  newTagName: string;
   onHideFocusSidebar?: () => void;
   onActivateItem: (item: LibraryItem, options?: { focusPdf?: boolean }) => void;
-  onBatchMove: () => void | Promise<void>;
-  onBatchMoveTargetChange: (value: string) => void;
-  onBatchTag: () => void | Promise<void>;
-  onBatchTagNameChange: (value: string) => void;
   onContextMenu: (event: ReactMouseEvent<HTMLElement>, detail: Exclude<ResourceContextMenuState, null>) => void;
   onCreateCollection: (parentId: number | null) => void | Promise<void>;
-  onCreateTag: () => void | Promise<void>;
   onCancelCollectionInlineEdit: () => void;
   onDragCountChange: (value: number) => void;
   onImportPaths: (paths: string[], sourceLabel: string) => void | Promise<void>;
-  onNewTagNameChange: (value: string) => void;
   onSearchChange: (value: string) => void;
   onSelectedCollectionChange: (collectionId: number) => void;
-  onSelectedTagChange: (tagId: number | null) => void;
   onSetCollectionDraftName: (value: string) => void;
   onStartCreateCollection: (parentId: number | null) => void;
   onStartRenameCollection: (collection: Collection) => void;
   onSubmitCollectionRename: () => void | Promise<void>;
   onToggleCollectionExpanded: (collectionId: number) => void;
-  onToggleManage: () => void;
   renamingCollectionId: number | null;
   search: string;
   selectedCollectionId: number | null;
-  selectedItemIds: number[];
-  selectedTagId: number | null;
-  setAttachmentFilter: (value: AttachmentFilter) => void;
-  setItemSort: (value: ItemSort) => void;
-  tags: Tag[];
   treeSearchFilter: { allowedItemIds: Set<number>; allowedCollectionIds: Set<number> } | null;
 };
 
 export function ResourceSidebar(props: Props) {
   const {
     activePaperId,
-    attachmentFilter,
-    batchMoveTargetId,
-    batchTagName,
     collectionDraftName,
     collections,
     creatingCollectionParentId,
     draggedFileCount,
-    isManageOpen,
-    itemSort,
     lastImportResult,
     libraryItems,
-    manageButtonRef,
-    managePopoverRef,
-    newTagName,
     onActivateItem,
-    onBatchMove,
-    onBatchMoveTargetChange,
-    onBatchTag,
-    onBatchTagNameChange,
     onContextMenu,
     onCreateCollection,
-    onCreateTag,
     onCancelCollectionInlineEdit,
     onDragCountChange,
     onHideFocusSidebar,
     onImportPaths,
-    onNewTagNameChange,
     onSearchChange,
     onSelectedCollectionChange,
-    onSelectedTagChange,
     onSetCollectionDraftName,
     onStartCreateCollection,
     onStartRenameCollection,
     onSubmitCollectionRename,
     onToggleCollectionExpanded,
-    onToggleManage,
     renamingCollectionId,
     search,
     selectedCollectionId,
-    selectedItemIds,
-    selectedTagId,
-    setAttachmentFilter,
-    setItemSort,
-    tags,
     treeSearchFilter,
   } = props;
 
@@ -194,9 +152,6 @@ export function ResourceSidebar(props: Props) {
           <p className="eyebrow">Workspace</p>
           <h1>Library</h1>
         </div>
-        <button aria-label="Manage library" className="icon-button" title="Manage library" type="button" ref={manageButtonRef} onClick={onToggleManage}>
-          <SettingsIcon />
-        </button>
       </div>
       <div className="toolbar-row">
         <input aria-label="Search papers" className="search-input" placeholder="Search papers, authors, years..." value={search} onChange={(event) => onSearchChange(event.target.value)} />
@@ -229,48 +184,6 @@ export function ResourceSidebar(props: Props) {
           </div>
         )}
       </section>
-      {isManageOpen ? (
-        <div className="manage-popover" ref={managePopoverRef} role="dialog" aria-label="Manage">
-          <div className="manage-popover-body">
-            <div className="collection-create-row">
-              <select aria-label="Attachment filter" className="mode-select" value={attachmentFilter} onChange={(event) => setAttachmentFilter(event.target.value as AttachmentFilter)}>
-                <option value="all">All Attachments</option>
-                <option value="ready">Readable Files</option>
-                <option value="missing">Missing Files</option>
-                <option value="citation_only">Citation Only</option>
-              </select>
-              <select aria-label="Sort papers" className="mode-select" value={itemSort} onChange={(event) => setItemSort(event.target.value as ItemSort)}>
-                <option value="recent">Recently Added</option>
-                <option value="title">Title A-Z</option>
-                <option value="year_desc">Year (Newest)</option>
-              </select>
-              <select aria-label="Filter tag" className="mode-select" value={selectedTagId ?? "all"} onChange={(event) => onSelectedTagChange(event.target.value === "all" ? null : Number(event.target.value))}>
-                <option value="all">All Tags</option>
-                {tags.map((tag) => <option key={tag.id} value={tag.id}>{tag.name}</option>)}
-              </select>
-            </div>
-            <div className="collection-create-row">
-              <input aria-label="New tag name" className="search-input" placeholder="Tag the active paper..." value={newTagName} onChange={(event) => onNewTagNameChange(event.target.value)} />
-              <button aria-label="Add Tag" className="icon-button" title="Add Tag" type="button" onClick={() => void onCreateTag()}><TagIcon /></button>
-            </div>
-            {selectedItemIds.length > 0 ? (
-              <div className="selection-toolbar">
-                <div className="collection-create-row">
-                  <input aria-label="Batch tag papers" className="search-input" placeholder="Tag selected papers..." value={batchTagName} onChange={(event) => onBatchTagNameChange(event.target.value)} />
-                  <button aria-label="Tag Selected" className="icon-button" title="Tag Selected" type="button" onClick={() => void onBatchTag()}><TagIcon /></button>
-                </div>
-                <div className="collection-create-row">
-                  <select aria-label="Batch move papers" className="mode-select" value={batchMoveTargetId} onChange={(event) => onBatchMoveTargetChange(event.target.value)}>
-                    <option value="current">Current Collection</option>
-                    {collections.filter((collection) => collection.id !== selectedCollectionId).map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}
-                  </select>
-                  <button aria-label="Move Selected" className="icon-button" title="Move Selected" type="button" onClick={() => void onBatchMove()}><MoveIcon /></button>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
       {importHasIssues && lastImportResult ? (
         <details className="management-panel" open>
           <summary>Show Import Issues</summary>

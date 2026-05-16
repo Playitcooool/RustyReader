@@ -943,9 +943,7 @@ describe("App reading workspace", () => {
       expect(window.localStorage.getItem("paper-reader.reader-zoom")).toBe("130");
     });
 
-    await user.click(screen.getByRole("button", { name: "Manage library" }));
-    expect(screen.getByLabelText("Sort papers")).toHaveValue("title");
-    expect(screen.getByLabelText("Attachment filter")).toHaveValue("citation_only");
+    expect(screen.queryByRole("button", { name: "Manage library" })).not.toBeInTheDocument();
 
     menuListeners.get("menu:open-settings")?.();
     expect(await screen.findByRole("dialog", { name: "Settings" })).toBeInTheDocument();
