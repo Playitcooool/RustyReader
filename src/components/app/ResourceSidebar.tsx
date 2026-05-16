@@ -1,4 +1,4 @@
-import { childCollectionsFor, droppedPathsFromFileList, sortItems } from "../../lib/appView";
+import { childCollectionsFor, droppedPathsFromFileList } from "../../lib/appView";
 import { isTauriRuntime } from "../../lib/api";
 import type { Collection, ImportBatchResult, LibraryItem } from "../../lib/contracts";
 import type { ResourceContextMenuState } from "../../hooks/useLibraryState";
@@ -6,7 +6,6 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, PlusIcon } from "./Icons";
 
 type Props = {
-  activePaperId: number | null;
   collectionDraftName: string;
   collections: Collection[];
   creatingCollectionParentId: number | "root" | null;
@@ -15,7 +14,6 @@ type Props = {
   lastImportResult: ImportBatchResult | null;
   libraryItems: LibraryItem[];
   onHideFocusSidebar?: () => void;
-  onActivateItem: (item: LibraryItem, options?: { focusPdf?: boolean }) => void;
   onContextMenu: (event: ReactMouseEvent<HTMLElement>, detail: Exclude<ResourceContextMenuState, null>) => void;
   onCreateCollection: (parentId: number | null) => void | Promise<void>;
   onCancelCollectionInlineEdit: () => void;
@@ -36,14 +34,12 @@ type Props = {
 
 export function ResourceSidebar(props: Props) {
   const {
-    activePaperId,
     collectionDraftName,
     collections,
     creatingCollectionParentId,
     draggedFileCount,
     lastImportResult,
     libraryItems,
-    onActivateItem,
     onContextMenu,
     onCreateCollection,
     onCancelCollectionInlineEdit,
@@ -94,12 +90,6 @@ export function ResourceSidebar(props: Props) {
       .flatMap((collection) => {
         const isExpanded = props.expandedCollectionIds.includes(collection.id);
         const collectionChildren = renderTreeNodes(collection.id, depth + 1);
-        const directItems = sortItems(
-          libraryItems
-            .filter((item) => item.collection_id === collection.id)
-            .filter((item) => (treeSearchFilter ? treeSearchFilter.allowedItemIds.has(item.id) : true)),
-          "title",
-        );
         const isRenaming = renamingCollectionId === collection.id;
         return [
           <div key={`collection-${collection.id}`} role="none">
@@ -134,11 +124,6 @@ export function ResourceSidebar(props: Props) {
               <div className="resource-tree-group" role="group">
                 {creatingCollectionParentId === collection.id ? renderInlineCollectionEditor(collection.id) : null}
                 {collectionChildren}
-                {directItems.map((item) => (
-                  <button key={`item-${item.id}`} aria-label={item.title} className={`resource-tree-row resource-tree-item ${activePaperId === item.id ? "resource-tree-row-active" : ""}`} role="treeitem" style={{ paddingLeft: `${28 + depth * 18}px` }} type="button" onClick={() => onActivateItem(item)} onContextMenu={(event) => onContextMenu(event, { x: event.clientX, y: event.clientY, kind: "item", targetId: item.id })} onDoubleClick={() => item.attachment_format === "pdf" && onActivateItem(item, { focusPdf: true })}>
-                    <span className="resource-tree-item-title">{item.title}</span>
-                  </button>
-                ))}
               </div>
             ) : null}
           </div>,
@@ -180,7 +165,7 @@ export function ResourceSidebar(props: Props) {
           </div>
         ) : (
           <div className="resource-tree" role="tree" aria-label="Library resources">
-            {treeSearchFilter && treeSearchFilter.allowedItemIds.size === 0 ? <p className="secondary-copy">No matches.</p> : <>{creatingCollectionParentId === "root" ? renderInlineCollectionEditor(null) : null}{renderTreeNodes(null)}</>}
+            {treeSearchFilter && treeSearchFilter.allowedCollectionIds.size === 0 ? <p className="secondary-copy">No matches.</p> : <>{creatingCollectionParentId === "root" ? renderInlineCollectionEditor(null) : null}{renderTreeNodes(null)}</>}
           </div>
         )}
       </section>

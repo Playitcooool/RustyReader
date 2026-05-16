@@ -90,7 +90,6 @@ export default function App({ api }: { api: AppApi }) {
 
   const library = useLibraryState({
     api,
-    onActivateItem: (item, options) => readerState.activateItem(item, options),
     setStatusMessage,
   });
   const readerState = useReaderState({
@@ -112,7 +111,6 @@ export default function App({ api }: { api: AppApi }) {
 
   const activeCollection = library.activeCollection;
   const activePaper = readerState.activePaper;
-  const activePaperMetadata = useMemo(() => (activePaper ? [activePaper.authors, activePaper.publication_year, activePaper.source].filter(Boolean).join(" · ") || null : null), [activePaper]);
   const closeReaderFloatingUi = useCallback(() => {
     readerState.setIsFindHudOpen(false);
     readerState.setReaderSearchQuery("");
@@ -552,7 +550,6 @@ export default function App({ api }: { api: AppApi }) {
 
       {isSidebarVisible ? (
         <ResourceSidebar
-          activePaperId={activePaper?.id ?? null}
           collectionDraftName={library.collectionDraftName}
           collections={library.collections}
           creatingCollectionParentId={library.creatingCollectionParentId}
@@ -560,7 +557,6 @@ export default function App({ api }: { api: AppApi }) {
           expandedCollectionIds={library.expandedCollectionIds}
           lastImportResult={library.lastImportResult}
           libraryItems={library.libraryItems}
-          onActivateItem={(item, options) => readerState.activateItem(item, options)}
           onCancelCollectionInlineEdit={library.cancelCollectionInlineEdit}
           onContextMenu={library.openResourceContextMenu}
           onCreateCollection={library.handleCreateCollection}
@@ -585,10 +581,10 @@ export default function App({ api }: { api: AppApi }) {
 
       <ReaderWorkspace
         data={{
+          activeCollection: library.activeCollection,
           activePaper,
-          activePaperMetadata,
           annotations: readerState.annotations,
-          currentReaderHtml: readerState.currentReaderHtml,
+          collectionItems: library.visibleItems,
           hasCollections: library.hasCollections,
           openPapers: readerState.openPapers,
           readerView: readerState.readerView,
@@ -629,6 +625,7 @@ export default function App({ api }: { api: AppApi }) {
         }}
         actions={{
           onActivateItem: (item, options) => readerState.activateItem(item, options),
+          onDocumentContextMenu: (event, item) => library.openResourceContextMenu(event, { x: event.clientX, y: event.clientY, kind: "item", targetId: item.id }),
           onActivePdfHighlight: readerState.handleActivatePdfHighlight,
           onAiToggle: () => {
             if (ai.isAiPanelOpen) {

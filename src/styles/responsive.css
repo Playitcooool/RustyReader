@@ -186,6 +186,11 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .collection-document-row {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+
   .ai-composer-header {
     flex-wrap: wrap;
   }

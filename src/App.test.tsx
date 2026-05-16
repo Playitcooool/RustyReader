@@ -211,7 +211,7 @@ describe("App reading workspace", () => {
 
     expect(await screen.findByRole("tree", { name: "Library resources" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "New folder" })).toBeInTheDocument();
-    expect(screen.getByRole("treeitem", { name: /Transformer Scaling Laws/i })).toBeInTheDocument();
+    expect(screen.getByRole("listitem", { name: /Transformer Scaling Laws/i })).toBeInTheDocument();
     expect(container.querySelectorAll(".resource-tree-leading-icon")).toHaveLength(0);
     expect(screen.getByRole("button", { name: /Collapse Machine Learning/i })).toBeInTheDocument();
   });
@@ -240,7 +240,7 @@ describe("App reading workspace", () => {
     window.localStorage.setItem("paper-reader.sidebar-open", "true");
     render(<App api={fakeApi} />);
 
-    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.dblClick(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     expect(await screen.findByRole("toolbar", { name: /pdf focus toolbar/i })).toBeInTheDocument();
 
     await waitFor(() => {
@@ -253,7 +253,7 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
 
-    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.dblClick(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     expect(await screen.findByRole("toolbar", { name: /pdf focus toolbar/i })).toBeInTheDocument();
     expect(screen.queryByRole("tree", { name: "Library resources" })).not.toBeInTheDocument();
 
@@ -268,15 +268,16 @@ describe("App reading workspace", () => {
     expect(screen.getByRole("toolbar", { name: /pdf focus toolbar/i })).toBeInTheDocument();
   });
 
-  it("single-clicking a pdf opens workspace preview while double-click enters focus", async () => {
+  it("single-clicking a pdf selects it without opening preview while double-click enters focus", async () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
 
-    const pdfNode = await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i });
+    const pdfNode = await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i });
     await user.click(pdfNode);
 
     expect(screen.queryByRole("toolbar", { name: /pdf focus toolbar/i })).not.toBeInTheDocument();
-    expect(screen.getByTestId("pdf-reader")).toHaveTextContent("Mock PDF reader page 1");
+    expect(screen.queryByTestId("pdf-reader")).not.toBeInTheDocument();
+    expect(pdfNode).toHaveAttribute("aria-current", "true");
     expect(screen.queryByRole("button", { name: "Find in document" })).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Reader page input" })).not.toBeInTheDocument();
     expect(screen.queryByText(/Annotations/i)).not.toBeInTheDocument();
@@ -289,11 +290,12 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Graph Neural Survey/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Graph Neural Survey/i }));
 
     expect(screen.queryByRole("toolbar", { name: /pdf focus toolbar/i })).not.toBeInTheDocument();
-    expect(screen.getByTestId("normalized-reader")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Find in document" })).toBeInTheDocument();
+    expect(screen.queryByTestId("normalized-reader")).not.toBeInTheDocument();
+    expect(screen.getByRole("listitem", { name: /Graph Neural Survey/i })).toHaveAttribute("aria-current", "true");
+    expect(screen.queryByRole("button", { name: "Find in document" })).not.toBeInTheDocument();
   });
 
   it("renders focus mode immediately while the reader context is still loading", async () => {
@@ -309,7 +311,7 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     render(<App api={apiWithDelay} />);
 
-    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.dblClick(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
 
     expect(screen.getByRole("toolbar", { name: /pdf focus toolbar/i })).toBeInTheDocument();
     expect(screen.queryByTestId("pdf-reader")).not.toBeInTheDocument();
@@ -329,7 +331,7 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     render(<App api={apiWithFailure} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
 
     expect(await screen.findByText("Reader view exploded")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Transformer Scaling Laws/i })).toBeInTheDocument();
@@ -340,7 +342,7 @@ describe("App reading workspace", () => {
     const createAnnotationSpy = vi.spyOn(fakeApi, "createAnnotation");
 
     render(<App api={fakeApi} />);
-    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.dblClick(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Mock select PDF text" }));
     expect(await screen.findByRole("toolbar", { name: "PDF highlight colors" })).toBeInTheDocument();
 
@@ -364,7 +366,7 @@ describe("App reading workspace", () => {
     });
 
     render(<App api={fakeApi} />);
-    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.dblClick(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Mock select PDF text" }));
 
     fireEvent.contextMenu(screen.getByTestId("pdf-reader"), { clientX: 140, clientY: 150 });
@@ -399,7 +401,7 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     fireEvent.keyDown(window, { key: "j", ctrlKey: true });
 
     expect(await screen.findByLabelText("AI panel")).toBeInTheDocument();
@@ -412,7 +414,7 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
 
-    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.dblClick(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Mock select PDF text" }));
     fireEvent.keyDown(window, { key: "j", ctrlKey: true });
 
@@ -440,7 +442,7 @@ describe("App reading workspace", () => {
     const addReferenceSpy = vi.spyOn(fakeApi, "addAiSessionReference");
     render(<App api={fakeApi} />);
 
-    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.dblClick(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Mock select PDF text" }));
     fireEvent.contextMenu(screen.getByTestId("pdf-reader"), { clientX: 140, clientY: 150 });
     await user.click(screen.getByRole("menuitem", { name: "Ask with Selection" }));
@@ -458,7 +460,7 @@ describe("App reading workspace", () => {
     const addReferenceSpy = vi.spyOn(fakeApi, "addAiSessionReference");
     render(<App api={fakeApi} />);
 
-    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.dblClick(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Mock select PDF text" }));
     fireEvent.contextMenu(screen.getByTestId("pdf-reader"), { clientX: 140, clientY: 150 });
     await user.click(screen.getByRole("menuitem", { name: "Add Highlight to Session" }));
@@ -472,8 +474,8 @@ describe("App reading workspace", () => {
 
   it("does not show the reader selection context menu without a pdf selection", async () => {
     render(<App api={fakeApi} />);
-    await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i });
-    fireEvent.dblClick(screen.getByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i });
+    fireEvent.dblClick(screen.getByRole("listitem", { name: /Transformer Scaling Laws/i }));
 
     fireEvent.contextMenu(await screen.findByTestId("pdf-reader"), { clientX: 140, clientY: 150 });
 
@@ -483,7 +485,7 @@ describe("App reading workspace", () => {
   it("hides PDF selection actions when the text selection is cleared", async () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
-    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.dblClick(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Mock select PDF text" }));
 
     expect(screen.getByRole("toolbar", { name: "PDF highlight colors" })).toBeInTheDocument();
@@ -509,7 +511,7 @@ describe("App reading workspace", () => {
     });
 
     render(<App api={fakeApi} />);
-    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.dblClick(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Mock select PDF text" }));
 
     fireEvent.contextMenu(screen.getByTestId("pdf-reader"), { clientX: 140, clientY: 150 });
@@ -527,7 +529,7 @@ describe("App reading workspace", () => {
     const createAnnotationSpy = vi.spyOn(fakeApi, "createAnnotation");
 
     render(<App api={fakeApi} />);
-    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.dblClick(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Add text box annotation" }));
     await user.click(screen.getByRole("button", { name: "Mock draw text box annotation" }));
 
@@ -547,7 +549,7 @@ describe("App reading workspace", () => {
     const createAnnotationSpy = vi.spyOn(fakeApi, "createAnnotation");
 
     render(<App api={fakeApi} />);
-    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.dblClick(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Add text box annotation" }));
     await user.click(screen.getByRole("button", { name: "Text box color purple" }));
     fireEvent.change(screen.getByRole("spinbutton", { name: "Text box font size" }), { target: { value: "18" } });
@@ -565,8 +567,8 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Graph Neural Survey/i }));
-    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Graph Neural Survey/i }));
+    await user.dblClick(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     expect(await screen.findByRole("toolbar", { name: /pdf focus toolbar/i })).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Graph Neural Survey" }));
@@ -574,14 +576,15 @@ describe("App reading workspace", () => {
     await waitFor(() => {
       expect(screen.queryByRole("toolbar", { name: /pdf focus toolbar/i })).not.toBeInTheDocument();
     });
-    expect(screen.getByTestId("normalized-reader")).toBeInTheDocument();
+    expect(screen.queryByTestId("normalized-reader")).not.toBeInTheDocument();
+    expect(screen.getByRole("listitem", { name: /Graph Neural Survey/i })).toHaveAttribute("aria-current", "true");
   });
 
   it("clears AI overlays when entering pdf focus", async () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
     await user.click(screen.getByRole("button", { name: "Chat History" }));
     await user.click(screen.getByRole("button", { name: "Task History" }));
@@ -591,7 +594,7 @@ describe("App reading workspace", () => {
     expect(screen.getByLabelText("Task History panel")).toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "Add AI reference" })).toBeInTheDocument();
 
-    await user.dblClick(screen.getByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.dblClick(screen.getByRole("listitem", { name: /Transformer Scaling Laws/i }));
 
     expect(await screen.findByRole("toolbar", { name: /pdf focus toolbar/i })).toBeInTheDocument();
     expect(screen.queryByLabelText("Chat History panel")).not.toBeInTheDocument();
@@ -603,7 +606,7 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
 
-    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.dblClick(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     expect(await screen.findByRole("toolbar", { name: /pdf focus toolbar/i })).toBeInTheDocument();
 
     fireEvent.keyDown(window, { key: "Escape" });
@@ -611,28 +614,20 @@ describe("App reading workspace", () => {
       expect(screen.queryByRole("toolbar", { name: /pdf focus toolbar/i })).not.toBeInTheDocument();
     });
 
-    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.dblClick(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Back to library" }));
     await waitFor(() => {
       expect(screen.queryByRole("toolbar", { name: /pdf focus toolbar/i })).not.toBeInTheDocument();
     });
-    expect(screen.getByTestId("pdf-reader")).toBeInTheDocument();
+    expect(screen.queryByTestId("pdf-reader")).not.toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Machine Learning documents" })).toBeInTheDocument();
   });
 
-  it("opens the find HUD in document workspace and with cmd-f in pdf focus", async () => {
+  it("opens the find HUD with cmd-f in pdf focus", async () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Graph Neural Survey/i }));
-    await user.click(screen.getByRole("button", { name: "Find in document" }));
-    expect(await screen.findByRole("textbox", { name: "Find in document" })).toHaveFocus();
-
-    fireEvent.keyDown(screen.getByRole("textbox", { name: "Find in document" }), { key: "Escape" });
-    await waitFor(() => {
-      expect(screen.queryByRole("textbox", { name: "Find in document" })).not.toBeInTheDocument();
-    });
-
-    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.dblClick(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     const focusToolbar = screen.getByRole("toolbar", { name: /pdf focus toolbar/i });
     expect(within(focusToolbar).queryByRole("button", { name: "Find in document" })).not.toBeInTheDocument();
 
@@ -692,7 +687,7 @@ describe("App reading workspace", () => {
       expect(screen.queryByRole("menuitem", { name: "New Folder" })).not.toBeInTheDocument();
     });
 
-    fireEvent.contextMenu(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    fireEvent.contextMenu(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     expect(screen.getByRole("menuitem", { name: "Open" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "Delete" })).toBeInTheDocument();
   });
@@ -701,14 +696,14 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
     expect(screen.getByLabelText("AI panel")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Close AI panel" }));
     expect(screen.queryByLabelText("AI panel")).not.toBeInTheDocument();
 
-    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.dblClick(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
     expect(screen.getByLabelText("AI panel")).toBeInTheDocument();
   });
@@ -717,7 +712,7 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     const { container } = render(<App api={fakeApi} />);
 
-    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.dblClick(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
 
     const shell = container.querySelector(".app-shell-focus.app-shell-ai-open");
@@ -732,7 +727,7 @@ describe("App reading workspace", () => {
     const runSessionTaskSpy = vi.spyOn(fakeApi, "runAiSessionTask");
 
     render(<App api={fakeApi} />);
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
 
     await user.type(screen.getByRole("textbox", { name: "AI prompt" }), "What is the key result?");
@@ -752,7 +747,7 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
 
     const prompt = screen.getByRole("textbox", { name: "AI prompt" });
@@ -785,7 +780,7 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
 
     expect(screen.getByRole("textbox", { name: "AI prompt" })).toBeInTheDocument();
@@ -811,7 +806,7 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Graph Neural Survey/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Graph Neural Survey/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
 
     expect(await screen.findByText("Graph Neural Survey", { selector: ".ai-reference-chip-label" })).toBeInTheDocument();
@@ -822,14 +817,14 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
     await user.type(screen.getByRole("textbox", { name: "AI prompt" }), "What is the key result?");
     await user.click(screen.getByRole("button", { name: "Send AI prompt" }));
     expect(await screen.findByText(/Reading Q&A: Transformer Scaling Laws/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Close AI panel" }));
-    await user.click(await screen.findByRole("treeitem", { name: /Graph Neural Survey/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Graph Neural Survey/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
 
     expect(await screen.findByText("Graph Neural Survey", { selector: ".ai-reference-chip-label" })).toBeInTheDocument();
@@ -841,7 +836,7 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     const { container } = render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
     await user.click(screen.getByRole("button", { name: "Chat History" }));
     await user.click(screen.getByRole("button", { name: "Task History" }));
@@ -862,7 +857,7 @@ describe("App reading workspace", () => {
     const removeAnnotationSpy = vi.spyOn(fakeApi, "removeAnnotation");
     render(<App api={fakeApi} />);
 
-    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.dblClick(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Mock activate highlight" }));
     expect(await screen.findByRole("toolbar", { name: "PDF highlight actions" })).toBeInTheDocument();
 
@@ -1038,8 +1033,8 @@ describe("App reading workspace", () => {
     });
     expect(screen.queryByRole("treeitem", { name: "Machine Learning" })).not.toBeInTheDocument();
     expect(screen.queryByRole("treeitem", { name: "Scaling Papers" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("treeitem", { name: /Transformer Scaling Laws/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("treeitem", { name: /Graph Neural Survey/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("listitem", { name: /Transformer Scaling Laws/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("listitem", { name: /Graph Neural Survey/i })).not.toBeInTheDocument();
     expect(screen.getByRole("treeitem", { name: "Systems" })).toBeInTheDocument();
   });
 
@@ -1088,7 +1083,7 @@ describe("App reading workspace", () => {
     const removeCollectionSpy = vi.spyOn(fakeApi, "removeCollection");
     const { container } = render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
     expect(await screen.findByText("Transformer Scaling Laws", { selector: ".ai-reference-chip-label" })).toBeInTheDocument();
 
@@ -1101,20 +1096,20 @@ describe("App reading workspace", () => {
     });
     expect(screen.queryByText("Transformer Scaling Laws", { selector: ".ai-reference-chip-label" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Transformer Scaling Laws" })).not.toBeInTheDocument();
-    expect(container.querySelector(".reader-panel-workspace h2")?.textContent).toBe("No paper selected");
+    expect(container.querySelector(".reader-panel-workspace h2")?.textContent).toBe("Systems");
   });
 
-  it("keeps workspace pdf preview and ai composer inside the fixed-height layout", async () => {
+  it("keeps workspace document list and ai composer inside the fixed-height layout", async () => {
     const user = userEvent.setup();
     const { container } = render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
 
     expect(container.querySelector(".app-shell.app-shell-workspace.app-shell-ai-open")).not.toBeNull();
     const workspacePanel = container.querySelector(".reader-panel-workspace");
     expect(workspacePanel).not.toBeNull();
-    expect(screen.getByTestId("pdf-reader").closest(".reader-panel-workspace")).toBe(workspacePanel);
+    expect(screen.getByRole("list", { name: "Machine Learning documents" }).closest(".reader-panel-workspace")).toBe(workspacePanel);
     expect(screen.getByLabelText("AI panel")).toContainElement(screen.getByRole("textbox", { name: "AI prompt" }));
   });
 
@@ -1122,7 +1117,7 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     const { container } = render(<App api={fakeApi} />);
 
-    await user.dblClick(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.dblClick(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
 
     const chatHistory = container.querySelector(".ai-chat-history");
@@ -1136,7 +1131,7 @@ describe("App reading workspace", () => {
     const runSessionTaskSpy = vi.spyOn(fakeApi, "runAiSessionTask");
     const { container } = render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
     expect(screen.getByRole("button", { name: "Summarize" })).toBeInTheDocument();
 
@@ -1163,7 +1158,7 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
     await user.click(screen.getByRole("button", { name: "New Session" }));
     expect(await screen.findByRole("button", { name: "Summarize" })).toBeInTheDocument();
@@ -1173,7 +1168,7 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
     await user.click(screen.getByRole("button", { name: "Add AI reference" }));
 
@@ -1203,7 +1198,7 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     const { container } = render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
     await user.click(screen.getByRole("button", { name: "Add AI reference" }));
 
@@ -1226,7 +1221,7 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
     await user.type(screen.getByRole("textbox", { name: "AI prompt" }), "What is the key result?");
     await user.click(screen.getByRole("button", { name: "Send AI prompt" }));
@@ -1251,7 +1246,7 @@ describe("App reading workspace", () => {
     const runSessionTaskSpy = vi.spyOn(fakeApi, "runAiSessionTask");
     render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
 
     const prompt = screen.getByRole("textbox", { name: "AI prompt" });
@@ -1281,7 +1276,7 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
 
     await user.click(screen.getByRole("button", { name: "New Session" }));
@@ -1308,7 +1303,7 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
 
     await user.click(screen.getByRole("button", { name: "Add AI reference" }));
@@ -1344,7 +1339,7 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     const { container } = render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
     await user.click(screen.getByRole("button", { name: "Add AI reference" }));
     await user.click(await within(screen.getByRole("dialog", { name: "Add AI reference" })).findByRole("button", { name: /Graph Neural Survey/i }));
@@ -1362,7 +1357,7 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
 
     expect(screen.getByRole("button", { name: "Compare" })).toBeDisabled();
@@ -1395,7 +1390,7 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
 
     for (const label of ["Chat History", "New Session", "Artifacts", "Task History", "Research Notes", "Close Copilot"]) {
@@ -1416,7 +1411,7 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     const { container } = render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
     await user.click(screen.getByRole("button", { name: "New Session" }));
 
@@ -1433,7 +1428,7 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
     await user.click(screen.getByRole("button", { name: "Chat History" }));
 
@@ -1446,7 +1441,7 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     const { container } = render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
     await user.click(screen.getByRole("button", { name: "New Session" }));
     expect(screen.getByText("New Chat", { selector: ".meta-count" })).toBeInTheDocument();
@@ -1472,7 +1467,7 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
     await user.click(screen.getByRole("button", { name: "New Session" }));
     expect(screen.getByText("New Chat", { selector: ".meta-count" })).toBeInTheDocument();
@@ -1493,7 +1488,7 @@ describe("App reading workspace", () => {
     const createAiSessionSpy = vi.spyOn(fakeApi, "createAiSession");
     render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
     await user.click(screen.getByRole("button", { name: "Chat History" }));
     const historyPanel = screen.getByLabelText("Chat History panel");
@@ -1511,17 +1506,17 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
     expect(screen.getByRole("button", { name: /Remove Transformer Scaling Laws/i })).toBeInTheDocument();
 
-    fireEvent.contextMenu(screen.getByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    fireEvent.contextMenu(screen.getByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("menuitem", { name: "Delete" }));
     expect(screen.getByRole("dialog", { name: "Confirm delete" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Delete" }));
 
     await waitFor(() => {
-      expect(screen.queryByRole("treeitem", { name: /Transformer Scaling Laws/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("listitem", { name: /Transformer Scaling Laws/i })).not.toBeInTheDocument();
     });
     expect(screen.queryByRole("button", { name: /Remove Transformer Scaling Laws/i })).not.toBeInTheDocument();
   });
@@ -1531,7 +1526,7 @@ describe("App reading workspace", () => {
     failNextFakeAiStream("Network stream dropped.");
     render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
     await user.click(screen.getByRole("button", { name: "Summarize" }));
 
@@ -1550,7 +1545,7 @@ describe("App reading workspace", () => {
     vi.spyOn(fakeApi, "runAiSessionTask").mockRejectedValueOnce(new Error("Provider missing API key."));
     render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
     await user.click(screen.getByRole("button", { name: "Summarize" }));
 
@@ -1567,7 +1562,7 @@ describe("App reading workspace", () => {
     const user = userEvent.setup();
     const { container } = render(<App api={fakeApi} />);
 
-    await user.click(await screen.findByRole("treeitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
 
     const thread = container.querySelector(".ai-chat-history");
@@ -1640,7 +1635,7 @@ describe("App reading workspace", () => {
 
     expect(await screen.findByRole("tree", { name: "Library resources" })).toBeInTheDocument();
     expect(refreshStatuses).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("treeitem", { name: /External Paper/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("listitem", { name: /External Paper/i })).not.toBeInTheDocument();
 
     const result = await fakeApi.importFiles({
       collection_id: 2,
@@ -1656,7 +1651,7 @@ describe("App reading workspace", () => {
       duplicate_item_ids: [],
     });
 
-    expect(await screen.findByRole("treeitem", { name: /External Paper/i })).toBeInTheDocument();
+    expect(await screen.findByRole("listitem", { name: /External Paper/i })).toBeInTheDocument();
     expect(screen.getByText("Library updated from browser extension.")).toBeInTheDocument();
     expect(refreshStatuses).toHaveBeenCalledTimes(1);
   });
@@ -1757,8 +1752,8 @@ describe("App reading workspace", () => {
     expect(screen.getByRole("treeitem", { name: /Machine Learning/i })).toBeInTheDocument();
     expect(screen.getByRole("treeitem", { name: /Transformers/i })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Expand Transformers/i }));
-    expect(screen.getByRole("treeitem", { name: /Transformer Scaling Laws/i })).toBeInTheDocument();
-    expect(screen.queryByRole("treeitem", { name: /Graph Neural Survey/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("listitem", { name: /Transformer Scaling Laws/i })).toBeInTheDocument();
+    expect(screen.queryByRole("listitem", { name: /Graph Neural Survey/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("treeitem", { name: /Systems/i })).not.toBeInTheDocument();
   });
 });

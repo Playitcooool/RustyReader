@@ -17,11 +17,9 @@ import {
   ZoomOutIcon,
 } from "./Icons";
 import { PdfFocusHighlightBar } from "./PdfHighlightBars";
-import { NormalizedReader } from "../readers/NormalizedReader";
 import { PdfContinuousReader } from "../readers/PdfContinuousReader";
-import { PdfReader } from "../readers/PdfReader";
 import { attachmentFormatLabel, formatItemMetadata, type ReaderFitMode } from "../../lib/appView";
-import type { LibraryItem, ReaderView, Annotation } from "../../lib/contracts";
+import type { Collection, LibraryItem, ReaderView, Annotation } from "../../lib/contracts";
 import type { ActivePdfHighlight, PdfTextBoxAnnotationDraft, ReaderTextSelection, TranslationPopover, WorkspaceMode } from "../../hooks/useReaderState";
 import type { PdfHighlightColor, PdfTextSelection } from "../readers/pdfSelection";
 import {
@@ -44,15 +42,15 @@ import {
   normalizePdfEraserSize,
   normalizePdfInkWidth,
 } from "../readers/pdfInkAnchor";
-import { useEffect, useMemo, useState, type RefObject } from "react";
+import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent, type RefObject } from "react";
 
 const pdfHighlightColors = ["yellow", "red", "green", "blue", "purple"] as const satisfies readonly PdfHighlightColor[];
 
 type ReaderWorkspaceData = {
+  activeCollection: Collection | null;
   activePaper: LibraryItem | null;
-  activePaperMetadata: string | null;
   annotations: Annotation[];
-  currentReaderHtml: string;
+  collectionItems: LibraryItem[];
   hasCollections: boolean;
   openPapers: LibraryItem[];
   readerView: ReaderView | null;
@@ -96,6 +94,7 @@ type ReaderWorkspaceUi = {
 
 type ReaderWorkspaceActions = {
   onActivateItem: (item: LibraryItem, options?: { focusPdf?: boolean }) => void;
+  onDocumentContextMenu: (event: ReactMouseEvent<HTMLElement>, item: LibraryItem) => void;
   onActivePdfHighlight: (highlight: ActivePdfHighlight) => void;
   onAiToggle: () => void | Promise<void>;
   onCloseFindHud: () => void;
@@ -139,10 +138,10 @@ type Props = {
 
 export function ReaderWorkspace(props: Props) {
   const {
+    activeCollection,
     activePaper,
-    activePaperMetadata,
     annotations,
-    currentReaderHtml,
+    collectionItems,
     hasCollections,
     openPapers,
     readerView,
@@ -174,7 +173,6 @@ export function ReaderWorkspace(props: Props) {
     readerSearchQuery,
     readerZoom,
     reportedActiveSearchMatchIndex,
-    textToolsEnabled,
     translationError,
     translationLoading,
     translationPopover,
@@ -183,6 +181,7 @@ export function ReaderWorkspace(props: Props) {
   } = props.ui;
   const {
     onActivateItem,
+    onDocumentContextMenu,
     onActivePdfHighlight,
     onAiToggle,
     onClearReaderSelection,
@@ -210,10 +209,8 @@ export function ReaderWorkspace(props: Props) {
     onRequestSelectionTranslation,
     onSearchReaderSelection,
     onShowLibrary,
-    onStepNormalizedZoom,
     onSelectionChange,
     onCloseTranslationPopover,
-    openFindHud,
     setPdfPageCount,
   } = props.actions;
   const [readerContextMenu, setReaderContextMenu] = useState<{ x: number; y: number } | null>(null);
@@ -511,61 +508,57 @@ export function ReaderWorkspace(props: Props) {
         </section>
       ) : (
         <section className="reader-panel reader-panel-workspace">
-          {readerView?.reader_kind === "pdf" ? null : (
-            <div className="reader-meta-row">
-              <div>
-                <p className="eyebrow">Reader</p>
-                <h2>{activePaper?.title ?? "No paper selected"}</h2>
-                <p className="secondary-copy">{activePaper ? activePaperMetadata ?? "No metadata" : "No metadata"}</p>
-                <p className="secondary-copy">
-                  {[activePaper?.collection_id ? null : null, activePaper && activePaper.attachment_status !== "ready" ? activePaper.attachment_status : null, activePaper ? attachmentFormatLabel(activePaper.attachment_format) : "Document"].filter(Boolean).join(" · ")}
-                </p>
-              </div>
+          <div className="reader-meta-row">
+            <div>
+              <p className="eyebrow">Collection</p>
+              <h2>{activeCollection?.name ?? "No collection selected"}</h2>
+              <p className="secondary-copy">
+                {activeCollection
+                  ? `${collectionItems.length} ${collectionItems.length === 1 ? "document" : "documents"}`
+                  : hasCollections
+                    ? "Select a collection from the left."
+                    : "Create your first collection to start building the desktop library."}
+              </p>
             </div>
-          )}
-          {readerView?.reader_kind !== "pdf" ? (
-            <div className="reader-toolbar">
-              {textToolsEnabled ? (
-                <div className="reader-control-group">
-                  <button aria-label="Find in document" className="icon-button" title="Find in document" type="button" onClick={openFindHud}>
-                    <SearchIcon />
-                  </button>
+          </div>
+          {activeCollection ? (
+            <div className="collection-document-list" role="list" aria-label={`${activeCollection.name} documents`}>
+              {collectionItems.length > 0 ? collectionItems.map((item) => (
+                <button
+                  key={item.id}
+                  aria-label={item.title}
+                  aria-current={activePaper?.id === item.id ? "true" : undefined}
+                  className={`collection-document-row ${activePaper?.id === item.id ? "collection-document-row-active" : ""}`}
+                  role="listitem"
+                  type="button"
+                  onClick={() => onActivateItem(item)}
+                  onContextMenu={(event) => onDocumentContextMenu(event, item)}
+                  onDoubleClick={() => item.attachment_format === "pdf" ? onActivateItem(item, { focusPdf: true }) : onActivateItem(item)}
+                >
+                  <span className="collection-document-main">
+                    <span className="collection-document-title">{item.title}</span>
+                    <span className="collection-document-meta">{formatItemMetadata(item)}</span>
+                  </span>
+                  <span className="collection-document-format">{attachmentFormatLabel(item.attachment_format)}</span>
+                  {item.attachment_status !== "ready" ? <span className="collection-document-status">{item.attachment_status}</span> : null}
+                </button>
+              )) : (
+                <div className="citation-card">
+                  <p className="eyebrow">Empty Collection</p>
+                  <h3>No documents here yet</h3>
+                  <p>Import documents into this collection to populate the list.</p>
                 </div>
-              ) : null}
-              <div className="reader-control-group">
-                <button aria-label="Zoom out" className="icon-button" title="Zoom out" type="button" onClick={() => onStepNormalizedZoom(-1)}>
-                  <ZoomOutIcon />
-                </button>
-                <span className="reader-zoom-label">{readerZoom}%</span>
-                <button aria-label="Zoom in" className="icon-button" title="Zoom in" type="button" onClick={() => onStepNormalizedZoom(1)}>
-                  <ZoomInIcon />
-                </button>
-              </div>
-              {readerView && readerView.content_status !== "ready" ? <span className="meta-count">{readerView.content_notice ?? readerView.content_status}</span> : null}
-              {activePaper && activePaper.attachment_status !== "ready" ? <span className="meta-count">{activePaper.attachment_status}</span> : null}
+              )}
             </div>
           ) : null}
-          {activePaper && readerView ? (
-            readerView.reader_kind === "pdf" ? (
-              <PdfReader fitMode={readerFitMode} getPdfDocumentInfo={getPdfDocumentInfo as never} getPdfPageBundle={getPdfPageBundle as never} page={0} view={readerView} zoom={readerZoom} onHighlightActivate={onActivePdfHighlight} onPageCountChange={setPdfPageCount} />
-            ) : (
-              <NormalizedReader pageHtml={currentReaderHtml} searchQuery={readerSearchQuery} activeSearchMatchIndex={readerSearchMatchIndex} onSearchMatchesChange={onReaderSearchMatchesChange} onSelectionChange={onSelectionChange} zoom={readerZoom} />
-            )
-          ) : (
+          {!activeCollection ? (
             <div className="citation-card">
               <p className="eyebrow">Ready for Reading</p>
               <h3>No collection selected</h3>
-              <p>{hasCollections ? "Select a document from the resource tree." : "Create your first collection to start building the desktop library."}</p>
+              <p>{hasCollections ? "Select a collection from the left." : "Create your first collection to start building the desktop library."}</p>
               <button className="ghost-button" type="button" onClick={onShowLibrary}>
                 Show Library
               </button>
-            </div>
-          )}
-          {readerView && readerView.reader_kind !== "pdf" ? (
-            <div className="citation-card">
-              <p className="eyebrow">Reader Content</p>
-              <h3>{readerView.title}</h3>
-              <p>{readerView.plain_text}</p>
             </div>
           ) : null}
         </section>

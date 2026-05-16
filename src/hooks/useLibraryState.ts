@@ -30,11 +30,9 @@ const ATTACHMENT_FILTER_KEY = "paper-reader.attachment-filter";
 
 export function useLibraryState({
   api,
-  onActivateItem,
   setStatusMessage,
 }: {
   api: AppApi;
-  onActivateItem: (item: LibraryItem, options?: { focusPdf?: boolean }) => void;
   setStatusMessage: (value: string) => void;
 }) {
   const getApi = useAppApi(api);
@@ -207,12 +205,7 @@ export function useLibraryState({
     try {
       const result = await (await getApi()).importFiles({ collection_id: selectedCollectionId, paths: acceptedPaths });
       setLastImportResult(result);
-      const loadedItems = await loadLibrary();
-      const importedItem = result.imported[0];
-      if (importedItem) {
-        const item = loadedItems.find((entry) => entry.id === importedItem.id);
-        if (item) onActivateItem(item);
-      }
+      await loadLibrary();
       setStatusMessage(`Imported ${result.imported.length} files (duplicates ${result.duplicates.length}, failed ${result.failed.length}) into ${activeCollection.name} from ${sourceLabel}.`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Import failed.");
@@ -220,7 +213,7 @@ export function useLibraryState({
       setIsImporting(false);
       setDraggedFileCount(0);
     }
-  }, [activeCollection, getApi, hasCollections, isImporting, loadLibrary, onActivateItem, selectedCollectionId, setStatusMessage]);
+  }, [activeCollection, getApi, hasCollections, isImporting, loadLibrary, selectedCollectionId, setStatusMessage]);
 
   useEffect(() => {
     importPathsRef.current = (paths: string[], sourceLabel: string) => {
