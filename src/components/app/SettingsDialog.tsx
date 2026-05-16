@@ -91,9 +91,9 @@ export function SettingsDialog({
         <div className="settings-dialog-hero">
           <div className="settings-dialog-copy">
             <p className="eyebrow">Settings</p>
-            <h2>General</h2>
+            <h2>Preferences</h2>
             <p className="settings-dialog-summary">
-              Tune the library workspace and keep one AI provider ready without exposing more controls than needed.
+              Tune the reading workspace, integrations, translation, and AI provider profiles.
             </p>
           </div>
           <button aria-label="Cancel" className="icon-button" title="Cancel" type="button" onClick={cancelSettings}>
@@ -101,11 +101,31 @@ export function SettingsDialog({
           </button>
         </div>
 
-        <div className="settings-sections">
-          <section className="settings-section-card" aria-labelledby="settings-general-heading">
+        <div className="settings-layout">
+          <nav className="settings-nav" aria-label="Settings sections">
+            <a className="settings-nav-item settings-nav-item-active" href="#settings-general-heading">
+              <span className="settings-nav-title" role="heading" aria-level={3}>General</span>
+              <span className="settings-nav-meta">Workspace defaults</span>
+            </a>
+            <a className="settings-nav-item" href="#settings-translation-heading">
+              <span className="settings-nav-title" role="heading" aria-level={3}>Translation</span>
+              <span className="settings-nav-meta">Selection output</span>
+            </a>
+            <a className="settings-nav-item" href="#settings-connector-heading">
+              <span className="settings-nav-title" role="heading" aria-level={3}>Chrome Connector</span>
+              <span className="settings-nav-meta">Local import</span>
+            </a>
+            <a className="settings-nav-item" href="#settings-ai-heading">
+              <span className="settings-nav-title" role="heading" aria-level={3}>AI Providers</span>
+              <span className="settings-nav-meta">Model profiles</span>
+            </a>
+          </nav>
+
+          <div className="settings-sections">
+            <section className="settings-section-card" aria-labelledby="settings-general-heading">
             <div className="settings-section-heading">
               <p className="eyebrow">Workspace</p>
-              <h3 id="settings-general-heading">Defaults</h3>
+              <h3 id="settings-general-heading">Workspace Defaults</h3>
             </div>
             <div className="settings-form-grid">
               <label className="settings-field">
@@ -347,7 +367,7 @@ export function SettingsDialog({
 
           <section className="settings-section-card" aria-labelledby="settings-ai-heading">
             <div className="settings-section-heading">
-              <p className="eyebrow">AI Providers</p>
+              <p className="eyebrow">Provider Profiles</p>
               <h3 id="settings-ai-heading">Provider Setup</h3>
             </div>
             <div className="settings-provider-tabs" role="tablist" aria-label="Active AI provider">
@@ -469,6 +489,7 @@ export function SettingsDialog({
               </div>
             )}
           </section>
+          </div>
         </div>
 
         <div className="settings-dialog-actions">
