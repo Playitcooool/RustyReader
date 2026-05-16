@@ -303,6 +303,66 @@
   color: #fff7ea;
 }
 
+.pdf-ink-tool-options {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pdf-ink-color-input {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.pdf-ink-color-input::-webkit-color-swatch-wrapper {
+  padding: 3px;
+}
+
+.pdf-ink-color-input::-webkit-color-swatch {
+  border: 0;
+  border-radius: 999px;
+}
+
+.pdf-ink-size-input {
+  width: 92px;
+  accent-color: #f28b53;
+}
+
+.pdf-ink-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.pdf-reader-focus:has(.pdf-ink-layer-pencil),
+.pdf-reader-ink-pencil {
+  cursor: crosshair;
+}
+
+.pdf-reader-focus:has(.pdf-ink-layer-eraser),
+.pdf-reader-ink-eraser {
+  cursor: cell;
+}
+
+.pdf-ink-stroke {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.pdf-ink-stroke-drawing {
+  opacity: 0.92;
+}
+
 .pdf-text-box-drawing,
 .pdf-text-box-annotation {
   position: absolute;

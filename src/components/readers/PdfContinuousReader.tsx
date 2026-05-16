@@ -33,6 +33,17 @@ import {
   type PdfTextBoxAnchor,
   type PdfTextBoxColor,
 } from "./pdfTextBoxAnchor";
+import {
+  DEFAULT_PDF_ERASER_SIZE,
+  DEFAULT_PDF_INK_COLOR,
+  DEFAULT_PDF_INK_WIDTH,
+  normalizePdfEraserSize,
+  normalizePdfInkColor,
+  normalizePdfInkWidth,
+  parsePdfInkAnchor,
+  type PdfInkAnchor,
+  type PdfInkPoint,
+} from "./pdfInkAnchor";
 
 const escapeHtml = (value: string) =>
   value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -111,11 +122,17 @@ type PdfContinuousReaderProps = {
   onSelectionChange?: (selection: PdfTextSelection | null) => void;
   onHighlightActivate?: (highlight: { annotationId: number; rect: PdfSelectionRect }) => void;
   onCreateTextBoxAnnotation?: (draft: { anchor: string; body: string }) => void;
+  onCreateInkAnnotation?: (draft: { anchor: string; body?: string }) => void;
+  onRemoveInkAnnotation?: (annotationId: number) => void | Promise<void>;
   onUpdateTextBoxAnnotation?: (annotationId: number, anchor: string, body?: string) => void | Promise<void>;
   onRemoveTextBoxAnnotation?: (annotationId: number) => void | Promise<void>;
   textBoxToolActive?: boolean;
   textBoxDefaultColor?: PdfTextBoxColor;
   textBoxDefaultFontSize?: number;
+  inkTool?: "none" | "pencil" | "eraser";
+  inkColor?: string;
+  inkWidth?: number;
+  eraserSize?: number;
   onSearchMatchesChange?: (state: { total: number; activeIndex: number }) => void;
 };
 
@@ -165,6 +182,16 @@ type TextBoxInteraction = {
   startClientX: number;
   startClientY: number;
   startAnchor: PdfTextBoxAnchor;
+};
+type InkStroke = {
+  annotationId: number;
+  anchor: PdfInkAnchor;
+};
+type DrawingInkStroke = {
+  pageIndex0: number;
+  color: string;
+  width: number;
+  points: PdfInkPoint[];
 };
 
 const supportsRequestIdleCallback = () =>
@@ -240,11 +267,17 @@ export function PdfContinuousReader({
   onSelectionChange,
   onHighlightActivate,
   onCreateTextBoxAnnotation,
+  onCreateInkAnnotation,
+  onRemoveInkAnnotation,
   onUpdateTextBoxAnnotation,
   onRemoveTextBoxAnnotation,
   textBoxToolActive = false,
   textBoxDefaultColor = DEFAULT_PDF_TEXT_BOX_COLOR,
   textBoxDefaultFontSize = DEFAULT_PDF_TEXT_BOX_FONT_SIZE,
+  inkTool = "none",
+  inkColor = DEFAULT_PDF_INK_COLOR,
+  inkWidth = DEFAULT_PDF_INK_WIDTH,
+  eraserSize = DEFAULT_PDF_ERASER_SIZE,
   onSearchMatchesChange,
 }: PdfContinuousReaderProps) {
   const scrollRootRef = useRef<HTMLElement | null>(null);
@@ -291,12 +324,14 @@ export function PdfContinuousReader({
     currentX: number;
     currentY: number;
   } | null>(null);
+  const [drawingInkStroke, setDrawingInkStroke] = useState<DrawingInkStroke | null>(null);
   const [textBoxDrafts, setTextBoxDrafts] = useState<TextBoxDraft[]>([]);
   const [selectedTextBoxAnnotationId, setSelectedTextBoxAnnotationId] = useState<number | null>(null);
   const [editingTextBoxAnnotationId, setEditingTextBoxAnnotationId] = useState<number | null>(null);
   const [textBoxBodyDrafts, setTextBoxBodyDrafts] = useState<Record<number, string>>({});
   const [textBoxAnchorOverrides, setTextBoxAnchorOverrides] = useState<Record<number, PdfTextBoxAnchor>>({});
   const [removingTextBoxAnnotationIds, setRemovingTextBoxAnnotationIds] = useState<Set<number>>(() => new Set());
+  const [removingInkAnnotationIds, setRemovingInkAnnotationIds] = useState<Set<number>>(() => new Set());
   const textBoxInteractionRef = useRef<TextBoxInteraction | null>(null);
   const newestTextBoxDraftIdRef = useRef<string | null>(null);
 
@@ -1277,6 +1312,20 @@ export function PdfContinuousReader({
     return grouped;
   }, [annotations, textBoxAnchorOverrides, textBoxDrafts]);
 
+  const inkStrokesByPage = useMemo(() => {
+    const grouped = new Map<number, InkStroke[]>();
+    for (const annotation of annotations) {
+      if (annotation.kind !== "ink") continue;
+      const anchor = parsePdfInkAnchor(annotation.anchor);
+      if (!anchor) continue;
+      const pageIndex0 = anchor.page - 1;
+      const current = grouped.get(pageIndex0) ?? [];
+      current.push({ annotationId: annotation.id, anchor });
+      grouped.set(pageIndex0, current);
+    }
+    return grouped;
+  }, [annotations]);
+
   useEffect(() => {
     const ids = new Set(annotations.filter((annotation) => annotation.kind === "text_box").map((annotation) => annotation.id));
     setTextBoxAnchorOverrides((current) => {
@@ -1327,6 +1376,16 @@ export function PdfContinuousReader({
     setEditingTextBoxAnnotationId(null);
   }, [textBoxToolActive]);
 
+  useEffect(() => {
+    if (inkTool === "none") {
+      setDrawingInkStroke(null);
+      return;
+    }
+    setSelectedTextBoxAnnotationId(null);
+    setEditingTextBoxAnnotationId(null);
+    if (inkTool === "eraser") setDrawingTextBox(null);
+  }, [inkTool]);
+
   const fullPageMountSet = useMemo(() => {
     const mounted = new Set<number>();
     const addRange = (center: number | null, radius: number) => {
@@ -1340,9 +1399,11 @@ export function PdfContinuousReader({
     for (const visiblePageIndex of visiblePageIndexes) addRange(visiblePageIndex, 1);
     addRange(activeSearchTargetPage, SEARCH_TARGET_RENDER_RADIUS);
     for (const pageIndex0 of textBoxesByPage.keys()) mounted.add(pageIndex0);
+    for (const pageIndex0 of inkStrokesByPage.keys()) mounted.add(pageIndex0);
     if (drawingTextBox) mounted.add(drawingTextBox.pageIndex0);
+    if (drawingInkStroke) mounted.add(drawingInkStroke.pageIndex0);
     return mounted;
-  }, [activeSearchTargetPage, dominantPageIndex, drawingTextBox, page, pageCount, textBoxesByPage, visiblePageIndexes]);
+  }, [activeSearchTargetPage, dominantPageIndex, drawingInkStroke, drawingTextBox, inkStrokesByPage, page, pageCount, textBoxesByPage, visiblePageIndexes]);
 
   const mountedPageIndexes = useMemo(() => {
     const mounted = new Set<number>(fullPageMountSet);
@@ -1370,6 +1431,148 @@ export function PdfContinuousReader({
   useEffect(() => {
     if (!textBoxToolActive) setDrawingTextBox(null);
   }, [textBoxToolActive]);
+
+  const pointFromPageEvent = useCallback((event: PointerEvent | MouseEvent | ReactPointerEvent<HTMLElement> | ReactMouseEvent<HTMLElement>, pageIndex0: number) => {
+    const shell = pageShellByIndexRef.current.get(pageIndex0);
+    if (!shell) return null;
+    const rect = shell.getBoundingClientRect();
+    return {
+      x: clamp((event.clientX - rect.left) / Math.max(1, rect.width), 0, 1),
+      y: clamp((event.clientY - rect.top) / Math.max(1, rect.height), 0, 1),
+    };
+  }, []);
+
+  const pageSvgPathFromPoints = useCallback((points: PdfInkPoint[], width: number, height: number) =>
+    points
+      .map((point, index) => `${index === 0 ? "M" : "L"} ${Math.round(point.x * width * 10) / 10} ${Math.round(point.y * height * 10) / 10}`)
+      .join(" "), []);
+
+  const distanceToSegmentPx = useCallback((point: PdfInkPoint, start: PdfInkPoint, end: PdfInkPoint, width: number, height: number) => {
+    const px = point.x * width;
+    const py = point.y * height;
+    const x1 = start.x * width;
+    const y1 = start.y * height;
+    const x2 = end.x * width;
+    const y2 = end.y * height;
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const lengthSquared = dx * dx + dy * dy;
+    if (lengthSquared <= 0) return Math.hypot(px - x1, py - y1);
+    const t = clamp(((px - x1) * dx + (py - y1) * dy) / lengthSquared, 0, 1);
+    return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+  }, []);
+
+  const eraseInkAtPoint = useCallback((pageIndex0: number, point: PdfInkPoint) => {
+    const shell = pageShellByIndexRef.current.get(pageIndex0);
+    if (!shell || !onRemoveInkAnnotation) return;
+    const rect = shell.getBoundingClientRect();
+    const radiusPx = normalizePdfEraserSize(eraserSize) / 2;
+    const strokes = inkStrokesByPage.get(pageIndex0) ?? [];
+    for (const stroke of strokes) {
+      if (removingInkAnnotationIds.has(stroke.annotationId)) continue;
+      const points = stroke.anchor.points;
+      let hit = false;
+      for (let index = 1; index < points.length; index += 1) {
+        if (distanceToSegmentPx(point, points[index - 1]!, points[index]!, rect.width, rect.height) <= radiusPx + stroke.anchor.width / 2) {
+          hit = true;
+          break;
+        }
+      }
+      if (!hit) continue;
+      const annotationId = stroke.annotationId;
+      setRemovingInkAnnotationIds((current) => new Set(current).add(annotationId));
+      void (async () => {
+        try {
+          await onRemoveInkAnnotation(annotationId);
+        } finally {
+          setRemovingInkAnnotationIds((current) => {
+            const next = new Set(current);
+            next.delete(annotationId);
+            return next;
+          });
+        }
+      })();
+      return;
+    }
+  }, [distanceToSegmentPx, eraserSize, inkStrokesByPage, onRemoveInkAnnotation, removingInkAnnotationIds]);
+
+  const startInkTool = useCallback((event: ReactPointerEvent<HTMLDivElement> | ReactMouseEvent<HTMLDivElement>, pageIndex0: number) => {
+    if (inkTool === "none") return false;
+    if (event.button !== 0) return false;
+    const point = pointFromPageEvent(event, pageIndex0);
+    if (!point) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    if (inkTool === "eraser") {
+      eraseInkAtPoint(pageIndex0, point);
+      return true;
+    }
+    setDrawingInkStroke({
+      pageIndex0,
+      color: normalizePdfInkColor(inkColor),
+      width: normalizePdfInkWidth(inkWidth),
+      points: [point],
+    });
+    return true;
+  }, [eraseInkAtPoint, inkColor, inkTool, inkWidth, pointFromPageEvent]);
+
+  useEffect(() => {
+    if (inkTool !== "eraser") return;
+    const onMove = (event: PointerEvent | MouseEvent) => {
+      const target = document.elementFromPoint(event.clientX, event.clientY);
+      const shell = target?.closest?.("[data-page-index]") as HTMLElement | null;
+      const pageIndex0 = Number(shell?.dataset.pageIndex);
+      if (!Number.isFinite(pageIndex0)) return;
+      const point = pointFromPageEvent(event, pageIndex0);
+      if (point) eraseInkAtPoint(pageIndex0, point);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("mousemove", onMove);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("mousemove", onMove);
+    };
+  }, [eraseInkAtPoint, inkTool, pointFromPageEvent]);
+
+  useEffect(() => {
+    if (!drawingInkStroke) return;
+    const onMove = (event: PointerEvent | MouseEvent) => {
+      const point = pointFromPageEvent(event, drawingInkStroke.pageIndex0);
+      if (!point) return;
+      setDrawingInkStroke((current) => {
+        if (!current) return current;
+        const previous = current.points[current.points.length - 1];
+        if (previous && Math.hypot(point.x - previous.x, point.y - previous.y) < 0.0025) return current;
+        return { ...current, points: [...current.points, point] };
+      });
+    };
+    const onUp = () => {
+      const stroke = drawingInkStroke;
+      if (stroke.points.length >= 2) {
+        onCreateInkAnnotation?.({
+          anchor: JSON.stringify({
+            type: "pdf_ink",
+            page: stroke.pageIndex0 + 1,
+            color: stroke.color,
+            width: stroke.width,
+            points: stroke.points,
+          }),
+          body: "",
+        });
+      }
+      setDrawingInkStroke(null);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp, { once: true });
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp, { once: true });
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [drawingInkStroke, onCreateInkAnnotation, pointFromPageEvent]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1900,7 +2103,7 @@ export function PdfContinuousReader({
 
   return (
     <section
-      className="pdf-reader pdf-reader-focus"
+      className={`pdf-reader pdf-reader-focus${inkTool === "pencil" ? " pdf-reader-ink-pencil" : ""}${inkTool === "eraser" ? " pdf-reader-ink-eraser" : ""}`}
       data-testid="pdf-reader"
       ref={scrollRootRef}
       onPointerDown={(event) => {
@@ -1937,8 +2140,14 @@ export function PdfContinuousReader({
                 width: width > 0 ? `${width}px` : undefined,
                 minHeight: height ? `${height}px` : undefined,
               }}
-              onPointerDown={(event) => startTextBoxDraw(event, index)}
-              onMouseDown={(event) => startTextBoxDraw(event, index)}
+              onPointerDown={(event) => {
+                if (startInkTool(event, index)) return;
+                startTextBoxDraw(event, index);
+              }}
+              onMouseDown={(event) => {
+                if (startInkTool(event, index)) return;
+                startTextBoxDraw(event, index);
+              }}
             >
               {shouldMountFullPage ? (
                 <div style={{ position: "relative" }}>
@@ -1978,6 +2187,35 @@ export function PdfContinuousReader({
                       WebkitUserSelect: textEnabled && textLayerReadyByPage[index] ? "text" : "none",
                     }}
                   />
+                  {inkStrokesByPage.has(index) || drawingInkStroke?.pageIndex0 === index ? (
+                    <svg
+                      aria-label={`PDF page ${index + 1} ink annotations`}
+                      className={`pdf-ink-layer${inkTool === "pencil" ? " pdf-ink-layer-pencil" : ""}${inkTool === "eraser" ? " pdf-ink-layer-eraser" : ""}`}
+                      style={{
+                        width: width > 0 ? `${width}px` : undefined,
+                        height: height ? `${height}px` : undefined,
+                      }}
+                      viewBox={`0 0 ${Math.max(1, width)} ${Math.max(1, height ?? 1)}`}
+                    >
+                      {(inkStrokesByPage.get(index) ?? []).map((stroke) => (
+                        <path
+                          key={stroke.annotationId}
+                          className="pdf-ink-stroke"
+                          d={pageSvgPathFromPoints(stroke.anchor.points, width, height ?? 1)}
+                          stroke={stroke.anchor.color}
+                          strokeWidth={stroke.anchor.width}
+                        />
+                      ))}
+                      {drawingInkStroke?.pageIndex0 === index ? (
+                        <path
+                          className="pdf-ink-stroke pdf-ink-stroke-drawing"
+                          d={pageSvgPathFromPoints(drawingInkStroke.points, width, height ?? 1)}
+                          stroke={drawingInkStroke.color}
+                          strokeWidth={drawingInkStroke.width}
+                        />
+                      ) : null}
+                    </svg>
+                  ) : null}
                   {textBoxesByPage.get(index)?.map((textBox) => {
                     const selected = textBox.persisted && textBox.annotationId === selectedTextBoxAnnotationId;
                     const editing = textBox.persisted && textBox.annotationId === editingTextBoxAnnotationId;

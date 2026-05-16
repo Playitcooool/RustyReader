@@ -4,6 +4,8 @@ import {
   ChevronRightIcon,
   CloseIcon,
   CopyIcon,
+  EditIcon,
+  EraserIcon,
   FitWidthIcon,
   HighlightIcon,
   MessageIcon,
@@ -31,6 +33,17 @@ import {
   pdfTextBoxColors,
   type PdfTextBoxColor,
 } from "../readers/pdfTextBoxAnchor";
+import {
+  DEFAULT_PDF_ERASER_SIZE,
+  DEFAULT_PDF_INK_COLOR,
+  DEFAULT_PDF_INK_WIDTH,
+  MAX_PDF_ERASER_SIZE,
+  MAX_PDF_INK_WIDTH,
+  MIN_PDF_ERASER_SIZE,
+  MIN_PDF_INK_WIDTH,
+  normalizePdfEraserSize,
+  normalizePdfInkWidth,
+} from "../readers/pdfInkAnchor";
 import { useEffect, useMemo, useState, type RefObject } from "react";
 
 const pdfHighlightColors = ["yellow", "red", "green", "blue", "purple"] as const satisfies readonly PdfHighlightColor[];
@@ -90,10 +103,12 @@ type ReaderWorkspaceActions = {
   onClearReaderSelection: () => void;
   onCopyReaderSelection: () => void | Promise<void>;
   onCreatePdfFocusHighlight: (color: PdfHighlightColor) => void | Promise<void>;
+  onCreatePdfFocusInkAnnotation: (draft: { anchor: string; body?: string }) => void | Promise<void>;
   onAskWithSelection: () => void | Promise<void>;
   onAddHighlightToSession: () => void | Promise<void>;
   onSaveSelectionAsNote: () => void | Promise<void>;
   onCreatePdfFocusTextBoxAnnotation: (draft: PdfTextBoxAnnotationDraft) => void | Promise<void>;
+  onRemovePdfInkAnnotation: (annotationId: number) => void | Promise<void>;
   onUpdatePdfTextBoxAnnotation: (annotationId: number, anchor: string, body?: string) => void | Promise<void>;
   onRemovePdfTextBoxAnnotation: (annotationId: number) => void | Promise<void>;
   onExitFocus: () => void;
@@ -175,10 +190,12 @@ export function ReaderWorkspace(props: Props) {
     onCloseTab,
     onCopyReaderSelection,
     onCreatePdfFocusHighlight,
+    onCreatePdfFocusInkAnnotation,
     onAskWithSelection,
     onAddHighlightToSession,
     onSaveSelectionAsNote,
     onCreatePdfFocusTextBoxAnnotation,
+    onRemovePdfInkAnnotation,
     onUpdatePdfTextBoxAnnotation,
     onRemovePdfTextBoxAnnotation,
     onExitFocus,
@@ -201,6 +218,10 @@ export function ReaderWorkspace(props: Props) {
   } = props.actions;
   const [readerContextMenu, setReaderContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [isPdfTextBoxToolActive, setIsPdfTextBoxToolActive] = useState(false);
+  const [pdfInkTool, setPdfInkTool] = useState<"none" | "pencil" | "eraser">("none");
+  const [pdfInkColor, setPdfInkColor] = useState(DEFAULT_PDF_INK_COLOR);
+  const [pdfInkWidth, setPdfInkWidth] = useState(DEFAULT_PDF_INK_WIDTH);
+  const [pdfEraserSize, setPdfEraserSize] = useState(DEFAULT_PDF_ERASER_SIZE);
   const [pdfTextBoxColor, setPdfTextBoxColor] = useState<PdfTextBoxColor>(DEFAULT_PDF_TEXT_BOX_COLOR);
   const [pdfTextBoxFontSize, setPdfTextBoxFontSize] = useState(DEFAULT_PDF_TEXT_BOX_FONT_SIZE);
   const [viewportSize, setViewportSize] = useState(() => ({
@@ -340,10 +361,76 @@ export function ReaderWorkspace(props: Props) {
                 className="ghost-button reader-icon-tool"
                 title="Add text box annotation"
                 type="button"
-                onClick={() => setIsPdfTextBoxToolActive((current) => !current)}
+                onClick={() => {
+                  setPdfInkTool("none");
+                  setIsPdfTextBoxToolActive((current) => !current);
+                }}
               >
                 T
               </button>
+              <button
+                aria-label="Draw with pencil"
+                aria-pressed={pdfInkTool === "pencil"}
+                className="ghost-button reader-icon-tool"
+                title="Draw with pencil"
+                type="button"
+                onClick={() => {
+                  setIsPdfTextBoxToolActive(false);
+                  setPdfInkTool((current) => current === "pencil" ? "none" : "pencil");
+                }}
+              >
+                <EditIcon />
+              </button>
+              <button
+                aria-label="Erase ink annotations"
+                aria-pressed={pdfInkTool === "eraser"}
+                className="ghost-button reader-icon-tool"
+                title="Erase ink annotations"
+                type="button"
+                onClick={() => {
+                  setIsPdfTextBoxToolActive(false);
+                  setPdfInkTool((current) => current === "eraser" ? "none" : "eraser");
+                }}
+              >
+                <EraserIcon />
+              </button>
+              {pdfInkTool === "pencil" ? (
+                <div className="pdf-ink-tool-options" aria-label="Pencil options">
+                  <input
+                    aria-label="Pencil color"
+                    className="pdf-ink-color-input"
+                    type="color"
+                    value={pdfInkColor}
+                    onChange={(event) => setPdfInkColor(event.target.value)}
+                  />
+                  <input
+                    aria-label="Pencil width"
+                    className="pdf-ink-size-input"
+                    min={MIN_PDF_INK_WIDTH}
+                    max={MAX_PDF_INK_WIDTH}
+                    step={1}
+                    type="range"
+                    value={pdfInkWidth}
+                    onChange={(event) => setPdfInkWidth(normalizePdfInkWidth(Number(event.target.value)))}
+                  />
+                  <span className="reader-zoom-label">{pdfInkWidth}px</span>
+                </div>
+              ) : null}
+              {pdfInkTool === "eraser" ? (
+                <div className="pdf-ink-tool-options" aria-label="Eraser options">
+                  <input
+                    aria-label="Eraser size"
+                    className="pdf-ink-size-input"
+                    min={MIN_PDF_ERASER_SIZE}
+                    max={MAX_PDF_ERASER_SIZE}
+                    step={2}
+                    type="range"
+                    value={pdfEraserSize}
+                    onChange={(event) => setPdfEraserSize(normalizePdfEraserSize(Number(event.target.value)))}
+                  />
+                  <span className="reader-zoom-label">{pdfEraserSize}px</span>
+                </div>
+              ) : null}
               {isPdfTextBoxToolActive ? (
                 <>
                   <div className="pdf-text-box-style-swatches" role="toolbar" aria-label="PDF text box text colors">
@@ -399,8 +486,14 @@ export function ReaderWorkspace(props: Props) {
                   void onCreatePdfFocusTextBoxAnnotation(draft);
                   setIsPdfTextBoxToolActive(false);
                 }}
+                onCreateInkAnnotation={(draft) => void onCreatePdfFocusInkAnnotation(draft)}
+                onRemoveInkAnnotation={(annotationId) => onRemovePdfInkAnnotation(annotationId)}
                 onUpdateTextBoxAnnotation={(annotationId, anchor, body) => onUpdatePdfTextBoxAnnotation(annotationId, anchor, body)}
                 onRemoveTextBoxAnnotation={(annotationId) => onRemovePdfTextBoxAnnotation(annotationId)}
+                inkTool={pdfInkTool}
+                inkColor={pdfInkColor}
+                inkWidth={pdfInkWidth}
+                eraserSize={pdfEraserSize}
                 textBoxToolActive={isPdfTextBoxToolActive}
                 textBoxDefaultColor={pdfTextBoxColor}
                 textBoxDefaultFontSize={pdfTextBoxFontSize}

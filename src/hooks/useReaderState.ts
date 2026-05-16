@@ -18,6 +18,10 @@ export type PdfTextBoxAnnotationDraft = {
   anchor: string;
   body: string;
 };
+export type PdfInkAnnotationDraft = {
+  anchor: string;
+  body?: string;
+};
 export type TranslationPopover = {
   rect: ReaderTextSelection["rect"];
   translatedText: string;
@@ -371,6 +375,18 @@ export function useReaderState({
     setStatusMessage("Created annotation.");
   }, [activePaper, getApi, pdfTextToolsEnabled, setStatusMessage, workspaceMode]);
 
+  const handleCreatePdfFocusInkAnnotation = useCallback(async (draft: PdfInkAnnotationDraft) => {
+    if (!activePaper || !pdfTextToolsEnabled || workspaceMode !== "pdf_focus") return;
+    const annotation = await (await getApi()).createAnnotation({
+      item_id: activePaper.id,
+      anchor: draft.anchor,
+      kind: "ink",
+      body: draft.body ?? "",
+    });
+    setAnnotations((current) => [...current, annotation]);
+    setStatusMessage("Created ink annotation.");
+  }, [activePaper, getApi, pdfTextToolsEnabled, setStatusMessage, workspaceMode]);
+
   const handleUpdatePdfTextBoxAnnotation = useCallback(async (annotationId: number, anchor: string, body?: string) => {
     if (!pdfTextToolsEnabled || workspaceMode !== "pdf_focus") return;
     const annotation = await (await getApi()).updateAnnotation({
@@ -387,6 +403,13 @@ export function useReaderState({
     await (await getApi()).removeAnnotation({ annotation_id: annotationId });
     setAnnotations((current) => current.filter((annotation) => annotation.id !== annotationId));
     setStatusMessage("Removed annotation.");
+  }, [getApi, pdfTextToolsEnabled, setStatusMessage, workspaceMode]);
+
+  const handleRemovePdfInkAnnotation = useCallback(async (annotationId: number) => {
+    if (!pdfTextToolsEnabled || workspaceMode !== "pdf_focus") return;
+    await (await getApi()).removeAnnotation({ annotation_id: annotationId });
+    setAnnotations((current) => current.filter((annotation) => annotation.id !== annotationId));
+    setStatusMessage("Removed ink annotation.");
   }, [getApi, pdfTextToolsEnabled, setStatusMessage, workspaceMode]);
 
   const handleActivatePdfHighlight = useCallback((highlight: ActivePdfHighlight) => {
@@ -459,7 +482,9 @@ export function useReaderState({
     readPrimaryAttachmentBytes,
     handleActivatePdfHighlight,
     handleCreatePdfFocusHighlight,
+    handleCreatePdfFocusInkAnnotation,
     handleCreatePdfFocusTextBoxAnnotation,
+    handleRemovePdfInkAnnotation,
     handleUpdatePdfTextBoxAnnotation,
     handleRemovePdfTextBoxAnnotation,
     handleRemoveActivePdfHighlight,
