@@ -19,6 +19,7 @@ tauri-plugin-shell = "2.0"
 
 # Rust PDF engine (render + text spans) to avoid WKWebView / pdf.js compatibility issues.
 pdf_oxide = { version = "0.3.38", features = ["rendering"] }
+lopdf = "0.35"
 
 # Native OCR fallback for scanned PDFs (bundled Tesseract + tessdata resources).
 tesseract-ocr-static = "0.1.2"
@@ -26,5 +27,4 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 tokio = { version = "1", features = ["sync"] }
 
 [dev-dependencies]
-lopdf = "0.35"
 tempfile = "3"

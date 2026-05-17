@@ -636,6 +636,38 @@ describe("App reading workspace", () => {
     expect(screen.getByRole("tab", { name: "Transformer Scaling Laws" })).toBeInTheDocument();
   });
 
+  it("shows PDF outline in the focus sidebar and jumps to outline pages", async () => {
+    const user = userEvent.setup();
+    render(<App api={fakeApi} />);
+
+    await user.dblClick(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
+    expect(await screen.findByRole("toolbar", { name: /pdf focus toolbar/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Show collections" }));
+    await user.click(screen.getByRole("tab", { name: "Outline" }));
+    const outline = await screen.findByRole("tree", { name: "PDF outline" });
+    expect(within(outline).getByRole("treeitem", { name: "Introduction page 1" })).toBeInTheDocument();
+    await user.click(within(outline).getByRole("button", { name: /Methods/i }));
+
+    expect(await screen.findByText("Mock PDF continuous reader page 2")).toBeInTheDocument();
+    expect(within(outline).getByRole("treeitem", { name: "Experiment page 2" })).toHaveClass("resource-tree-row-active");
+  });
+
+  it("renders an empty PDF outline state without blocking the reader", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(fakeApi, "pdfEngineGetOutline").mockResolvedValue([]);
+    render(<App api={fakeApi} />);
+
+    await user.dblClick(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
+    expect(await screen.findByText("Mock PDF continuous reader page 1")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Show collections" }));
+    await user.click(screen.getByRole("tab", { name: "Outline" }));
+
+    expect(await screen.findByText("No outline in this PDF.")).toBeInTheDocument();
+    expect(screen.getByText("Mock PDF continuous reader page 1")).toBeInTheDocument();
+  });
+
   it("opens the find HUD with cmd-f in pdf focus", async () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);

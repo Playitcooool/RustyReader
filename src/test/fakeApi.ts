@@ -20,6 +20,7 @@ import type {
   OcrPdfPageInput,
   PdfDocumentInfo,
   PdfEngineGetDocumentInfoInput,
+  PdfEngineGetOutlineInput,
   PdfInitialPageBundle,
   PdfEngineGetPageBundleInput,
   PdfEngineGetPageTextInput,
@@ -28,6 +29,7 @@ import type {
   PdfEngineGetPageTextsBatchInput,
   PdfPageBundle,
   PdfPageText,
+  PdfOutlineItem,
   PdfSearchResult,
   ReaderView,
   ResearchNote,
@@ -1734,6 +1736,30 @@ export const fakeApi: AppApi = {
         { width_pt: 612, height_pt: 792 },
       ],
     };
+  },
+
+  async pdfEngineGetOutline(_input: PdfEngineGetOutlineInput): Promise<PdfOutlineItem[]> {
+    return [
+      {
+        id: "outline-0",
+        title: "Introduction",
+        page_index0: 0,
+        children: [],
+      },
+      {
+        id: "outline-1",
+        title: "Methods",
+        page_index0: 1,
+        children: [
+          {
+            id: "outline-1-0",
+            title: "Experiment",
+            page_index0: 1,
+            children: [],
+          },
+        ],
+      },
+    ];
   },
 
   async pdfEngineGetInitialPageBundle(input: PdfEngineGetPageBundleInput): Promise<PdfInitialPageBundle> {

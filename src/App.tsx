@@ -554,6 +554,8 @@ export default function App({ api }: { api: AppApi }) {
           collections={library.collections}
           creatingCollectionParentId={library.creatingCollectionParentId}
           draggedFileCount={library.draggedFileCount}
+          activePdfOutlinePage={readerState.readerPage}
+          focusPdfAttachmentId={isPdfFocusMode ? activePaper?.primary_attachment_id ?? null : null}
           lastImportResult={library.lastImportResult}
           libraryItems={library.libraryItems}
           onCancelCollectionInlineEdit={library.cancelCollectionInlineEdit}
@@ -561,7 +563,9 @@ export default function App({ api }: { api: AppApi }) {
           onCreateCollection={library.handleCreateCollection}
           onDragCountChange={library.setDraggedFileCount}
           onHideFocusSidebar={isPdfFocusMode ? () => setIsSidebarVisible(false) : undefined}
+          onGetPdfOutline={readerState.getPdfOutline}
           onImportPaths={library.importPaths}
+          onNavigatePdfOutline={readerState.setReaderPageClamped}
           onSearchChange={library.setSearch}
           onSelectedCollectionChange={library.setSelectedCollectionId}
           onSetCollectionDraftName={library.setCollectionDraftName}
@@ -590,6 +594,7 @@ export default function App({ api }: { api: AppApi }) {
         pdfApi={{
           getPdfDocumentInfo: readerState.getPdfDocumentInfo,
           getPdfInitialPageBundle: readerState.getPdfInitialPageBundle,
+          getPdfOutline: readerState.getPdfOutline,
           getPdfPageBundle: readerState.getPdfPageBundle,
           getPdfPageBundlesBatch: readerState.getPdfPageBundlesBatch,
           getPdfPageText: readerState.getPdfPageText,

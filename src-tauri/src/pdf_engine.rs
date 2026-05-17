@@ -1,8 +1,9 @@
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     sync::{Arc, OnceLock},
 };
 
+use lopdf::{Dictionary, Document as LopdfDocument, Object, ObjectId};
 use pdf_oxide::{
     document::PdfDocument as OxidePdfDocument,
     rendering::{render_page, ImageFormat, RenderOptions},
@@ -46,6 +47,14 @@ pub(crate) struct PdfDocumentInfo {
     pages: Vec<PdfPageInfo>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct PdfOutlineItem {
+    id: String,
+    title: String,
+    page_index0: i64,
+    children: Vec<PdfOutlineItem>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct PdfInitialPageBundle {
     document_info: PdfDocumentInfo,
@@ -61,6 +70,11 @@ pub(crate) struct PdfEngineGetPageBundleInput {
 
 #[derive(Deserialize)]
 pub(crate) struct PdfEngineGetDocumentInfoInput {
+    primary_attachment_id: i64,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct PdfEngineGetOutlineInput {
     primary_attachment_id: i64,
 }
 
@@ -113,6 +127,7 @@ pub(crate) struct PdfEngineSearchInput {
 #[derive(Default)]
 pub(crate) struct PdfEngineCache {
     pub(crate) document_info_by_attachment: HashMap<i64, PdfDocumentInfo>,
+    pub(crate) outline_by_attachment: HashMap<i64, Vec<PdfOutlineItem>>,
     pub(crate) text_spans_by_page: HashMap<(i64, i64), Vec<PdfTextSpan>>,
     text_spans_order: VecDeque<(i64, i64)>,
     pub(crate) bundle_by_key: HashMap<(i64, i64, u32), PdfPageBundle>,
@@ -142,6 +157,159 @@ fn remember_search_result(cache: &mut PdfEngineCache, key: (i64, String), result
 
 fn normalized_query(input: &str) -> String {
     input.trim().to_lowercase()
+}
+
+fn outline_dict_from_object<'a>(doc: &'a LopdfDocument, object: &'a Object) -> Option<&'a Dictionary> {
+    match object {
+        Object::Dictionary(dictionary) => Some(dictionary),
+        Object::Reference(object_id) => doc.get_dictionary(*object_id).ok(),
+        _ => None,
+    }
+}
+
+fn outline_page_index_from_destination(
+    doc: &LopdfDocument,
+    destination: &Object,
+    page_index_by_id: &HashMap<ObjectId, i64>,
+) -> Option<i64> {
+    match destination {
+        Object::Array(items) => items
+            .first()
+            .and_then(|page| page.as_reference().ok())
+            .and_then(|page_id| page_index_by_id.get(&page_id).copied()),
+        Object::Reference(object_id) => doc
+            .get_object(*object_id)
+            .ok()
+            .and_then(|object| outline_page_index_from_destination(doc, object, page_index_by_id)),
+        _ => None,
+    }
+}
+
+fn outline_page_index_for_node(
+    doc: &LopdfDocument,
+    node: &Dictionary,
+    page_index_by_id: &HashMap<ObjectId, i64>,
+) -> Option<i64> {
+    if let Ok(destination) = node.get(b"Dest") {
+        return outline_page_index_from_destination(doc, destination, page_index_by_id);
+    }
+    let action = node.get(b"A").ok().and_then(|object| outline_dict_from_object(doc, object))?;
+    if action.get(b"S").ok()?.as_name().ok()? != b"GoTo" {
+        return None;
+    }
+    outline_page_index_from_destination(doc, action.get(b"D").ok()?, page_index_by_id)
+}
+
+fn decode_pdf_outline_title(bytes: &[u8]) -> String {
+    if bytes.starts_with(b"\xFE\xFF") {
+        let units = bytes[2..]
+            .chunks(2)
+            .filter_map(|chunk| {
+                if chunk.len() == 2 {
+                    Some(u16::from_be_bytes([chunk[0], chunk[1]]))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        String::from_utf16_lossy(&units)
+    } else if bytes.starts_with(b"\xEF\xBB\xBF") {
+        String::from_utf8_lossy(&bytes[3..]).to_string()
+    } else {
+        String::from_utf8_lossy(bytes).to_string()
+    }
+}
+
+fn outline_title_for_node(node: &Dictionary) -> Option<String> {
+    let title = decode_pdf_outline_title(node.get(b"Title").ok()?.as_str().ok()?);
+    let title = title.trim();
+    if title.is_empty() {
+        None
+    } else {
+        Some(title.to_string())
+    }
+}
+
+fn collect_outline_items(
+    doc: &LopdfDocument,
+    first: Object,
+    page_index_by_id: &HashMap<ObjectId, i64>,
+    prefix: String,
+    visited: &mut HashSet<ObjectId>,
+) -> Vec<PdfOutlineItem> {
+    let mut items = Vec::new();
+    let mut current = Some(first);
+    let mut sibling_index = 0usize;
+
+    while let Some(object) = current {
+        let reference = object.as_reference().ok();
+        if let Some(object_id) = reference {
+            if !visited.insert(object_id) {
+                break;
+            }
+        }
+
+        let Some(node) = outline_dict_from_object(doc, &object) else {
+            break;
+        };
+        let item_path = if prefix.is_empty() {
+            sibling_index.to_string()
+        } else {
+            format!("{prefix}-{sibling_index}")
+        };
+        let children = node
+            .get(b"First")
+            .ok()
+            .cloned()
+            .map(|first_child| collect_outline_items(doc, first_child, page_index_by_id, item_path.clone(), visited))
+            .unwrap_or_default();
+
+        if let (Some(title), Some(page_index0)) = (
+            outline_title_for_node(node),
+            outline_page_index_for_node(doc, node, page_index_by_id),
+        ) {
+            items.push(PdfOutlineItem {
+                id: format!("outline-{item_path}"),
+                title,
+                page_index0,
+                children,
+            });
+        } else {
+            items.extend(children);
+        }
+
+        current = node.get(b"Next").ok().cloned();
+        sibling_index += 1;
+    }
+
+    items
+}
+
+fn extract_pdf_outline(bytes: &[u8]) -> Result<Vec<PdfOutlineItem>, String> {
+    let doc = LopdfDocument::load_mem(bytes).map_err(|error| error.to_string())?;
+    let page_index_by_id = doc
+        .get_pages()
+        .into_iter()
+        .map(|(page_number, object_id)| (object_id, i64::from(page_number.saturating_sub(1))))
+        .collect::<HashMap<_, _>>();
+    let catalog = doc.catalog().map_err(|error| error.to_string())?;
+    let Some(outlines) = catalog
+        .get(b"Outlines")
+        .ok()
+        .and_then(|object| outline_dict_from_object(&doc, object))
+    else {
+        return Ok(Vec::new());
+    };
+    let Some(first) = outlines.get(b"First").ok().cloned() else {
+        return Ok(Vec::new());
+    };
+    Ok(collect_outline_items(
+        &doc,
+        first,
+        &page_index_by_id,
+        String::new(),
+        &mut HashSet::new(),
+    ))
 }
 
 fn unique_preserve_order(page_indexes0: &[i64]) -> Result<Vec<i64>, String> {
@@ -390,6 +558,40 @@ pub(crate) async fn pdf_engine_get_document_info(
             .document_info_by_attachment
             .insert(input.primary_attachment_id, info.clone());
         Ok(info)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub(crate) async fn pdf_engine_get_outline(
+    state: State<'_, AppState>,
+    input: PdfEngineGetOutlineInput,
+) -> Result<Vec<PdfOutlineItem>, String> {
+    if let Some(cached) = state
+        .pdf_cache
+        .lock()
+        .map_err(|_| "pdf cache poisoned".to_string())?
+        .outline_by_attachment
+        .get(&input.primary_attachment_id)
+        .cloned()
+    {
+        return Ok(cached);
+    }
+
+    let library_root = state.library_root.clone();
+    let pdf_cache = state.pdf_cache.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let bytes = service_for_root(&library_root)?
+            .read_primary_attachment_bytes(input.primary_attachment_id)
+            .map_err(|error| error.to_string())?;
+        let outline = extract_pdf_outline(&bytes)?;
+        pdf_cache
+            .lock()
+            .map_err(|_| "pdf cache poisoned".to_string())?
+            .outline_by_attachment
+            .insert(input.primary_attachment_id, outline.clone());
+        Ok(outline)
     })
     .await
     .map_err(|error| error.to_string())?
@@ -1031,6 +1233,102 @@ mod tests {
         bytes
     }
 
+    fn make_pdf_with_outline() -> Vec<u8> {
+        let mut doc = Document::with_version("1.5");
+        let pages_id = doc.new_object_id();
+        let page_one_id = push_page(&mut doc, pages_id, 612.0, 792.0);
+        let page_two_id = push_page(&mut doc, pages_id, 612.0, 792.0);
+        let outline_root_id = doc.new_object_id();
+        let intro_id = doc.new_object_id();
+        let methods_id = doc.new_object_id();
+        let child_id = doc.new_object_id();
+        let remote_id = doc.new_object_id();
+        let unresolved_id = doc.new_object_id();
+        let catalog_id = doc.add_object(lopdf::dictionary! {
+            "Type" => "Catalog",
+            "Pages" => pages_id,
+            "Outlines" => outline_root_id,
+        });
+
+        doc.objects.insert(
+            pages_id,
+            Object::Dictionary(lopdf::dictionary! {
+                "Type" => "Pages",
+                "Kids" => vec![page_one_id.into(), page_two_id.into()],
+                "Count" => 2,
+            }),
+        );
+        doc.objects.insert(
+            outline_root_id,
+            Object::Dictionary(lopdf::dictionary! {
+                "Type" => "Outlines",
+                "First" => intro_id,
+                "Last" => unresolved_id,
+                "Count" => 4,
+            }),
+        );
+        doc.objects.insert(
+            intro_id,
+            Object::Dictionary(lopdf::dictionary! {
+                "Title" => Object::string_literal("Introduction"),
+                "Parent" => outline_root_id,
+                "Next" => methods_id,
+                "Dest" => vec![page_one_id.into(), "Fit".into()],
+            }),
+        );
+        doc.objects.insert(
+            methods_id,
+            Object::Dictionary(lopdf::dictionary! {
+                "Title" => Object::string_literal("Methods"),
+                "Parent" => outline_root_id,
+                "Prev" => intro_id,
+                "Next" => remote_id,
+                "First" => child_id,
+                "Last" => child_id,
+                "Count" => 1,
+                "A" => lopdf::dictionary! {
+                    "S" => "GoTo",
+                    "D" => vec![page_two_id.into(), "Fit".into()],
+                },
+            }),
+        );
+        doc.objects.insert(
+            child_id,
+            Object::Dictionary(lopdf::dictionary! {
+                "Title" => Object::string_literal("Experiment 1"),
+                "Parent" => methods_id,
+                "Dest" => vec![page_two_id.into(), "Fit".into()],
+            }),
+        );
+        doc.objects.insert(
+            remote_id,
+            Object::Dictionary(lopdf::dictionary! {
+                "Title" => Object::string_literal("Remote"),
+                "Parent" => outline_root_id,
+                "Prev" => methods_id,
+                "Next" => unresolved_id,
+                "A" => lopdf::dictionary! {
+                    "S" => "GoToR",
+                    "D" => vec![page_two_id.into(), "Fit".into()],
+                },
+            }),
+        );
+        doc.objects.insert(
+            unresolved_id,
+            Object::Dictionary(lopdf::dictionary! {
+                "Title" => Object::string_literal("Named destination"),
+                "Parent" => outline_root_id,
+                "Prev" => remote_id,
+                "Dest" => Object::string_literal("chapter-three"),
+            }),
+        );
+        doc.trailer.set("Root", catalog_id);
+
+        let mut bytes = Vec::new();
+        doc.save_to(&mut bytes).expect("test pdf should serialize");
+        bytes
+    }
+
     #[test]
     fn pdf_cache_enforces_text_and_bundle_limits() {
         let mut cache = PdfEngineCache::default();
@@ -1081,6 +1379,28 @@ mod tests {
         assert_eq!(info.pages[0].height_pt, 792.0);
         assert_eq!(info.pages[1].width_pt, 420.0);
         assert_eq!(info.pages[1].height_pt, 595.0);
+    }
+
+    #[test]
+    fn outline_extraction_reads_nested_destinations_and_skips_unsupported_nodes() {
+        let outline = extract_pdf_outline(&make_pdf_with_outline()).expect("outline should parse");
+
+        assert_eq!(outline.len(), 2);
+        assert_eq!(outline[0].title, "Introduction");
+        assert_eq!(outline[0].page_index0, 0);
+        assert!(outline[0].children.is_empty());
+        assert_eq!(outline[1].title, "Methods");
+        assert_eq!(outline[1].page_index0, 1);
+        assert_eq!(outline[1].children.len(), 1);
+        assert_eq!(outline[1].children[0].title, "Experiment 1");
+        assert_eq!(outline[1].children[0].page_index0, 1);
+    }
+
+    #[test]
+    fn outline_extraction_returns_empty_for_pdf_without_outline() {
+        let outline = extract_pdf_outline(&make_two_page_pdf_with_distinct_sizes()).expect("outline should parse");
+
+        assert!(outline.is_empty());
     }
 
     #[test]

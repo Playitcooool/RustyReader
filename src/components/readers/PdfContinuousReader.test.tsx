@@ -97,6 +97,8 @@ describe("PdfContinuousReader", () => {
     cleanup();
     vi.restoreAllMocks();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (document as any).elementFromPoint;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     delete (globalThis as any).IntersectionObserver;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     delete (globalThis as any).ResizeObserver;

@@ -59,6 +59,7 @@ type ReaderWorkspaceData = {
 type ReaderWorkspacePdfApi = {
   getPdfDocumentInfo: (primaryAttachmentId: number) => Promise<unknown>;
   getPdfInitialPageBundle?: (input: { primary_attachment_id: number; page_index0: number; target_width_px: number }) => Promise<unknown>;
+  getPdfOutline?: (primaryAttachmentId: number) => Promise<unknown>;
   getPdfPageBundle: (input: { primary_attachment_id: number; page_index0: number; target_width_px: number }) => Promise<unknown>;
   getPdfPageBundlesBatch: (input: { primary_attachment_id: number; page_indexes0: number[]; target_width_px: number }) => Promise<unknown>;
   getPdfPageText: (input: { primary_attachment_id: number; page_index0: number }) => Promise<unknown>;

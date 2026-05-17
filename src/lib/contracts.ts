@@ -289,6 +289,13 @@ export type PdfDocumentInfo = {
   pages: PdfPageInfo[];
 };
 
+export type PdfOutlineItem = {
+  id: string;
+  title: string;
+  page_index0: number;
+  children: PdfOutlineItem[];
+};
+
 export type PdfInitialPageBundle = {
   document_info: PdfDocumentInfo;
   bundle: PdfPageBundle;
@@ -307,6 +314,10 @@ export type PdfEngineGetPageBundlesBatchInput = {
 };
 
 export type PdfEngineGetDocumentInfoInput = {
+  primary_attachment_id: number;
+};
+
+export type PdfEngineGetOutlineInput = {
   primary_attachment_id: number;
 };
 
@@ -463,6 +474,7 @@ export type AppApi = {
   writeExportFile: (input: { path: string; authorization_token: string; contents: string }) => Promise<void>;
   ocrPdfPage: (input: OcrPdfPageInput) => Promise<OcrPageResult>;
   pdfEngineGetDocumentInfo: (input: PdfEngineGetDocumentInfoInput) => Promise<PdfDocumentInfo>;
+  pdfEngineGetOutline: (input: PdfEngineGetOutlineInput) => Promise<PdfOutlineItem[]>;
   pdfEngineGetInitialPageBundle: (input: PdfEngineGetPageBundleInput) => Promise<PdfInitialPageBundle>;
   pdfEngineGetPageBundle: (input: PdfEngineGetPageBundleInput) => Promise<PdfPageBundle>;
   pdfEngineGetPageBundlesBatch: (input: PdfEngineGetPageBundlesBatchInput) => Promise<PdfPageBundle[]>;

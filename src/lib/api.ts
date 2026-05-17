@@ -95,6 +95,19 @@ export async function createTauriApi(): Promise<AppApi> {
     };
   };
 
+  const toPdfOutlineItems = (value: unknown): import("./contracts").PdfOutlineItem[] =>
+    Array.isArray(value)
+      ? value.map((item) => {
+          const obj = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+          return {
+            id: typeof obj.id === "string" ? obj.id : "",
+            title: typeof obj.title === "string" ? obj.title : "",
+            page_index0: Number(obj.page_index0),
+            children: toPdfOutlineItems(obj.children),
+          };
+        })
+      : [];
+
   const toPdfSearchResult = (value: unknown) => {
     if (!value || typeof value !== "object") throw new Error("Unexpected PDF search response.");
     const obj = value as Record<string, unknown>;
@@ -258,6 +271,12 @@ export async function createTauriApi(): Promise<AppApi> {
     pdfEngineGetDocumentInfo: async (input) =>
       toPdfDocumentInfo(
         await invoke("pdf_engine_get_document_info", {
+          input,
+        }),
+      ),
+    pdfEngineGetOutline: async (input) =>
+      toPdfOutlineItems(
+        await invoke("pdf_engine_get_outline", {
           input,
         }),
       ),

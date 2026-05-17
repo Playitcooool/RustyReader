@@ -236,6 +236,7 @@ export function useReaderState({
   const getPdfPageBundlesBatch = useCallback(async (input: { primary_attachment_id: number; page_indexes0: number[]; target_width_px: number }) => (await getApi()).pdfEngineGetPageBundlesBatch(input), [getApi]);
   const getPdfInitialPageBundle = useCallback(async (input: { primary_attachment_id: number; page_index0: number; target_width_px: number }) => (await getApi()).pdfEngineGetInitialPageBundle(input), [getApi]);
   const getPdfDocumentInfo = useCallback(async (primaryAttachmentId: number) => (await getApi()).pdfEngineGetDocumentInfo({ primary_attachment_id: primaryAttachmentId }), [getApi]);
+  const getPdfOutline = useCallback(async (primaryAttachmentId: number) => (await getApi()).pdfEngineGetOutline({ primary_attachment_id: primaryAttachmentId }), [getApi]);
   const getPdfPageText = useCallback(async (input: { primary_attachment_id: number; page_index0: number }) => (await getApi()).pdfEngineGetPageText(input), [getApi]);
   const getPdfPageTextsBatch = useCallback(async (input: { primary_attachment_id: number; page_indexes0: number[] }) => (await getApi()).pdfEngineGetPageTextsBatch(input), [getApi]);
   const pdfEngineSearch = useCallback(async (input: { primary_attachment_id: number; query: string; max_matches?: number }) => (await getApi()).pdfEngineSearch(input), [getApi]);
@@ -478,6 +479,7 @@ export function useReaderState({
     closeTranslationPopover,
     getPdfDocumentInfo,
     getPdfInitialPageBundle,
+    getPdfOutline,
     getPdfPageBundle,
     getPdfPageBundlesBatch,
     getPdfPageText,

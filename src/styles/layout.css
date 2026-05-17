@@ -230,6 +230,11 @@ p {
   color: inherit;
 }
 
+.ghost-button-active {
+  background: rgba(226, 139, 83, 0.18);
+  color: #fff4e8;
+}
+
 .ghost-button,
 .primary-button,
 .reader-tab,
@@ -529,6 +534,14 @@ p {
 .resource-tree-collection-button {
   font-weight: 600;
   letter-spacing: 0.01em;
+}
+
+.pdf-outline-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
 }
 
 .resource-tree-row-editing {
