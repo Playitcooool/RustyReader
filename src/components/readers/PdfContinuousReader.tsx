@@ -1519,6 +1519,7 @@ export function PdfContinuousReader({
   useEffect(() => {
     if (inkTool !== "eraser") return;
     const onMove = (event: PointerEvent | MouseEvent) => {
+      if ((event.buttons & 1) !== 1) return;
       const target = document.elementFromPoint(event.clientX, event.clientY);
       const shell = target?.closest?.("[data-page-index]") as HTMLElement | null;
       const pageIndex0 = Number(shell?.dataset.pageIndex);
