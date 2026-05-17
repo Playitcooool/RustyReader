@@ -484,6 +484,7 @@ export function ReaderWorkspace(props: Props) {
                   setIsPdfTextBoxToolActive(false);
                 }}
                 onCreateInkAnnotation={(draft) => void onCreatePdfFocusInkAnnotation(draft)}
+                onUpdateInkAnnotation={(annotationId, anchor, body) => onUpdatePdfTextBoxAnnotation(annotationId, anchor, body)}
                 onRemoveInkAnnotation={(annotationId) => onRemovePdfInkAnnotation(annotationId)}
                 onUpdateTextBoxAnnotation={(annotationId, anchor, body) => onUpdatePdfTextBoxAnnotation(annotationId, anchor, body)}
                 onRemoveTextBoxAnnotation={(annotationId) => onRemovePdfTextBoxAnnotation(annotationId)}

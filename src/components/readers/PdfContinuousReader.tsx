@@ -122,7 +122,8 @@ type PdfContinuousReaderProps = {
   onSelectionChange?: (selection: PdfTextSelection | null) => void;
   onHighlightActivate?: (highlight: { annotationId: number; rect: PdfSelectionRect }) => void;
   onCreateTextBoxAnnotation?: (draft: { anchor: string; body: string }) => void;
-  onCreateInkAnnotation?: (draft: { anchor: string; body?: string }) => void;
+  onCreateInkAnnotation?: (draft: { anchor: string; body?: string }) => void | Promise<void>;
+  onUpdateInkAnnotation?: (annotationId: number, anchor: string, body?: string) => void | Promise<void>;
   onRemoveInkAnnotation?: (annotationId: number) => void | Promise<void>;
   onUpdateTextBoxAnnotation?: (annotationId: number, anchor: string, body?: string) => void | Promise<void>;
   onRemoveTextBoxAnnotation?: (annotationId: number) => void | Promise<void>;
@@ -268,6 +269,7 @@ export function PdfContinuousReader({
   onHighlightActivate,
   onCreateTextBoxAnnotation,
   onCreateInkAnnotation,
+  onUpdateInkAnnotation,
   onRemoveInkAnnotation,
   onUpdateTextBoxAnnotation,
   onRemoveTextBoxAnnotation,
@@ -1462,6 +1464,25 @@ export function PdfContinuousReader({
     return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
   }, []);
 
+  const splitInkStrokeByEraser = useCallback((anchor: PdfInkAnchor, point: PdfInkPoint, width: number, height: number, radiusPx: number) => {
+    const segments: PdfInkPoint[][] = [];
+    let current: PdfInkPoint[] = [];
+    for (let index = 1; index < anchor.points.length; index += 1) {
+      const start = anchor.points[index - 1]!;
+      const end = anchor.points[index]!;
+      const hit = distanceToSegmentPx(point, start, end, width, height) <= radiusPx + anchor.width / 2;
+      if (hit) {
+        if (current.length >= 2) segments.push(current);
+        current = [];
+        continue;
+      }
+      if (current.length === 0) current.push(start);
+      current.push(end);
+    }
+    if (current.length >= 2) segments.push(current);
+    return segments;
+  }, [distanceToSegmentPx]);
+
   const eraseInkAtPoint = useCallback((pageIndex0: number, point: PdfInkPoint) => {
     const shell = pageShellByIndexRef.current.get(pageIndex0);
     if (!shell || !onRemoveInkAnnotation) return;
@@ -1470,20 +1491,23 @@ export function PdfContinuousReader({
     const strokes = inkStrokesByPage.get(pageIndex0) ?? [];
     for (const stroke of strokes) {
       if (removingInkAnnotationIds.has(stroke.annotationId)) continue;
-      const points = stroke.anchor.points;
-      let hit = false;
-      for (let index = 1; index < points.length; index += 1) {
-        if (distanceToSegmentPx(point, points[index - 1]!, points[index]!, rect.width, rect.height) <= radiusPx + stroke.anchor.width / 2) {
-          hit = true;
-          break;
-        }
-      }
-      if (!hit) continue;
+      const remainingSegments = splitInkStrokeByEraser(stroke.anchor, point, rect.width, rect.height, radiusPx);
+      if (remainingSegments.length === 1 && remainingSegments[0]!.length === stroke.anchor.points.length) continue;
       const annotationId = stroke.annotationId;
       setRemovingInkAnnotationIds((current) => new Set(current).add(annotationId));
       void (async () => {
         try {
-          await onRemoveInkAnnotation(annotationId);
+          if (remainingSegments.length === 0 || !onUpdateInkAnnotation) {
+            await onRemoveInkAnnotation(annotationId);
+          } else {
+            const [firstSegment, ...extraSegments] = remainingSegments;
+            if (!firstSegment) return;
+            await onUpdateInkAnnotation(annotationId, JSON.stringify({ ...stroke.anchor, points: firstSegment }));
+            await Promise.all(extraSegments.map((points) => onCreateInkAnnotation?.({
+              anchor: JSON.stringify({ ...stroke.anchor, points }),
+              body: "",
+            })));
+          }
         } finally {
           setRemovingInkAnnotationIds((current) => {
             const next = new Set(current);
@@ -1494,7 +1518,7 @@ export function PdfContinuousReader({
       })();
       return;
     }
-  }, [distanceToSegmentPx, eraserSize, inkStrokesByPage, onRemoveInkAnnotation, removingInkAnnotationIds]);
+  }, [eraserSize, inkStrokesByPage, onCreateInkAnnotation, onRemoveInkAnnotation, onUpdateInkAnnotation, removingInkAnnotationIds, splitInkStrokeByEraser]);
 
   const startInkTool = useCallback((event: ReactPointerEvent<HTMLDivElement> | ReactMouseEvent<HTMLDivElement>, pageIndex0: number) => {
     if (inkTool === "none") return false;

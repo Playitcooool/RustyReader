@@ -971,6 +971,75 @@ describe("PdfContinuousReader", () => {
     expect(onRemoveInkAnnotation).not.toHaveBeenCalled();
   });
 
+  it("splits an ink annotation when the eraser cuts through the middle of a stroke", async () => {
+    const getPdfPageBundle = vi.fn().mockResolvedValue(makeBundle("Hello world"));
+    const getPdfDocumentInfo = vi.fn().mockResolvedValue(makeDocumentInfo());
+    const getPdfPageText = vi.fn().mockResolvedValue({ page_index0: 0, spans: [] });
+    const ocrPdfPage = vi.fn().mockResolvedValue({
+      primary_attachment_id: 101,
+      page_index0: 0,
+      lang: "eng+chi_sim",
+      config_version: "test",
+      lines: [],
+    });
+    const onCreateInkAnnotation = vi.fn().mockResolvedValue(undefined);
+    const onUpdateInkAnnotation = vi.fn().mockResolvedValue(undefined);
+    const onRemoveInkAnnotation = vi.fn().mockResolvedValue(undefined);
+
+    const { container } = render(
+      <PdfContinuousReader
+        annotations={[{
+          id: 46,
+          item_id: pdfView.item_id,
+          kind: "ink",
+          body: "",
+          anchor: JSON.stringify({
+            type: "pdf_ink",
+            page: 1,
+            color: "#3366ff",
+            width: 6,
+            points: [{ x: 0.1, y: 0.1 }, { x: 0.2, y: 0.1 }, { x: 0.5, y: 0.1 }, { x: 0.6, y: 0.1 }],
+          }),
+        }]}
+        getPdfDocumentInfo={getPdfDocumentInfo}
+        getPdfPageBundle={getPdfPageBundle}
+        getPdfPageText={getPdfPageText}
+        ocrPdfPage={ocrPdfPage}
+        onCreateInkAnnotation={onCreateInkAnnotation}
+        onUpdateInkAnnotation={onUpdateInkAnnotation}
+        onRemoveInkAnnotation={onRemoveInkAnnotation}
+        page={0}
+        view={pdfView}
+        zoom={100}
+        inkTool="eraser"
+        eraserSize={40}
+      />,
+    );
+
+    await screen.findByLabelText("PDF page 1 ink annotations");
+    const shell = container.querySelector('[data-page-index="0"]') as HTMLElement;
+    shell.getBoundingClientRect = () => ({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 800,
+      bottom: 1000,
+      width: 800,
+      height: 1000,
+      toJSON: () => ({}),
+    });
+
+    fireEvent.mouseDown(shell, { button: 0, buttons: 1, clientX: 280, clientY: 100 });
+
+    await waitFor(() => expect(onUpdateInkAnnotation).toHaveBeenCalledTimes(1));
+    expect(onUpdateInkAnnotation.mock.calls[0]?.[0]).toBe(46);
+    expect(JSON.parse(onUpdateInkAnnotation.mock.calls[0]?.[1] as string).points).toEqual([{ x: 0.1, y: 0.1 }, { x: 0.2, y: 0.1 }]);
+    expect(onCreateInkAnnotation).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(onCreateInkAnnotation.mock.calls[0]?.[0].anchor as string).points).toEqual([{ x: 0.5, y: 0.1 }, { x: 0.6, y: 0.1 }]);
+    expect(onRemoveInkAnnotation).not.toHaveBeenCalled();
+  });
+
   it("moves and resizes persisted text box annotations before persisting geometry", async () => {
     const getPdfPageBundle = vi.fn().mockResolvedValue(makeBundle("Hello world"));
     const getPdfDocumentInfo = vi.fn().mockResolvedValue(makeDocumentInfo());
