@@ -166,10 +166,6 @@ export function useReaderState({
   }, [activePaper, setIsSidebarVisible, workspaceMode]);
 
   useEffect(() => {
-    if (workspaceMode === "pdf_focus") setIsSidebarVisible(false);
-  }, [setIsSidebarVisible, workspaceMode]);
-
-  useEffect(() => {
     setReaderSearchMatchIndex(0);
   }, [activePaperId, readerPage, readerSearchQuery, readerView?.reader_kind]);
 

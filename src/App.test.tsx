@@ -244,36 +244,27 @@ describe("App reading workspace", () => {
     expect(screen.getByRole("tree", { name: "Library resources" })).toBeInTheDocument();
   });
 
-  it("keeps pdf focus sidebar hiding out of persisted startup state", async () => {
+  it("keeps the collection sidebar visible when entering pdf focus", async () => {
     const user = userEvent.setup();
     window.localStorage.setItem("paper-reader.sidebar-open", "true");
     render(<App api={fakeApi} />);
 
     await user.dblClick(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     expect(await screen.findByRole("toolbar", { name: /pdf focus toolbar/i })).toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(screen.queryByRole("tree", { name: "Library resources" })).not.toBeInTheDocument();
-    });
+    expect(screen.getByRole("tree", { name: "Library resources" })).toBeInTheDocument();
     expect(window.localStorage.getItem("paper-reader.sidebar-open")).toBe("true");
   });
 
-  it("opens the collection sidebar from pdf focus without leaving focus", async () => {
+  it("does not show a collection sidebar expand button in pdf focus", async () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
 
     await user.dblClick(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     expect(await screen.findByRole("toolbar", { name: /pdf focus toolbar/i })).toBeInTheDocument();
-    expect(screen.queryByRole("tree", { name: "Library resources" })).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Show collections" }));
-
-    expect(screen.getByRole("toolbar", { name: /pdf focus toolbar/i })).toBeInTheDocument();
     expect(screen.getByRole("tree", { name: "Library resources" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Hide collections" })).toHaveAttribute("aria-pressed", "true");
-
     await user.click(screen.getByRole("button", { name: "Hide collections" }));
     expect(screen.queryByRole("tree", { name: "Library resources" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Show collections" })).not.toBeInTheDocument();
     expect(screen.getByRole("toolbar", { name: /pdf focus toolbar/i })).toBeInTheDocument();
   });
 
@@ -643,7 +634,6 @@ describe("App reading workspace", () => {
     await user.dblClick(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     expect(await screen.findByRole("toolbar", { name: /pdf focus toolbar/i })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Show collections" }));
     await user.click(screen.getByRole("tab", { name: "Outline" }));
     const outline = await screen.findByRole("tree", { name: "PDF outline" });
     expect(within(outline).getByRole("treeitem", { name: "Introduction page 1" })).toBeInTheDocument();
@@ -661,7 +651,6 @@ describe("App reading workspace", () => {
     await user.dblClick(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     expect(await screen.findByText("Mock PDF continuous reader page 1")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Show collections" }));
     await user.click(screen.getByRole("tab", { name: "Outline" }));
 
     expect(await screen.findByText("No outline in this PDF.")).toBeInTheDocument();
@@ -762,9 +751,10 @@ describe("App reading workspace", () => {
 
     const shell = container.querySelector(".app-shell-focus.app-shell-ai-open");
     expect(shell).not.toBeNull();
-    expect(shell?.children[0]).toHaveClass("reader-shell-focus");
-    expect(shell?.children[1]).toHaveClass("pane-resizer");
-    expect(shell?.children[2]).toHaveClass("ai-shell");
+    expect(shell?.children[0]).toHaveClass("sidebar");
+    expect(shell?.children[1]).toHaveClass("reader-shell-focus");
+    expect(shell?.children[2]).toHaveClass("pane-resizer");
+    expect(shell?.children[3]).toHaveClass("ai-shell");
   });
 
   it("sends freeform prompts to the active AI session", async () => {
