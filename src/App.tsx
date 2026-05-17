@@ -66,7 +66,7 @@ const draftFromAiSettings = (settings: AISettings): UpdateAISettingsInput => ({
 
 export default function App({ api }: { api: AppApi }) {
   const getApi = useCallback(() => Promise.resolve(api), [api]);
-  const [statusMessage, setStatusMessage] = useState("Loading library...");
+  const [statusMessage, setStatusMessage] = useState("");
   const [isSidebarVisible, setIsSidebarVisible] = useState(() => readStoredBoolean(SIDEBAR_OPEN_KEY, true));
   const [sidebarWidth, setSidebarWidth] = useState(() => readStoredNumber(SIDEBAR_WIDTH_KEY, DEFAULT_SIDEBAR_WIDTH));
   const [aiPanelWidth, setAiPanelWidth] = useState(() => readStoredNumber(AI_PANEL_WIDTH_KEY, DEFAULT_AI_PANEL_WIDTH));
@@ -525,7 +525,7 @@ export default function App({ api }: { api: AppApi }) {
       className={`app-shell ${isPdfFocusMode ? "app-shell-focus" : "app-shell-workspace"} ${isPdfFocusMode && isSidebarVisible ? "app-shell-focus-sidebar-open" : ""} ${ai.isAiPanelOpen ? "app-shell-ai-open" : ""}`}
       style={{ "--sidebar-width": `${clamp(sidebarWidth, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH)}px`, "--ai-panel-width": `${clamp(aiPanelWidth, AI_PANEL_MIN_WIDTH, AI_PANEL_MAX_WIDTH)}px` } as CSSProperties}
     >
-      {!ai.isAiPanelOpen ? (
+      {statusMessage && !ai.isAiPanelOpen ? (
         <div className="status-pill app-status" role="status">
           {statusMessage}
         </div>

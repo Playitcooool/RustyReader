@@ -217,6 +217,14 @@ describe("App reading workspace", () => {
     expect(screen.queryByRole("button", { name: /Expand Machine Learning/i })).not.toBeInTheDocument();
   });
 
+  it("does not keep a startup loading status after the library renders", async () => {
+    render(<App api={fakeApi} />);
+
+    expect(await screen.findByRole("tree", { name: "Library resources" })).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByText("Loading library...")).not.toBeInTheDocument();
+  });
+
   it("reopens the library on startup when saved sidebar state is hidden with no active paper", async () => {
     window.localStorage.setItem("paper-reader.sidebar-open", "false");
 
