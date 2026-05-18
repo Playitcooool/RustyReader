@@ -11,6 +11,7 @@ import {
   MessageIcon,
   NoteIcon,
   SearchIcon,
+  SidebarIcon,
   TranslateIcon,
   ZoomInIcon,
   ZoomOutIcon,
@@ -122,6 +123,7 @@ type ReaderWorkspaceActions = {
   onRequestSelectionTranslation: () => void | Promise<void>;
   onSearchReaderSelection: () => void;
   onShowLibrary: () => void;
+  onShowOutline: () => void;
   onStepNormalizedZoom: (direction: 1 | -1) => void;
   onSelectionChange: (selection: ReaderTextSelection | null) => void;
   onCloseTranslationPopover: () => void;
@@ -209,6 +211,7 @@ export function ReaderWorkspace(props: Props) {
     onRequestSelectionTranslation,
     onSearchReaderSelection,
     onShowLibrary,
+    onShowOutline,
     onSelectionChange,
     onCloseTranslationPopover,
     setPdfPageCount,
@@ -322,6 +325,13 @@ export function ReaderWorkspace(props: Props) {
       {workspaceMode === "pdf_focus" && activePaper?.attachment_format === "pdf" ? (
         <section className="reader-panel reader-panel-focus">
           <div className="reader-toolbar reader-toolbar-focus" role="toolbar" aria-label="PDF focus toolbar">
+            {!isSidebarVisible ? (
+              <div className="reader-control-group reader-control-group-library">
+                <button aria-label="Show outline" aria-pressed="false" className="icon-button" title="Show outline" type="button" onClick={onShowOutline}>
+                  <SidebarIcon />
+                </button>
+              </div>
+            ) : null}
             <div className="reader-control-group reader-control-group-page">
               <button aria-label="Previous Page" className="icon-button" disabled={readerPage === 0} title="Previous Page" type="button" onClick={() => onReaderPageChange(readerPage - 1)}>
                 <ChevronLeftIcon />

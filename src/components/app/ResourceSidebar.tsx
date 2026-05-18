@@ -14,7 +14,9 @@ type Props = {
   libraryItems: LibraryItem[];
   activePdfOutlinePage?: number;
   focusPdfAttachmentId?: number | null;
+  focusPanel?: "library" | "outline";
   onGetPdfOutline?: (primaryAttachmentId: number) => Promise<PdfOutlineItem[]>;
+  onFocusPanelChange?: (panel: "library" | "outline") => void;
   onHideFocusSidebar?: () => void;
   onContextMenu: (event: ReactMouseEvent<HTMLElement>, detail: Exclude<ResourceContextMenuState, null>) => void;
   onCreateCollection: (parentId: number | null) => void | Promise<void>;
@@ -43,11 +45,13 @@ export function ResourceSidebar(props: Props) {
     lastImportResult,
     libraryItems,
     activePdfOutlinePage,
+    focusPanel: controlledFocusPanel,
     focusPdfAttachmentId,
     onContextMenu,
     onCreateCollection,
     onCancelCollectionInlineEdit,
     onDragCountChange,
+    onFocusPanelChange,
     onHideFocusSidebar,
     onGetPdfOutline,
     onImportPaths,
@@ -66,10 +70,16 @@ export function ResourceSidebar(props: Props) {
 
   const importHasIssues = Boolean(lastImportResult && (lastImportResult.duplicates.length > 0 || lastImportResult.failed.length > 0));
   const focusSidebarEnabled = Boolean(onHideFocusSidebar && focusPdfAttachmentId && onGetPdfOutline && onNavigatePdfOutline);
-  const [focusPanel, setFocusPanel] = useState<"library" | "outline">("library");
+  const [uncontrolledFocusPanel, setUncontrolledFocusPanel] = useState<"library" | "outline">("library");
+  const focusPanel = focusSidebarEnabled ? controlledFocusPanel ?? uncontrolledFocusPanel : "library";
   const [outlineItems, setOutlineItems] = useState<PdfOutlineItem[]>([]);
   const [outlineLoading, setOutlineLoading] = useState(false);
   const [outlineError, setOutlineError] = useState<string | null>(null);
+
+  const setFocusPanel = (panel: "library" | "outline") => {
+    setUncontrolledFocusPanel(panel);
+    onFocusPanelChange?.(panel);
+  };
 
   useEffect(() => {
     if (!focusSidebarEnabled || focusPanel !== "outline" || !focusPdfAttachmentId || !onGetPdfOutline) return;

@@ -34,6 +34,7 @@ const ITEM_SORT_KEY = "paper-reader.item-sort";
 const ATTACHMENT_FILTER_KEY = "paper-reader.attachment-filter";
 const READER_FIT_MODE_KEY = "paper-reader.reader-fit-mode";
 const READER_ZOOM_KEY = "paper-reader.reader-zoom";
+type FocusSidebarPanel = "library" | "outline";
 
 const emptyAiSettingsDraft = (): UpdateAISettingsInput => ({
   active_provider: "openai",
@@ -68,6 +69,7 @@ export default function App({ api }: { api: AppApi }) {
   const getApi = useCallback(() => Promise.resolve(api), [api]);
   const [statusMessage, setStatusMessage] = useState("");
   const [isSidebarVisible, setIsSidebarVisible] = useState(() => readStoredBoolean(SIDEBAR_OPEN_KEY, true));
+  const [focusSidebarPanel, setFocusSidebarPanel] = useState<FocusSidebarPanel>("library");
   const [sidebarWidth, setSidebarWidth] = useState(() => readStoredNumber(SIDEBAR_WIDTH_KEY, DEFAULT_SIDEBAR_WIDTH));
   const [aiPanelWidth, setAiPanelWidth] = useState(() => readStoredNumber(AI_PANEL_WIDTH_KEY, DEFAULT_AI_PANEL_WIDTH));
   const [deleteTarget, setDeleteTarget] = useState<DeleteConfirmTarget | null>(null);
@@ -241,6 +243,8 @@ export default function App({ api }: { api: AppApi }) {
     ai.setIsAiSessionHistoryOpen(false);
     ai.setAiDockOpen({ artifacts: false, history: false, notes: false });
     if (ai.isReferencePickerOpen) ai.toggleAiReferencePicker();
+    setFocusSidebarPanel("outline");
+    setIsSidebarVisible(false);
     closeReaderFloatingUi();
   }, [ai, closeReaderFloatingUi, readerState.workspaceMode]);
 
@@ -555,6 +559,7 @@ export default function App({ api }: { api: AppApi }) {
           creatingCollectionParentId={library.creatingCollectionParentId}
           draggedFileCount={library.draggedFileCount}
           activePdfOutlinePage={readerState.readerPage}
+          focusPanel={focusSidebarPanel}
           focusPdfAttachmentId={isPdfFocusMode ? activePaper?.primary_attachment_id ?? null : null}
           lastImportResult={library.lastImportResult}
           libraryItems={library.libraryItems}
@@ -562,6 +567,7 @@ export default function App({ api }: { api: AppApi }) {
           onContextMenu={library.openResourceContextMenu}
           onCreateCollection={library.handleCreateCollection}
           onDragCountChange={library.setDraggedFileCount}
+          onFocusPanelChange={setFocusSidebarPanel}
           onHideFocusSidebar={isPdfFocusMode ? () => setIsSidebarVisible(false) : undefined}
           onGetPdfOutline={readerState.getPdfOutline}
           onImportPaths={library.importPaths}
@@ -651,7 +657,7 @@ export default function App({ api }: { api: AppApi }) {
           onRemovePdfInkAnnotation: readerState.handleRemovePdfInkAnnotation,
           onUpdatePdfTextBoxAnnotation: readerState.handleUpdatePdfTextBoxAnnotation,
           onRemovePdfTextBoxAnnotation: readerState.handleRemovePdfTextBoxAnnotation,
-          onExitFocus: () => { readerState.setWorkspaceMode("workspace"); setIsSidebarVisible(true); },
+          onExitFocus: () => { readerState.setWorkspaceMode("workspace"); setFocusSidebarPanel("library"); setIsSidebarVisible(true); },
           onFindQueryChange: readerState.setReaderSearchQuery,
           onMoveMatch: (direction) => readerState.setReaderSearchMatchIndex((current: number) => current + direction),
           onPdfZoomChange: readerState.setPdfZoomManual,
@@ -668,6 +674,7 @@ export default function App({ api }: { api: AppApi }) {
             if (selection) readerState.dismissActivePdfHighlight();
           },
           onShowLibrary: () => setIsSidebarVisible(true),
+          onShowOutline: () => { setFocusSidebarPanel("outline"); setIsSidebarVisible(true); },
           onStepNormalizedZoom: readerState.stepNormalizedZoom,
           openFindHud: readerState.openFindHud,
           setPdfPageCount: (pageCount) => activePaper && readerState.setPdfPageCounts((current: Record<number, number>) => current[activePaper.id] === pageCount ? current : { ...current, [activePaper.id]: pageCount }),
