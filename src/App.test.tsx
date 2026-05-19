@@ -401,6 +401,26 @@ describe("App reading workspace", () => {
     );
   });
 
+  it("opens PDF selection actions on right-button pointer down before the native context menu", async () => {
+    const user = userEvent.setup();
+    render(<App api={fakeApi} />);
+    await user.dblClick(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(screen.getByRole("button", { name: "Mock select PDF text" }));
+
+    const pdfReader = screen.getByTestId("pdf-reader");
+    const event = new MouseEvent("pointerdown", {
+      bubbles: true,
+      cancelable: true,
+      button: 2,
+      clientX: 140,
+      clientY: 150,
+    });
+    pdfReader.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(await screen.findByRole("menu", { name: "Reader selection actions" })).toBeInTheDocument();
+  });
+
   it("opens Copilot with the current paper on Ctrl+J without a selection", async () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);

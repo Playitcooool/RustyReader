@@ -42,7 +42,7 @@ import {
   normalizePdfEraserSize,
   normalizePdfInkWidth,
 } from "../readers/pdfInkAnchor";
-import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type RefObject } from "react";
 
 const pdfHighlightColors = ["yellow", "red", "green", "blue", "purple"] as const satisfies readonly PdfHighlightColor[];
 
@@ -216,6 +216,7 @@ export function ReaderWorkspace(props: Props) {
     onCloseTranslationPopover,
     setPdfPageCount,
   } = props.actions;
+  const readerShellRef = useRef<HTMLElement | null>(null);
   const [readerContextMenu, setReaderContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [isPdfTextBoxToolActive, setIsPdfTextBoxToolActive] = useState(false);
   const [pdfInkTool, setPdfInkTool] = useState<"none" | "pencil" | "eraser">("none");
@@ -258,6 +259,42 @@ export function ReaderWorkspace(props: Props) {
     if (!selectionForActions?.quote.trim()) setReaderContextMenu(null);
   }, [selectionForActions]);
 
+  const openReaderSelectionMenu = useCallback(
+    (event: Pick<MouseEvent | PointerEvent, "target" | "clientX" | "clientY" | "preventDefault" | "stopPropagation">) => {
+      if (!selectionForActions?.quote.trim()) return false;
+      const target = event.target;
+      if (!(target instanceof Element)) return false;
+      const reader = target.closest(".pdf-reader, [data-testid='pdf-reader']");
+      if (!reader) return false;
+      if (reader.querySelector(".textLayer") && !target.closest(".textLayer")) return false;
+      event.preventDefault();
+      event.stopPropagation();
+      setReaderContextMenu({ x: event.clientX, y: event.clientY });
+      return true;
+    },
+    [selectionForActions],
+  );
+
+  useEffect(() => {
+    const shell = readerShellRef.current;
+    if (!shell) return;
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.button !== 2 && !(event.button === 0 && event.ctrlKey)) return;
+      openReaderSelectionMenu(event);
+    };
+    const onContextMenu = (event: MouseEvent) => {
+      openReaderSelectionMenu(event);
+    };
+
+    shell.addEventListener("pointerdown", onPointerDown, true);
+    shell.addEventListener("contextmenu", onContextMenu, true);
+    return () => {
+      shell.removeEventListener("pointerdown", onPointerDown, true);
+      shell.removeEventListener("contextmenu", onContextMenu, true);
+    };
+  }, [openReaderSelectionMenu]);
+
   const readerContextMenuStyle = useMemo(() => {
     if (!readerContextMenu) return {};
     const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -288,17 +325,11 @@ export function ReaderWorkspace(props: Props) {
 
   return (
     <main
+      ref={readerShellRef}
       className={`reader-shell ${workspaceMode === "pdf_focus" ? "reader-shell-focus" : "reader-shell-workspace"}`}
       onClick={() => setReaderContextMenu(null)}
       onContextMenu={(event) => {
-        if (!selectionForActions?.quote.trim()) return;
-        const target = event.target;
-        if (!(target instanceof Element)) return;
-        const reader = target.closest(".pdf-reader, [data-testid='pdf-reader']");
-        if (!reader) return;
-        if (reader.querySelector(".textLayer") && !target.closest(".textLayer")) return;
-        event.preventDefault();
-        setReaderContextMenu({ x: event.clientX, y: event.clientY });
+        openReaderSelectionMenu(event.nativeEvent);
       }}
     >
       <div className={`reader-tabs ${workspaceMode === "pdf_focus" ? "reader-tabs-focus" : ""}`} role="tablist" aria-label="Open papers">
