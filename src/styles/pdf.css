@@ -243,12 +243,19 @@
   position: absolute;
   inset: 100% 0 0;
   z-index: 0;
+  color: transparent;
+  background: transparent;
   cursor: default;
+  pointer-events: none;
   user-select: none;
 }
 
 .pdf-reader .textLayer.selecting .endOfContent {
   top: 0;
+}
+
+.pdf-reader .textLayer .endOfContent::selection {
+  background: transparent;
 }
 
 .pdf-reader .textLayer .pdf-annotation-highlight {
