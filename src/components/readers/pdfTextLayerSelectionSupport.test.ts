@@ -53,6 +53,38 @@ describe("pdfTextLayerSelectionSupport", () => {
     }
   });
 
+  it("resets the expanded selection helper before opening a context menu", () => {
+    const host = document.createElement("div");
+    host.className = "textLayer";
+    const span = document.createElement("span");
+    span.setAttribute("role", "presentation");
+    span.textContent = "hello world";
+    host.appendChild(span);
+
+    const uninstall = installPdfJsTextLayerSelectionSupport(host);
+    try {
+      document.body.appendChild(host);
+      const selection = document.getSelection();
+      const range = document.createRange();
+      range.setStart(span.firstChild ?? span, 0);
+      range.setEnd(span.firstChild ?? span, 5);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+
+      expect(host.classList.contains("selecting")).toBe(true);
+      expect(selection?.toString()).toBe("hello");
+
+      document.dispatchEvent(new Event("contextmenu"));
+
+      expect(host.classList.contains("selecting")).toBe(false);
+      expect(selection?.toString()).toBe("hello");
+    } finally {
+      host.remove();
+      uninstall();
+    }
+  });
+
   it("falls back when Range.intersectsNode is unavailable/throws", () => {
     const host = document.createElement("div");
     host.className = "textLayer";

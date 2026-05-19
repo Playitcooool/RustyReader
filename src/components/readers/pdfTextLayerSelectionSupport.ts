@@ -15,6 +15,11 @@ const resetTextLayer = (endDiv: HTMLDivElement, textLayerDiv: HTMLElement) => {
   textLayerDiv.classList.remove("selecting");
 };
 
+const resetAllTextLayers = () => {
+  for (const [textLayerDiv, endDiv] of textLayers) resetTextLayer(endDiv, textLayerDiv);
+  prevRange = null;
+};
+
 const rangeIntersectsNodeSafely = (range: Range, node: Node) => {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -42,24 +47,28 @@ const installGlobalListenersIfNeeded = () => {
   };
   const onPointerUp = () => {
     isPointerDown = false;
-    for (const [textLayerDiv, endDiv] of textLayers) resetTextLayer(endDiv, textLayerDiv);
-    prevRange = null;
+    resetAllTextLayers();
+  };
+  const onPointerCancel = () => {
+    isPointerDown = false;
+    resetAllTextLayers();
+  };
+  const onContextMenu = () => {
+    isPointerDown = false;
+    resetAllTextLayers();
   };
   const onBlur = () => {
     isPointerDown = false;
-    for (const [textLayerDiv, endDiv] of textLayers) resetTextLayer(endDiv, textLayerDiv);
-    prevRange = null;
+    resetAllTextLayers();
   };
   const onKeyUp = () => {
     if (isPointerDown) return;
-    for (const [textLayerDiv, endDiv] of textLayers) resetTextLayer(endDiv, textLayerDiv);
-    prevRange = null;
+    resetAllTextLayers();
   };
   const onSelectionChange = () => {
     const selection = document.getSelection?.();
     if (!selection || selection.rangeCount === 0) {
-      for (const [textLayerDiv, endDiv] of textLayers) resetTextLayer(endDiv, textLayerDiv);
-      prevRange = null;
+      resetAllTextLayers();
       return;
     }
 
@@ -145,6 +154,8 @@ const installGlobalListenersIfNeeded = () => {
 
   document.addEventListener("pointerdown", onPointerDown);
   document.addEventListener("pointerup", onPointerUp);
+  document.addEventListener("pointercancel", onPointerCancel);
+  document.addEventListener("contextmenu", onContextMenu, true);
   window.addEventListener("blur", onBlur);
   document.addEventListener("keyup", onKeyUp);
   document.addEventListener("selectionchange", onSelectionChange);
@@ -153,6 +164,8 @@ const installGlobalListenersIfNeeded = () => {
   (installGlobalListenersIfNeeded as unknown as { teardown?: Uninstall }).teardown = () => {
     document.removeEventListener("pointerdown", onPointerDown);
     document.removeEventListener("pointerup", onPointerUp);
+    document.removeEventListener("pointercancel", onPointerCancel);
+    document.removeEventListener("contextmenu", onContextMenu, true);
     window.removeEventListener("blur", onBlur);
     document.removeEventListener("keyup", onKeyUp);
     document.removeEventListener("selectionchange", onSelectionChange);
