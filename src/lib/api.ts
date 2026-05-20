@@ -191,6 +191,7 @@ export async function createTauriApi(): Promise<AppApi> {
     updateAnnotation: (input) => invoke("update_annotation", { input }),
     removeAnnotation: (input) => invoke("remove_annotation", { input }),
     getAiSettings: () => invoke("get_ai_settings"),
+    getSystemAiEnv: () => invoke("get_system_ai_env"),
     updateAiSettings: (input) => invoke("update_ai_settings", { input }),
     getConnectorSettings: () => invoke("get_connector_settings"),
     regenerateConnectorToken: () => invoke("regenerate_connector_token"),

@@ -943,6 +943,8 @@ describe("App reading workspace", () => {
     expect(getAiSettingsSpy).toHaveBeenCalled();
     expect(getConnectorSettingsSpy).toHaveBeenCalled();
     expect(screen.getByRole("heading", { name: "General" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Connector URL")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Chrome Connector/ }));
     expect(screen.getByLabelText("Connector URL")).toHaveValue("http://127.0.0.1:17654");
     expect(screen.getByLabelText("Connector token")).toHaveValue("mock-connector-token");
     await user.click(screen.getByRole("button", { name: "Regenerate token" }));
@@ -950,7 +952,7 @@ describe("App reading workspace", () => {
       expect(regenerateConnectorTokenSpy).toHaveBeenCalled();
       expect(screen.getByLabelText("Connector token")).not.toHaveValue("mock-connector-token");
     });
-    expect(screen.getByText("AI Providers")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Translation/ }));
     expect(screen.getByLabelText("Translation OpenAI model")).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("Translation provider"), "anthropic");
     expect(screen.getByLabelText("Translation Anthropic model")).toBeInTheDocument();
@@ -962,11 +964,13 @@ describe("App reading workspace", () => {
     await user.selectOptions(screen.getByLabelText("Translation provider"), "openai");
     await user.type(screen.getByLabelText("Translation OpenAI model"), "gpt-4.1-mini-translator");
 
+    await user.click(screen.getByRole("button", { name: /General/ }));
     await user.selectOptions(screen.getByLabelText("Default paper sort"), "title");
     await user.selectOptions(screen.getByLabelText("Default attachment filter"), "citation_only");
     await user.selectOptions(screen.getByLabelText("PDF default fit mode"), "manual");
     fireEvent.change(screen.getByLabelText("PDF default zoom"), { target: { value: "130" } });
 
+    await user.click(screen.getByRole("button", { name: /AI Providers/ }));
     await user.clear(screen.getByLabelText("OpenAI model"));
     await user.type(screen.getByLabelText("OpenAI model"), "gpt-4.1");
     await user.type(screen.getByLabelText("OpenAI API key"), "new-openai-key");
@@ -994,6 +998,7 @@ describe("App reading workspace", () => {
 
     menuListeners.get("menu:open-settings")?.();
     expect(await screen.findByRole("dialog", { name: "Settings" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /AI Providers/ }));
     await user.click(screen.getAllByRole("button", { name: "Clear saved key" })[0]);
     expect(updateAiSettingsSpy).not.toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1006,6 +1011,45 @@ describe("App reading workspace", () => {
       expect(updateAiSettingsSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           clear_openai_api_key: true,
+        }),
+      );
+    });
+  });
+
+  it("loads AI provider values from env-style settings", async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).__TAURI_INTERNALS__ = {
+      transformCallback: (callback: unknown) => callback,
+      invoke: vi.fn(async () => null),
+    };
+    const user = userEvent.setup();
+    const getSystemAiEnvSpy = vi.spyOn(fakeApi, "getSystemAiEnv");
+    const updateAiSettingsSpy = vi.spyOn(fakeApi, "updateAiSettings");
+    render(<App api={fakeApi} />);
+
+    expect(await screen.findByRole("tree", { name: "Library resources" })).toBeInTheDocument();
+    menuListeners.get("menu:open-settings")?.();
+    await user.click(await screen.findByRole("button", { name: /AI Providers/ }));
+    await user.click(screen.getByRole("button", { name: "Read system AI env variables" }));
+
+    await waitFor(() => {
+      expect(getSystemAiEnvSpy).toHaveBeenCalled();
+      expect(screen.getByLabelText("AI environment variables")).toHaveValue(
+        "ANTHROPIC_MODEL=claude-env-model\nANTHROPIC_API_KEY=env-anthropic-key\nANTHROPIC_BASE_URL=https://env.anthropic.example/v1",
+      );
+    });
+
+    await user.click(screen.getByRole("tab", { name: "Anthropic" }));
+    expect(screen.getByLabelText("Anthropic model")).toHaveValue("claude-env-model");
+    expect(screen.getByLabelText("Anthropic base URL")).toHaveValue("https://env.anthropic.example/v1");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(updateAiSettingsSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          anthropic_model: "claude-env-model",
+          anthropic_base_url: "https://env.anthropic.example/v1",
+          anthropic_api_key: "env-anthropic-key",
         }),
       );
     });

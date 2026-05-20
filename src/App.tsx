@@ -65,6 +65,37 @@ const draftFromAiSettings = (settings: AISettings): UpdateAISettingsInput => ({
   deepl_base_url: settings.deepl_base_url,
 });
 
+const parseAiEnvSettings = (text: string) => {
+  const env: Record<string, string> = {};
+  text.split(/\r?\n/).forEach((rawLine) => {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) return;
+    const normalized = line.startsWith("export ") ? line.slice("export ".length).trim() : line;
+    const separatorIndex = normalized.indexOf("=");
+    if (separatorIndex <= 0) return;
+    const key = normalized.slice(0, separatorIndex).trim();
+    let value = normalized.slice(separatorIndex + 1).trim();
+    const quote = value[0];
+    if ((quote === "\"" || quote === "'") && value.endsWith(quote)) {
+      value = value.slice(1, -1);
+    }
+    if (key) env[key] = value;
+  });
+  return env;
+};
+
+const applyAiEnvSettings = (draft: UpdateAISettingsInput, text: string): UpdateAISettingsInput => {
+  const env = parseAiEnvSettings(text);
+  return {
+    ...draft,
+    openai_model: env.OPENAI_MODEL ?? draft.openai_model,
+    openai_base_url: env.OPENAI_BASE_URL ?? draft.openai_base_url,
+    anthropic_model: env.ANTHROPIC_MODEL ?? draft.anthropic_model,
+    anthropic_base_url: env.ANTHROPIC_BASE_URL ?? draft.anthropic_base_url,
+    deepl_base_url: env.DEEPL_BASE_URL ?? draft.deepl_base_url,
+  };
+};
+
 export default function App({ api }: { api: AppApi }) {
   const getApi = useCallback(() => Promise.resolve(api), [api]);
   const [statusMessage, setStatusMessage] = useState("");
@@ -86,6 +117,7 @@ export default function App({ api }: { api: AppApi }) {
   const [openAiApiKeyDraft, setOpenAiApiKeyDraft] = useState("");
   const [anthropicApiKeyDraft, setAnthropicApiKeyDraft] = useState("");
   const [deeplApiKeyDraft, setDeeplApiKeyDraft] = useState("");
+  const [aiEnvDraft, setAiEnvDraft] = useState("");
   const [connectorSettings, setConnectorSettings] = useState<ConnectorSettings | null>(null);
   const appShellRef = useRef<HTMLDivElement | null>(null);
   const aiComposerInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -291,6 +323,7 @@ export default function App({ api }: { api: AppApi }) {
     setOpenAiApiKeyDraft("");
     setAnthropicApiKeyDraft("");
     setDeeplApiKeyDraft("");
+    setAiEnvDraft("");
     setIsSettingsOpen(true);
   }, [getApi]);
 
@@ -299,14 +332,17 @@ export default function App({ api }: { api: AppApi }) {
     setOpenAiApiKeyDraft("");
     setAnthropicApiKeyDraft("");
     setDeeplApiKeyDraft("");
+    setAiEnvDraft("");
   }, []);
 
   const handleSaveAiSettings = useCallback(async () => {
+    const envSettings = parseAiEnvSettings(aiEnvDraft);
+    const mergedAiSettingsDraft = applyAiEnvSettings(aiSettingsDraft, aiEnvDraft);
     const next = await (await getApi()).updateAiSettings({
-      ...aiSettingsDraft,
-      openai_api_key: openAiApiKeyDraft.trim() ? openAiApiKeyDraft : undefined,
-      anthropic_api_key: anthropicApiKeyDraft.trim() ? anthropicApiKeyDraft : undefined,
-      deepl_api_key: deeplApiKeyDraft.trim() ? deeplApiKeyDraft : undefined,
+      ...mergedAiSettingsDraft,
+      openai_api_key: envSettings.OPENAI_API_KEY || (openAiApiKeyDraft.trim() ? openAiApiKeyDraft : undefined),
+      anthropic_api_key: envSettings.ANTHROPIC_API_KEY || (anthropicApiKeyDraft.trim() ? anthropicApiKeyDraft : undefined),
+      deepl_api_key: envSettings.DEEPL_API_KEY || (deeplApiKeyDraft.trim() ? deeplApiKeyDraft : undefined),
     });
     setIsSidebarVisible(generalSettingsDraft.resourcesSidebarOpen);
     library.setItemSort?.(generalSettingsDraft.defaultItemSort);
@@ -318,9 +354,10 @@ export default function App({ api }: { api: AppApi }) {
     setOpenAiApiKeyDraft("");
     setAnthropicApiKeyDraft("");
     setDeeplApiKeyDraft("");
+    setAiEnvDraft("");
     setIsSettingsOpen(false);
     setStatusMessage("Saved settings.");
-  }, [aiSettingsDraft, anthropicApiKeyDraft, deeplApiKeyDraft, generalSettingsDraft, getApi, library, openAiApiKeyDraft, readerState]);
+  }, [aiEnvDraft, aiSettingsDraft, anthropicApiKeyDraft, deeplApiKeyDraft, generalSettingsDraft, getApi, library, openAiApiKeyDraft, readerState]);
 
   const handleClearSavedKey = useCallback(async (provider: AIProvider | "deepl") => {
     const next = await (await getApi()).updateAiSettings({
@@ -336,6 +373,13 @@ export default function App({ api }: { api: AppApi }) {
     else setDeeplApiKeyDraft("");
     setStatusMessage(`${provider === "openai" ? "OpenAI" : provider === "anthropic" ? "Anthropic" : "DeepL"} API key cleared.`);
   }, [aiSettingsDraft, getApi]);
+
+  const handleReadSystemAiEnv = useCallback(async () => {
+    const next = await (await getApi()).getSystemAiEnv();
+    setAiEnvDraft(next.text);
+    setAiSettingsDraft((current) => applyAiEnvSettings(current, next.text));
+    setStatusMessage(next.text.trim() ? "Loaded AI env variables." : "No AI env variables found.");
+  }, [getApi]);
 
   const handleRegenerateConnectorToken = useCallback(async () => {
     const next = await (await getApi()).regenerateConnectorToken();
@@ -774,6 +818,7 @@ export default function App({ api }: { api: AppApi }) {
           openAiApiKeyDraft={openAiApiKeyDraft}
           anthropicApiKeyDraft={anthropicApiKeyDraft}
           deeplApiKeyDraft={deeplApiKeyDraft}
+          aiEnvDraft={aiEnvDraft}
           readerMinZoom={70}
           readerMaxZoom={180}
           defaultReaderZoom={DEFAULT_READER_ZOOM}
@@ -782,12 +827,14 @@ export default function App({ api }: { api: AppApi }) {
           onOpenAiApiKeyDraftChange={setOpenAiApiKeyDraft}
           onAnthropicApiKeyDraftChange={setAnthropicApiKeyDraft}
           onDeeplApiKeyDraftChange={setDeeplApiKeyDraft}
+          onAiEnvDraftChange={setAiEnvDraft}
           onClampReaderZoom={(value) => clamp(value, 70, 180)}
           onResetLayoutWidths={() => {
             setSidebarWidth(DEFAULT_SIDEBAR_WIDTH);
             setAiPanelWidth(DEFAULT_AI_PANEL_WIDTH);
           }}
           onClearSavedKey={(provider) => void handleClearSavedKey(provider)}
+          onReadSystemAiEnv={() => void handleReadSystemAiEnv()}
           onRegenerateConnectorToken={() => void handleRegenerateConnectorToken()}
           onCancel={closeSettingsDialog}
           onSave={() => void handleSaveAiSettings()}

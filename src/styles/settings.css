@@ -103,8 +103,11 @@
   border-radius: 12px;
   border: 1px solid transparent;
   color: inherit;
+  font: inherit;
+  text-align: left;
   text-decoration: none;
   background: transparent;
+  cursor: pointer;
 }
 
 .settings-nav-item:hover {
@@ -207,6 +210,13 @@
 
 .settings-input::placeholder {
   color: rgba(244, 239, 230, 0.38);
+}
+
+.settings-textarea {
+  min-height: 118px;
+  resize: vertical;
+  line-height: 1.45;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 .settings-input:hover {

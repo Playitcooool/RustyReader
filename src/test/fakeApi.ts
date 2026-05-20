@@ -1089,6 +1089,16 @@ export const fakeApi: AppApi = {
     return publicAiSettings();
   },
 
+  async getSystemAiEnv() {
+    return {
+      text: [
+        "ANTHROPIC_MODEL=claude-env-model",
+        "ANTHROPIC_API_KEY=env-anthropic-key",
+        "ANTHROPIC_BASE_URL=https://env.anthropic.example/v1",
+      ].join("\n"),
+    };
+  },
+
   async updateAiSettings(input: UpdateAISettingsInput) {
     state.aiSettings.active_provider = input.active_provider as AIProvider;
     state.aiSettings.openai_model = input.openai_model;

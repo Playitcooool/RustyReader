@@ -180,6 +180,10 @@ export type AISettings = {
   has_deepl_api_key: boolean;
 };
 
+export type AIEnvSettings = {
+  text: string;
+};
+
 export type ConnectorSettings = {
   connector_url: string;
   port: number;
@@ -411,6 +415,7 @@ export type AppApi = {
   }) => Promise<Annotation>;
   removeAnnotation: (input: { annotation_id: number }) => Promise<void>;
   getAiSettings: () => Promise<AISettings>;
+  getSystemAiEnv: () => Promise<AIEnvSettings>;
   updateAiSettings: (input: UpdateAISettingsInput) => Promise<AISettings>;
   getConnectorSettings: () => Promise<ConnectorSettings>;
   regenerateConnectorToken: () => Promise<ConnectorSettings>;

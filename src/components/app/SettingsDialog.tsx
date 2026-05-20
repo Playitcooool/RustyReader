@@ -12,6 +12,15 @@ export type GeneralSettingsDraft = {
   defaultReaderZoom: number;
 };
 
+type SettingsSection = "general" | "translation" | "connector" | "ai";
+
+const settingsSections: Array<{ id: SettingsSection; title: string; meta: string }> = [
+  { id: "general", title: "General", meta: "Workspace defaults" },
+  { id: "translation", title: "Translation", meta: "Selection output" },
+  { id: "connector", title: "Chrome Connector", meta: "Local import" },
+  { id: "ai", title: "AI Providers", meta: "Model profiles" },
+];
+
 export function SettingsDialog({
   generalSettingsDraft,
   aiSettings,
@@ -20,6 +29,7 @@ export function SettingsDialog({
   openAiApiKeyDraft,
   anthropicApiKeyDraft,
   deeplApiKeyDraft,
+  aiEnvDraft,
   readerMinZoom,
   readerMaxZoom,
   defaultReaderZoom,
@@ -28,9 +38,11 @@ export function SettingsDialog({
   onOpenAiApiKeyDraftChange,
   onAnthropicApiKeyDraftChange,
   onDeeplApiKeyDraftChange,
+  onAiEnvDraftChange,
   onClampReaderZoom,
   onResetLayoutWidths,
   onClearSavedKey,
+  onReadSystemAiEnv,
   onRegenerateConnectorToken,
   onCancel,
   onSave,
@@ -42,6 +54,7 @@ export function SettingsDialog({
   openAiApiKeyDraft: string;
   anthropicApiKeyDraft: string;
   deeplApiKeyDraft: string;
+  aiEnvDraft: string;
   readerMinZoom: number;
   readerMaxZoom: number;
   defaultReaderZoom: number;
@@ -50,14 +63,17 @@ export function SettingsDialog({
   onOpenAiApiKeyDraftChange: (value: string) => void;
   onAnthropicApiKeyDraftChange: (value: string) => void;
   onDeeplApiKeyDraftChange: (value: string) => void;
+  onAiEnvDraftChange: (value: string) => void;
   onClampReaderZoom: (value: number) => number;
   onResetLayoutWidths: () => void;
   onClearSavedKey: (provider: AIProvider | "deepl") => void;
+  onReadSystemAiEnv: () => void;
   onRegenerateConnectorToken: () => void;
   onCancel: () => void;
   onSave: () => void;
 }) {
   const [pendingClearKeyProvider, setPendingClearKeyProvider] = useState<AIProvider | "deepl" | null>(null);
+  const [activeSection, setActiveSection] = useState<SettingsSection>("general");
   const cancelSettings = () => {
     setPendingClearKeyProvider(null);
     onCancel();
@@ -103,25 +119,25 @@ export function SettingsDialog({
 
         <div className="settings-layout">
           <nav className="settings-nav" aria-label="Settings sections">
-            <a className="settings-nav-item settings-nav-item-active" href="#settings-general-heading">
-              <span className="settings-nav-title" role="heading" aria-level={3}>General</span>
-              <span className="settings-nav-meta">Workspace defaults</span>
-            </a>
-            <a className="settings-nav-item" href="#settings-translation-heading">
-              <span className="settings-nav-title" role="heading" aria-level={3}>Translation</span>
-              <span className="settings-nav-meta">Selection output</span>
-            </a>
-            <a className="settings-nav-item" href="#settings-connector-heading">
-              <span className="settings-nav-title" role="heading" aria-level={3}>Chrome Connector</span>
-              <span className="settings-nav-meta">Local import</span>
-            </a>
-            <a className="settings-nav-item" href="#settings-ai-heading">
-              <span className="settings-nav-title" role="heading" aria-level={3}>AI Providers</span>
-              <span className="settings-nav-meta">Model profiles</span>
-            </a>
+            {settingsSections.map((section) => (
+              <button
+                key={section.id}
+                aria-current={activeSection === section.id ? "page" : undefined}
+                className={`settings-nav-item ${activeSection === section.id ? "settings-nav-item-active" : ""}`}
+                type="button"
+                onClick={() => {
+                  setPendingClearKeyProvider(null);
+                  setActiveSection(section.id);
+                }}
+              >
+                <span className="settings-nav-title" role="heading" aria-level={3}>{section.title}</span>
+                <span className="settings-nav-meta">{section.meta}</span>
+              </button>
+            ))}
           </nav>
 
           <div className="settings-sections">
+            {activeSection === "general" ? (
             <section className="settings-section-card" aria-labelledby="settings-general-heading">
             <div className="settings-section-heading">
               <p className="eyebrow">Workspace</p>
@@ -223,7 +239,9 @@ export function SettingsDialog({
               </button>
             </div>
           </section>
+            ) : null}
 
+          {activeSection === "translation" ? (
           <section className="settings-section-card" aria-labelledby="settings-translation-heading">
             <div className="settings-section-heading">
               <p className="eyebrow">Translation</p>
@@ -320,7 +338,9 @@ export function SettingsDialog({
               {renderClearKeyButton("deepl", "Clear DeepL key")}
             </div>
           </section>
+          ) : null}
 
+          {activeSection === "connector" ? (
           <section className="settings-section-card" aria-labelledby="settings-connector-heading">
             <div className="settings-section-heading">
               <p className="eyebrow">Chrome Connector</p>
@@ -364,11 +384,29 @@ export function SettingsDialog({
               </button>
             </div>
           </section>
+          ) : null}
 
+          {activeSection === "ai" ? (
           <section className="settings-section-card" aria-labelledby="settings-ai-heading">
             <div className="settings-section-heading">
               <p className="eyebrow">Provider Profiles</p>
               <h3 id="settings-ai-heading">Provider Setup</h3>
+            </div>
+            <label className="settings-field">
+              <span>Environment variables</span>
+              <textarea
+                aria-label="AI environment variables"
+                className="settings-input settings-textarea"
+                placeholder={"ANTHROPIC_MODEL=claude-...\nANTHROPIC_API_KEY=sk-...\nANTHROPIC_BASE_URL=https://api.anthropic.com/v1"}
+                value={aiEnvDraft}
+                onChange={(event) => onAiEnvDraftChange(event.target.value)}
+              />
+            </label>
+            <div className="settings-provider-actions settings-provider-actions-inline">
+              <span className="settings-inline-note">Paste KEY=value lines here; saved values override the matching provider fields.</span>
+              <button aria-label="Read system AI env variables" className="icon-button" title="Read system AI env variables" type="button" onClick={onReadSystemAiEnv}>
+                <RefreshIcon />
+              </button>
             </div>
             <div className="settings-provider-tabs" role="tablist" aria-label="Active AI provider">
               {(["openai", "anthropic"] as const).map((provider) => (
@@ -489,6 +527,7 @@ export function SettingsDialog({
               </div>
             )}
           </section>
+          ) : null}
           </div>
         </div>
 

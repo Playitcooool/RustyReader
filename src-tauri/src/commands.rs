@@ -4,7 +4,8 @@ use app_core::service::{
     ImportMode, LibraryItem, ResearchNote, Tag, TranslateSelectionResult, TranslationProvider,
     UpdateAISettingsInput,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use std::env;
 use std::path::PathBuf;
 use tauri::State;
 
@@ -128,6 +129,11 @@ pub(crate) struct UpdateAiSettingsPayload {
     deepl_base_url: String,
     deepl_api_key: Option<String>,
     clear_deepl_api_key: Option<bool>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct AIEnvSettingsPayload {
+    text: String,
 }
 
 #[derive(Deserialize)]
@@ -330,6 +336,26 @@ pub(crate) fn get_ai_settings(state: State<'_, AppState>) -> Result<AISettings, 
     service(&state)
         .get_ai_settings()
         .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) fn get_system_ai_env() -> Result<AIEnvSettingsPayload, String> {
+    let keys = [
+        "OPENAI_MODEL",
+        "OPENAI_API_KEY",
+        "OPENAI_BASE_URL",
+        "ANTHROPIC_MODEL",
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_BASE_URL",
+        "DEEPL_API_KEY",
+        "DEEPL_BASE_URL",
+    ];
+    let text = keys
+        .into_iter()
+        .filter_map(|key| env::var(key).ok().map(|value| format!("{key}={value}")))
+        .collect::<Vec<_>>()
+        .join("\n");
+    Ok(AIEnvSettingsPayload { text })
 }
 
 #[tauri::command]

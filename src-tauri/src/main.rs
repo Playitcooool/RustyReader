@@ -602,6 +602,7 @@ fn main() {
             commands::remove_annotation,
             commands::update_annotation,
             commands::get_ai_settings,
+            commands::get_system_ai_env,
             commands::update_ai_settings,
             commands::translate_selection,
             commands::list_ai_sessions,
