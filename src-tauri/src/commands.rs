@@ -341,12 +341,18 @@ pub(crate) fn get_ai_settings(state: State<'_, AppState>) -> Result<AISettings, 
 #[tauri::command]
 pub(crate) fn get_system_ai_env() -> Result<AIEnvSettingsPayload, String> {
     let keys = [
+        "AI_PROVIDER",
+        "ACTIVE_PROVIDER",
         "OPENAI_MODEL",
         "OPENAI_API_KEY",
         "OPENAI_BASE_URL",
         "ANTHROPIC_MODEL",
         "ANTHROPIC_API_KEY",
         "ANTHROPIC_BASE_URL",
+        "TRANSLATION_PROVIDER",
+        "TRANSLATION_TARGET_LANG",
+        "TRANSLATION_OPENAI_MODEL",
+        "TRANSLATION_ANTHROPIC_MODEL",
         "DEEPL_API_KEY",
         "DEEPL_BASE_URL",
     ];

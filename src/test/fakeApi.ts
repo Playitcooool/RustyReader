@@ -1092,9 +1092,16 @@ export const fakeApi: AppApi = {
   async getSystemAiEnv() {
     return {
       text: [
+        "AI_PROVIDER=anthropic",
+        "OPENAI_MODEL=gpt-env-model",
+        "OPENAI_API_KEY=env-openai-key",
+        "OPENAI_BASE_URL=https://env.openai.example/v1",
         "ANTHROPIC_MODEL=claude-env-model",
         "ANTHROPIC_API_KEY=env-anthropic-key",
         "ANTHROPIC_BASE_URL=https://env.anthropic.example/v1",
+        "TRANSLATION_PROVIDER=openai",
+        "TRANSLATION_TARGET_LANG=JA",
+        "TRANSLATION_OPENAI_MODEL=gpt-env-translator",
       ].join("\n"),
     };
   },

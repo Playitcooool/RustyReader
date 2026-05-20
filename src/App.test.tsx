@@ -953,16 +953,11 @@ describe("App reading workspace", () => {
       expect(screen.getByLabelText("Connector token")).not.toHaveValue("mock-connector-token");
     });
     await user.click(screen.getByRole("button", { name: /Translation/ }));
-    expect(screen.getByLabelText("Translation OpenAI model")).toBeInTheDocument();
-    await user.selectOptions(screen.getByLabelText("Translation provider"), "anthropic");
-    expect(screen.getByLabelText("Translation Anthropic model")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Translation OpenAI model")).not.toBeInTheDocument();
-    await user.selectOptions(screen.getByLabelText("Translation provider"), "deepl");
-    expect(screen.queryByLabelText("Translation OpenAI model")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Translation Anthropic model")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("DeepL API key")).toBeInTheDocument();
-    await user.selectOptions(screen.getByLabelText("Translation provider"), "openai");
-    await user.type(screen.getByLabelText("Translation OpenAI model"), "gpt-4.1-mini-translator");
+    expect(screen.getByLabelText("Translation environment variables")).toBeInTheDocument();
+    await user.type(
+      screen.getByLabelText("Translation environment variables"),
+      "TRANSLATION_PROVIDER=openai\nTRANSLATION_OPENAI_MODEL=gpt-4.1-mini-translator\nTRANSLATION_TARGET_LANG=ZH-HANS",
+    );
 
     await user.click(screen.getByRole("button", { name: /General/ }));
     await user.selectOptions(screen.getByLabelText("Default paper sort"), "title");
@@ -971,9 +966,12 @@ describe("App reading workspace", () => {
     fireEvent.change(screen.getByLabelText("PDF default zoom"), { target: { value: "130" } });
 
     await user.click(screen.getByRole("button", { name: /AI Providers/ }));
-    await user.clear(screen.getByLabelText("OpenAI model"));
-    await user.type(screen.getByLabelText("OpenAI model"), "gpt-4.1");
-    await user.type(screen.getByLabelText("OpenAI API key"), "new-openai-key");
+    expect(screen.getByLabelText("AI environment variables")).toBeInTheDocument();
+    expect(screen.queryByLabelText("OpenAI model")).not.toBeInTheDocument();
+    await user.type(
+      screen.getByLabelText("AI environment variables"),
+      "AI_PROVIDER=openai\nOPENAI_MODEL=gpt-4.1\nOPENAI_API_KEY=new-openai-key\nOPENAI_BASE_URL=https://api.openai.com/v1",
+    );
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
@@ -995,25 +993,6 @@ describe("App reading workspace", () => {
     });
 
     expect(screen.queryByRole("button", { name: "Manage library" })).not.toBeInTheDocument();
-
-    menuListeners.get("menu:open-settings")?.();
-    expect(await screen.findByRole("dialog", { name: "Settings" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /AI Providers/ }));
-    await user.click(screen.getAllByRole("button", { name: "Clear saved key" })[0]);
-    expect(updateAiSettingsSpy).not.toHaveBeenCalledWith(
-      expect.objectContaining({
-        clear_openai_api_key: true,
-      }),
-    );
-    await user.click(screen.getByRole("button", { name: "Confirm clear key" }));
-
-    await waitFor(() => {
-      expect(updateAiSettingsSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          clear_openai_api_key: true,
-        }),
-      );
-    });
   });
 
   it("loads AI provider values from env-style settings", async () => {
@@ -1035,21 +1014,62 @@ describe("App reading workspace", () => {
     await waitFor(() => {
       expect(getSystemAiEnvSpy).toHaveBeenCalled();
       expect(screen.getByLabelText("AI environment variables")).toHaveValue(
-        "ANTHROPIC_MODEL=claude-env-model\nANTHROPIC_API_KEY=env-anthropic-key\nANTHROPIC_BASE_URL=https://env.anthropic.example/v1",
+        [
+          "AI_PROVIDER=anthropic",
+          "OPENAI_MODEL=gpt-env-model",
+          "OPENAI_API_KEY=env-openai-key",
+          "OPENAI_BASE_URL=https://env.openai.example/v1",
+          "ANTHROPIC_MODEL=claude-env-model",
+          "ANTHROPIC_API_KEY=env-anthropic-key",
+          "ANTHROPIC_BASE_URL=https://env.anthropic.example/v1",
+        ].join("\n"),
       );
     });
 
-    await user.click(screen.getByRole("tab", { name: "Anthropic" }));
-    expect(screen.getByLabelText("Anthropic model")).toHaveValue("claude-env-model");
-    expect(screen.getByLabelText("Anthropic base URL")).toHaveValue("https://env.anthropic.example/v1");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
       expect(updateAiSettingsSpy).toHaveBeenCalledWith(
         expect.objectContaining({
+          active_provider: "anthropic",
+          openai_model: "gpt-env-model",
+          openai_api_key: "env-openai-key",
           anthropic_model: "claude-env-model",
           anthropic_base_url: "https://env.anthropic.example/v1",
           anthropic_api_key: "env-anthropic-key",
+        }),
+      );
+    });
+  });
+
+  it("loads translation values from env-style settings", async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).__TAURI_INTERNALS__ = {
+      transformCallback: (callback: unknown) => callback,
+      invoke: vi.fn(async () => null),
+    };
+    const user = userEvent.setup();
+    const updateAiSettingsSpy = vi.spyOn(fakeApi, "updateAiSettings");
+    render(<App api={fakeApi} />);
+
+    expect(await screen.findByRole("tree", { name: "Library resources" })).toBeInTheDocument();
+    menuListeners.get("menu:open-settings")?.();
+    await user.click(await screen.findByRole("button", { name: /Translation/ }));
+    await user.click(screen.getByRole("button", { name: "Read system translation env variables" }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Translation environment variables")).toHaveValue(
+        "TRANSLATION_PROVIDER=openai\nTRANSLATION_TARGET_LANG=JA\nTRANSLATION_OPENAI_MODEL=gpt-env-translator",
+      );
+    });
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(updateAiSettingsSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          translation_provider: "openai",
+          translation_target_lang: "JA",
+          translation_openai_model: "gpt-env-translator",
         }),
       );
     });

@@ -1,7 +1,7 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 
-import { CloseIcon, RefreshIcon, SaveIcon, TrashIcon } from "./Icons";
-import type { AIProvider, AISettings, ConnectorSettings, TranslationProvider, UpdateAISettingsInput } from "../../lib/contracts";
+import { CloseIcon, RefreshIcon, SaveIcon } from "./Icons";
+import type { ConnectorSettings } from "../../lib/contracts";
 import type { AttachmentFilter, ItemSort, ReaderFitMode } from "../../lib/appView";
 
 export type GeneralSettingsDraft = {
@@ -23,83 +23,45 @@ const settingsSections: Array<{ id: SettingsSection; title: string; meta: string
 
 export function SettingsDialog({
   generalSettingsDraft,
-  aiSettings,
   connectorSettings,
-  aiSettingsDraft,
-  openAiApiKeyDraft,
-  anthropicApiKeyDraft,
-  deeplApiKeyDraft,
   aiEnvDraft,
+  translationEnvDraft,
   readerMinZoom,
   readerMaxZoom,
   defaultReaderZoom,
   onGeneralSettingsDraftChange,
-  onAiSettingsDraftChange,
-  onOpenAiApiKeyDraftChange,
-  onAnthropicApiKeyDraftChange,
-  onDeeplApiKeyDraftChange,
   onAiEnvDraftChange,
+  onTranslationEnvDraftChange,
   onClampReaderZoom,
   onResetLayoutWidths,
-  onClearSavedKey,
   onReadSystemAiEnv,
+  onReadSystemTranslationEnv,
   onRegenerateConnectorToken,
   onCancel,
   onSave,
 }: {
   generalSettingsDraft: GeneralSettingsDraft;
-  aiSettings: AISettings | null;
   connectorSettings: ConnectorSettings | null;
-  aiSettingsDraft: UpdateAISettingsInput;
-  openAiApiKeyDraft: string;
-  anthropicApiKeyDraft: string;
-  deeplApiKeyDraft: string;
   aiEnvDraft: string;
+  translationEnvDraft: string;
   readerMinZoom: number;
   readerMaxZoom: number;
   defaultReaderZoom: number;
   onGeneralSettingsDraftChange: Dispatch<SetStateAction<GeneralSettingsDraft>>;
-  onAiSettingsDraftChange: Dispatch<SetStateAction<UpdateAISettingsInput>>;
-  onOpenAiApiKeyDraftChange: (value: string) => void;
-  onAnthropicApiKeyDraftChange: (value: string) => void;
-  onDeeplApiKeyDraftChange: (value: string) => void;
   onAiEnvDraftChange: (value: string) => void;
+  onTranslationEnvDraftChange: (value: string) => void;
   onClampReaderZoom: (value: number) => number;
   onResetLayoutWidths: () => void;
-  onClearSavedKey: (provider: AIProvider | "deepl") => void;
   onReadSystemAiEnv: () => void;
+  onReadSystemTranslationEnv: () => void;
   onRegenerateConnectorToken: () => void;
   onCancel: () => void;
   onSave: () => void;
 }) {
-  const [pendingClearKeyProvider, setPendingClearKeyProvider] = useState<AIProvider | "deepl" | null>(null);
   const [activeSection, setActiveSection] = useState<SettingsSection>("general");
   const cancelSettings = () => {
-    setPendingClearKeyProvider(null);
     onCancel();
   };
-  const updateAiSettingsDraft: Dispatch<SetStateAction<UpdateAISettingsInput>> = (value) => {
-    setPendingClearKeyProvider(null);
-    onAiSettingsDraftChange(value);
-  };
-  const renderClearKeyButton = (provider: AIProvider | "deepl", label: string) => (
-    <button
-      aria-label={pendingClearKeyProvider === provider ? "Confirm clear key" : label}
-      className={`icon-button ${pendingClearKeyProvider === provider ? "danger-icon-button" : ""}`}
-      title={pendingClearKeyProvider === provider ? "Confirm clear key" : label}
-      type="button"
-      onClick={() => {
-        if (pendingClearKeyProvider === provider) {
-          setPendingClearKeyProvider(null);
-          onClearSavedKey(provider);
-          return;
-        }
-        setPendingClearKeyProvider(provider);
-      }}
-    >
-      <TrashIcon />
-    </button>
-  );
 
   return (
     <div className="modal-scrim" role="presentation">
@@ -125,10 +87,7 @@ export function SettingsDialog({
                 aria-current={activeSection === section.id ? "page" : undefined}
                 className={`settings-nav-item ${activeSection === section.id ? "settings-nav-item-active" : ""}`}
                 type="button"
-                onClick={() => {
-                  setPendingClearKeyProvider(null);
-                  setActiveSection(section.id);
-                }}
+                onClick={() => setActiveSection(section.id)}
               >
                 <span className="settings-nav-title" role="heading" aria-level={3}>{section.title}</span>
                 <span className="settings-nav-meta">{section.meta}</span>
@@ -247,95 +206,21 @@ export function SettingsDialog({
               <p className="eyebrow">Translation</p>
               <h3 id="settings-translation-heading">Selection Translation</h3>
             </div>
-            <div className="settings-form-grid">
-              <label className="settings-field">
-                <span>Provider</span>
-                <select
-                  aria-label="Translation provider"
-                  className="settings-input"
-                  value={aiSettingsDraft.translation_provider}
-                  onChange={(event) =>
-                    updateAiSettingsDraft((current) => ({
-                      ...current,
-                      translation_provider: event.target.value as TranslationProvider,
-                    }))
-                  }
-                >
-                  <option value="openai">OpenAI</option>
-                  <option value="anthropic">Anthropic</option>
-                  <option value="deepl">DeepL</option>
-                </select>
-              </label>
-              <label className="settings-field">
-                <span>Target language</span>
-                <input
-                  aria-label="Translation target language"
-                  className="settings-input"
-                  value={aiSettingsDraft.translation_target_lang}
-                  onChange={(event) =>
-                    updateAiSettingsDraft((current) => ({ ...current, translation_target_lang: event.target.value }))
-                  }
-                />
-              </label>
-              {aiSettingsDraft.translation_provider === "openai" ? (
-                <label className="settings-field">
-                  <span>Translation OpenAI model</span>
-                  <input
-                    aria-label="Translation OpenAI model"
-                    className="settings-input"
-                    placeholder={aiSettingsDraft.openai_model || "Fallback to OpenAI model"}
-                    value={aiSettingsDraft.translation_openai_model}
-                    onChange={(event) =>
-                      updateAiSettingsDraft((current) => ({ ...current, translation_openai_model: event.target.value }))
-                    }
-                  />
-                </label>
-              ) : null}
-              {aiSettingsDraft.translation_provider === "anthropic" ? (
-                <label className="settings-field">
-                  <span>Translation Anthropic model</span>
-                  <input
-                    aria-label="Translation Anthropic model"
-                    className="settings-input"
-                    placeholder={aiSettingsDraft.anthropic_model || "Fallback to Anthropic model"}
-                    value={aiSettingsDraft.translation_anthropic_model}
-                    onChange={(event) =>
-                      updateAiSettingsDraft((current) => ({ ...current, translation_anthropic_model: event.target.value }))
-                    }
-                  />
-                </label>
-              ) : null}
-              {aiSettingsDraft.translation_provider === "deepl" ? (
-                <>
-                  <label className="settings-field">
-                    <span>DeepL Base URL</span>
-                    <input
-                      aria-label="DeepL base URL"
-                      className="settings-input"
-                      placeholder="https://api-free.deepl.com"
-                      value={aiSettingsDraft.deepl_base_url}
-                      onChange={(event) =>
-                        updateAiSettingsDraft((current) => ({ ...current, deepl_base_url: event.target.value }))
-                      }
-                    />
-                  </label>
-                  <label className="settings-field">
-                    <span>DeepL API key</span>
-                    <input
-                      aria-label="DeepL API key"
-                      className="settings-input"
-                      type="password"
-                      value={deeplApiKeyDraft}
-                      placeholder={aiSettings?.has_deepl_api_key ? "Replace saved key" : "Paste API key"}
-                      onChange={(event) => onDeeplApiKeyDraftChange(event.target.value)}
-                    />
-                  </label>
-                </>
-              ) : null}
-            </div>
+            <label className="settings-field">
+              <span>Environment variables</span>
+              <textarea
+                aria-label="Translation environment variables"
+                className="settings-input settings-textarea"
+                placeholder={"TRANSLATION_PROVIDER=openai\nTRANSLATION_TARGET_LANG=ZH-HANS\nTRANSLATION_OPENAI_MODEL=gpt-4.1-mini\nTRANSLATION_ANTHROPIC_MODEL=claude-...\nDEEPL_API_KEY=...\nDEEPL_BASE_URL=https://api-free.deepl.com"}
+                value={translationEnvDraft}
+                onChange={(event) => onTranslationEnvDraftChange(event.target.value)}
+              />
+            </label>
             <div className="settings-provider-actions settings-provider-actions-inline">
-              <span className="settings-inline-note">OpenAI and Anthropic reuse their saved provider keys; DeepL uses its own key.</span>
-              {renderClearKeyButton("deepl", "Clear DeepL key")}
+              <span className="settings-inline-note">Paste KEY=value lines for the translation provider, target language, and optional DeepL profile.</span>
+              <button aria-label="Read system translation env variables" className="icon-button" title="Read system translation env variables" type="button" onClick={onReadSystemTranslationEnv}>
+                <RefreshIcon />
+              </button>
             </div>
           </section>
           ) : null}
@@ -397,135 +282,17 @@ export function SettingsDialog({
               <textarea
                 aria-label="AI environment variables"
                 className="settings-input settings-textarea"
-                placeholder={"ANTHROPIC_MODEL=claude-...\nANTHROPIC_API_KEY=sk-...\nANTHROPIC_BASE_URL=https://api.anthropic.com/v1"}
+                placeholder={"AI_PROVIDER=openai\nOPENAI_MODEL=gpt-4.1\nOPENAI_API_KEY=sk-...\nOPENAI_BASE_URL=https://api.openai.com/v1\nANTHROPIC_MODEL=claude-...\nANTHROPIC_API_KEY=sk-...\nANTHROPIC_BASE_URL=https://api.anthropic.com/v1"}
                 value={aiEnvDraft}
                 onChange={(event) => onAiEnvDraftChange(event.target.value)}
               />
             </label>
             <div className="settings-provider-actions settings-provider-actions-inline">
-              <span className="settings-inline-note">Paste KEY=value lines here; saved values override the matching provider fields.</span>
+              <span className="settings-inline-note">Paste KEY=value lines for OpenAI or Anthropic; saved values override the matching provider profile.</span>
               <button aria-label="Read system AI env variables" className="icon-button" title="Read system AI env variables" type="button" onClick={onReadSystemAiEnv}>
                 <RefreshIcon />
               </button>
             </div>
-            <div className="settings-provider-tabs" role="tablist" aria-label="Active AI provider">
-              {(["openai", "anthropic"] as const).map((provider) => (
-                <button
-                  key={provider}
-                  aria-selected={aiSettingsDraft.active_provider === provider}
-                  className={`reader-tab settings-provider-tab ${
-                    aiSettingsDraft.active_provider === provider ? "reader-tab-active" : ""
-                  }`}
-                  role="tab"
-                  type="button"
-                  onClick={() => updateAiSettingsDraft((current) => ({ ...current, active_provider: provider }))}
-                >
-                  {provider === "openai" ? "OpenAI" : "Anthropic"}
-                </button>
-              ))}
-            </div>
-
-            {aiSettingsDraft.active_provider === "openai" ? (
-              <div className="settings-provider-panel">
-                <div className="settings-provider-panel-header">
-                  <div>
-                    <p className="eyebrow">OpenAI</p>
-                    <p className="settings-provider-description">Default chat and reading tasks route through this profile.</p>
-                  </div>
-                  <span className="meta-count">{aiSettings?.has_openai_api_key ? "Saved key" : "No saved key"}</span>
-                </div>
-                <div className="settings-form-grid">
-                  <label className="settings-field">
-                    <span>Model</span>
-                    <input
-                      aria-label="OpenAI model"
-                      className="settings-input"
-                      value={aiSettingsDraft.openai_model}
-                      onChange={(event) =>
-                        updateAiSettingsDraft((current) => ({ ...current, openai_model: event.target.value }))
-                      }
-                    />
-                  </label>
-                  <label className="settings-field">
-                    <span>Base URL</span>
-                    <input
-                      aria-label="OpenAI base URL"
-                      className="settings-input"
-                      placeholder="https://api.openai.com/v1"
-                      value={aiSettingsDraft.openai_base_url}
-                      onChange={(event) =>
-                        updateAiSettingsDraft((current) => ({ ...current, openai_base_url: event.target.value }))
-                      }
-                    />
-                  </label>
-                  <label className="settings-field settings-field-full">
-                    <span>API key</span>
-                    <input
-                      aria-label="OpenAI API key"
-                      className="settings-input"
-                      type="password"
-                      value={openAiApiKeyDraft}
-                      placeholder={aiSettings?.has_openai_api_key ? "Replace saved key" : "Paste API key"}
-                      onChange={(event) => onOpenAiApiKeyDraftChange(event.target.value)}
-                    />
-                  </label>
-                </div>
-                <div className="settings-provider-actions settings-provider-actions-inline">
-                  <span className="settings-inline-note">The key stays in secure storage and never reappears in plain text.</span>
-                  {renderClearKeyButton("openai", "Clear saved key")}
-                </div>
-              </div>
-            ) : (
-              <div className="settings-provider-panel">
-                <div className="settings-provider-panel-header">
-                  <div>
-                    <p className="eyebrow">Anthropic</p>
-                    <p className="settings-provider-description">Use this profile when Claude should handle the active reading workflow.</p>
-                  </div>
-                  <span className="meta-count">{aiSettings?.has_anthropic_api_key ? "Saved key" : "No saved key"}</span>
-                </div>
-                <div className="settings-form-grid">
-                  <label className="settings-field">
-                    <span>Model</span>
-                    <input
-                      aria-label="Anthropic model"
-                      className="settings-input"
-                      value={aiSettingsDraft.anthropic_model}
-                      onChange={(event) =>
-                        updateAiSettingsDraft((current) => ({ ...current, anthropic_model: event.target.value }))
-                      }
-                    />
-                  </label>
-                  <label className="settings-field">
-                    <span>Base URL</span>
-                    <input
-                      aria-label="Anthropic base URL"
-                      className="settings-input"
-                      placeholder="https://api.anthropic.com/v1"
-                      value={aiSettingsDraft.anthropic_base_url}
-                      onChange={(event) =>
-                        updateAiSettingsDraft((current) => ({ ...current, anthropic_base_url: event.target.value }))
-                      }
-                    />
-                  </label>
-                  <label className="settings-field settings-field-full">
-                    <span>API key</span>
-                    <input
-                      aria-label="Anthropic API key"
-                      className="settings-input"
-                      type="password"
-                      value={anthropicApiKeyDraft}
-                      placeholder={aiSettings?.has_anthropic_api_key ? "Replace saved key" : "Paste API key"}
-                      onChange={(event) => onAnthropicApiKeyDraftChange(event.target.value)}
-                    />
-                  </label>
-                </div>
-                <div className="settings-provider-actions settings-provider-actions-inline">
-                  <span className="settings-inline-note">The key stays in secure storage and never reappears in plain text.</span>
-                  {renderClearKeyButton("anthropic", "Clear saved key")}
-                </div>
-              </div>
-            )}
           </section>
           ) : null}
           </div>
