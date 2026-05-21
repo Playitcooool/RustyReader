@@ -1,7 +1,7 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 
 import { CloseIcon, RefreshIcon, SaveIcon } from "./Icons";
-import type { ConnectorSettings } from "../../lib/contracts";
+import type { AIProvider, ConnectorSettings, TranslationProvider } from "../../lib/contracts";
 import type { AttachmentFilter, ItemSort, ReaderFitMode } from "../../lib/appView";
 
 export type GeneralSettingsDraft = {
@@ -21,15 +21,55 @@ const settingsSections: Array<{ id: SettingsSection; title: string; meta: string
   { id: "ai", title: "AI Providers", meta: "Model profiles" },
 ];
 
+const aiProviderCards: Array<{ id: AIProvider; title: string; meta: string; placeholder: string }> = [
+  {
+    id: "openai",
+    title: "OpenAI",
+    meta: "Chat, reading tasks, and OpenAI-compatible endpoints",
+    placeholder: "OPENAI_MODEL=gpt-4.1\nOPENAI_API_KEY=sk-...\nOPENAI_BASE_URL=https://api.openai.com/v1",
+  },
+  {
+    id: "anthropic",
+    title: "Anthropic",
+    meta: "Claude profile for active reading workflows",
+    placeholder: "ANTHROPIC_MODEL=claude-...\nANTHROPIC_API_KEY=sk-...\nANTHROPIC_BASE_URL=https://api.anthropic.com/v1",
+  },
+];
+
+const translationProviderCards: Array<{ id: TranslationProvider; title: string; meta: string; placeholder: string }> = [
+  {
+    id: "openai",
+    title: "OpenAI",
+    meta: "Use the saved OpenAI provider key for translation",
+    placeholder: "TRANSLATION_TARGET_LANG=ZH-HANS\nTRANSLATION_OPENAI_MODEL=gpt-4.1-mini",
+  },
+  {
+    id: "anthropic",
+    title: "Anthropic",
+    meta: "Use the saved Anthropic provider key for translation",
+    placeholder: "TRANSLATION_TARGET_LANG=ZH-HANS\nTRANSLATION_ANTHROPIC_MODEL=claude-...",
+  },
+  {
+    id: "deepl",
+    title: "DeepL",
+    meta: "Use a dedicated DeepL translation profile",
+    placeholder: "TRANSLATION_TARGET_LANG=ZH-HANS\nDEEPL_API_KEY=...\nDEEPL_BASE_URL=https://api-free.deepl.com",
+  },
+];
+
 export function SettingsDialog({
   generalSettingsDraft,
   connectorSettings,
-  aiEnvDraft,
-  translationEnvDraft,
+  activeAiProvider,
+  activeTranslationProvider,
+  aiEnvDrafts,
+  translationEnvDrafts,
   readerMinZoom,
   readerMaxZoom,
   defaultReaderZoom,
   onGeneralSettingsDraftChange,
+  onActiveAiProviderChange,
+  onActiveTranslationProviderChange,
   onAiEnvDraftChange,
   onTranslationEnvDraftChange,
   onClampReaderZoom,
@@ -42,14 +82,18 @@ export function SettingsDialog({
 }: {
   generalSettingsDraft: GeneralSettingsDraft;
   connectorSettings: ConnectorSettings | null;
-  aiEnvDraft: string;
-  translationEnvDraft: string;
+  activeAiProvider: AIProvider;
+  activeTranslationProvider: TranslationProvider;
+  aiEnvDrafts: Record<AIProvider, string>;
+  translationEnvDrafts: Record<TranslationProvider, string>;
   readerMinZoom: number;
   readerMaxZoom: number;
   defaultReaderZoom: number;
   onGeneralSettingsDraftChange: Dispatch<SetStateAction<GeneralSettingsDraft>>;
-  onAiEnvDraftChange: (value: string) => void;
-  onTranslationEnvDraftChange: (value: string) => void;
+  onActiveAiProviderChange: (provider: AIProvider) => void;
+  onActiveTranslationProviderChange: (provider: TranslationProvider) => void;
+  onAiEnvDraftChange: (provider: AIProvider, value: string) => void;
+  onTranslationEnvDraftChange: (provider: TranslationProvider, value: string) => void;
   onClampReaderZoom: (value: number) => number;
   onResetLayoutWidths: () => void;
   onReadSystemAiEnv: () => void;
@@ -59,6 +103,9 @@ export function SettingsDialog({
   onSave: () => void;
 }) {
   const [activeSection, setActiveSection] = useState<SettingsSection>("general");
+  const activeAiProviderCard = aiProviderCards.find((provider) => provider.id === activeAiProvider) ?? aiProviderCards[0];
+  const activeTranslationProviderCard =
+    translationProviderCards.find((provider) => provider.id === activeTranslationProvider) ?? translationProviderCards[0];
   const cancelSettings = () => {
     onCancel();
   };
@@ -206,18 +253,33 @@ export function SettingsDialog({
               <p className="eyebrow">Translation</p>
               <h3 id="settings-translation-heading">Selection Translation</h3>
             </div>
+            <div className="settings-provider-cards" role="tablist" aria-label="Translation provider">
+              {translationProviderCards.map((provider) => (
+                <button
+                  key={provider.id}
+                  aria-selected={activeTranslationProvider === provider.id}
+                  className={`settings-provider-card ${activeTranslationProvider === provider.id ? "settings-provider-card-active" : ""}`}
+                  role="tab"
+                  type="button"
+                  onClick={() => onActiveTranslationProviderChange(provider.id)}
+                >
+                  <span className="settings-provider-card-title">{provider.title}</span>
+                  <span className="settings-provider-card-meta">{provider.meta}</span>
+                </button>
+              ))}
+            </div>
             <label className="settings-field">
               <span>Environment variables</span>
               <textarea
                 aria-label="Translation environment variables"
                 className="settings-input settings-textarea"
-                placeholder={"TRANSLATION_PROVIDER=openai\nTRANSLATION_TARGET_LANG=ZH-HANS\nTRANSLATION_OPENAI_MODEL=gpt-4.1-mini\nTRANSLATION_ANTHROPIC_MODEL=claude-...\nDEEPL_API_KEY=...\nDEEPL_BASE_URL=https://api-free.deepl.com"}
-                value={translationEnvDraft}
-                onChange={(event) => onTranslationEnvDraftChange(event.target.value)}
+                placeholder={activeTranslationProviderCard.placeholder}
+                value={translationEnvDrafts[activeTranslationProvider]}
+                onChange={(event) => onTranslationEnvDraftChange(activeTranslationProvider, event.target.value)}
               />
             </label>
             <div className="settings-provider-actions settings-provider-actions-inline">
-              <span className="settings-inline-note">Paste KEY=value lines for the translation provider, target language, and optional DeepL profile.</span>
+              <span className="settings-inline-note">Only variables for the selected translation provider are shown here.</span>
               <button aria-label="Read system translation env variables" className="icon-button" title="Read system translation env variables" type="button" onClick={onReadSystemTranslationEnv}>
                 <RefreshIcon />
               </button>
@@ -277,18 +339,33 @@ export function SettingsDialog({
               <p className="eyebrow">Provider Profiles</p>
               <h3 id="settings-ai-heading">Provider Setup</h3>
             </div>
+            <div className="settings-provider-cards" role="tablist" aria-label="Active AI provider">
+              {aiProviderCards.map((provider) => (
+                <button
+                  key={provider.id}
+                  aria-selected={activeAiProvider === provider.id}
+                  className={`settings-provider-card ${activeAiProvider === provider.id ? "settings-provider-card-active" : ""}`}
+                  role="tab"
+                  type="button"
+                  onClick={() => onActiveAiProviderChange(provider.id)}
+                >
+                  <span className="settings-provider-card-title">{provider.title}</span>
+                  <span className="settings-provider-card-meta">{provider.meta}</span>
+                </button>
+              ))}
+            </div>
             <label className="settings-field">
               <span>Environment variables</span>
               <textarea
                 aria-label="AI environment variables"
                 className="settings-input settings-textarea"
-                placeholder={"AI_PROVIDER=openai\nOPENAI_MODEL=gpt-4.1\nOPENAI_API_KEY=sk-...\nOPENAI_BASE_URL=https://api.openai.com/v1\nANTHROPIC_MODEL=claude-...\nANTHROPIC_API_KEY=sk-...\nANTHROPIC_BASE_URL=https://api.anthropic.com/v1"}
-                value={aiEnvDraft}
-                onChange={(event) => onAiEnvDraftChange(event.target.value)}
+                placeholder={activeAiProviderCard.placeholder}
+                value={aiEnvDrafts[activeAiProvider]}
+                onChange={(event) => onAiEnvDraftChange(activeAiProvider, event.target.value)}
               />
             </label>
             <div className="settings-provider-actions settings-provider-actions-inline">
-              <span className="settings-inline-note">Paste KEY=value lines for OpenAI or Anthropic; saved values override the matching provider profile.</span>
+              <span className="settings-inline-note">Only variables for the selected AI provider are shown here.</span>
               <button aria-label="Read system AI env variables" className="icon-button" title="Read system AI env variables" type="button" onClick={onReadSystemAiEnv}>
                 <RefreshIcon />
               </button>

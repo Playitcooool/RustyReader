@@ -954,9 +954,11 @@ describe("App reading workspace", () => {
     });
     await user.click(screen.getByRole("button", { name: /Translation/ }));
     expect(screen.getByLabelText("Translation environment variables")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /OpenAI/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByText("TRANSLATION_ANTHROPIC_MODEL=claude-...")).not.toBeInTheDocument();
     await user.type(
       screen.getByLabelText("Translation environment variables"),
-      "TRANSLATION_PROVIDER=openai\nTRANSLATION_OPENAI_MODEL=gpt-4.1-mini-translator\nTRANSLATION_TARGET_LANG=ZH-HANS",
+      "TRANSLATION_OPENAI_MODEL=gpt-4.1-mini-translator\nTRANSLATION_TARGET_LANG=ZH-HANS",
     );
 
     await user.click(screen.getByRole("button", { name: /General/ }));
@@ -968,9 +970,11 @@ describe("App reading workspace", () => {
     await user.click(screen.getByRole("button", { name: /AI Providers/ }));
     expect(screen.getByLabelText("AI environment variables")).toBeInTheDocument();
     expect(screen.queryByLabelText("OpenAI model")).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /OpenAI/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByText("ANTHROPIC_MODEL=claude-...")).not.toBeInTheDocument();
     await user.type(
       screen.getByLabelText("AI environment variables"),
-      "AI_PROVIDER=openai\nOPENAI_MODEL=gpt-4.1\nOPENAI_API_KEY=new-openai-key\nOPENAI_BASE_URL=https://api.openai.com/v1",
+      "OPENAI_MODEL=gpt-4.1\nOPENAI_API_KEY=new-openai-key\nOPENAI_BASE_URL=https://api.openai.com/v1",
     );
     await user.click(screen.getByRole("button", { name: "Save" }));
 
@@ -1015,16 +1019,18 @@ describe("App reading workspace", () => {
       expect(getSystemAiEnvSpy).toHaveBeenCalled();
       expect(screen.getByLabelText("AI environment variables")).toHaveValue(
         [
-          "AI_PROVIDER=anthropic",
-          "OPENAI_MODEL=gpt-env-model",
-          "OPENAI_API_KEY=env-openai-key",
-          "OPENAI_BASE_URL=https://env.openai.example/v1",
           "ANTHROPIC_MODEL=claude-env-model",
           "ANTHROPIC_API_KEY=env-anthropic-key",
           "ANTHROPIC_BASE_URL=https://env.anthropic.example/v1",
         ].join("\n"),
       );
     });
+    expect(screen.getByRole("tab", { name: /Anthropic/ })).toHaveAttribute("aria-selected", "true");
+    await user.click(screen.getByRole("tab", { name: /OpenAI/ }));
+    expect(screen.getByLabelText("AI environment variables")).toHaveValue(
+      "OPENAI_MODEL=gpt-env-model\nOPENAI_API_KEY=env-openai-key\nOPENAI_BASE_URL=https://env.openai.example/v1",
+    );
+    await user.click(screen.getByRole("tab", { name: /Anthropic/ }));
 
     await user.click(screen.getByRole("button", { name: "Save" }));
 
@@ -1059,9 +1065,10 @@ describe("App reading workspace", () => {
 
     await waitFor(() => {
       expect(screen.getByLabelText("Translation environment variables")).toHaveValue(
-        "TRANSLATION_PROVIDER=openai\nTRANSLATION_TARGET_LANG=JA\nTRANSLATION_OPENAI_MODEL=gpt-env-translator",
+        "TRANSLATION_TARGET_LANG=JA\nTRANSLATION_OPENAI_MODEL=gpt-env-translator",
       );
     });
+    expect(screen.getByRole("tab", { name: /OpenAI/ })).toHaveAttribute("aria-selected", "true");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {

@@ -12,7 +12,7 @@ import { SettingsDialog, type GeneralSettingsDraft } from "./components/app/Sett
 import { clamp, collectionDeleteSummary, readStoredBoolean, readStoredNumber, readStoredString, type AttachmentFilter, type ItemSort, type ReaderFitMode } from "./lib/appView";
 import { isTauriRuntime } from "./lib/api";
 import { getRuntimePolyfillDiagnostics } from "./lib/runtimePolyfills";
-import type { AISettings, AppApi, Collection, ConnectorSettings, UpdateAISettingsInput } from "./lib/contracts";
+import type { AIProvider, AISettings, AppApi, Collection, ConnectorSettings, TranslationProvider, UpdateAISettingsInput } from "./lib/contracts";
 import { useAiSessionState } from "./hooks/useAiSessionState";
 import { useLibraryState } from "./hooks/useLibraryState";
 import { useReaderState } from "./hooks/useReaderState";
@@ -134,6 +134,11 @@ const filterEnvText = (text: string, keys: string[]) => {
     .join("\n");
 };
 
+const providerEnvKeysByProvider: Record<AIProvider, string[]> = {
+  openai: ["OPENAI_MODEL", "OPENAI_API_KEY", "OPENAI_BASE_URL"],
+  anthropic: ["ANTHROPIC_MODEL", "ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL"],
+};
+
 const providerEnvKeys = [
   "AI_PROVIDER",
   "ACTIVE_PROVIDER",
@@ -145,6 +150,12 @@ const providerEnvKeys = [
   "ANTHROPIC_BASE_URL",
 ];
 
+const translationEnvKeysByProvider: Record<TranslationProvider, string[]> = {
+  openai: ["TRANSLATION_TARGET_LANG", "TRANSLATION_OPENAI_MODEL"],
+  anthropic: ["TRANSLATION_TARGET_LANG", "TRANSLATION_ANTHROPIC_MODEL"],
+  deepl: ["TRANSLATION_TARGET_LANG", "DEEPL_API_KEY", "DEEPL_BASE_URL"],
+};
+
 const translationEnvKeys = [
   "TRANSLATION_PROVIDER",
   "TRANSLATION_TARGET_LANG",
@@ -153,6 +164,17 @@ const translationEnvKeys = [
   "DEEPL_API_KEY",
   "DEEPL_BASE_URL",
 ];
+
+const emptyProviderEnvDrafts = (): Record<AIProvider, string> => ({
+  openai: "",
+  anthropic: "",
+});
+
+const emptyTranslationEnvDrafts = (): Record<TranslationProvider, string> => ({
+  openai: "",
+  anthropic: "",
+  deepl: "",
+});
 
 export default function App({ api }: { api: AppApi }) {
   const getApi = useCallback(() => Promise.resolve(api), [api]);
@@ -172,8 +194,8 @@ export default function App({ api }: { api: AppApi }) {
     defaultReaderFitMode: DEFAULT_READER_FIT_MODE,
     defaultReaderZoom: DEFAULT_READER_ZOOM,
   });
-  const [aiEnvDraft, setAiEnvDraft] = useState("");
-  const [translationEnvDraft, setTranslationEnvDraft] = useState("");
+  const [aiEnvDrafts, setAiEnvDrafts] = useState<Record<AIProvider, string>>(emptyProviderEnvDrafts);
+  const [translationEnvDrafts, setTranslationEnvDrafts] = useState<Record<TranslationProvider, string>>(emptyTranslationEnvDrafts);
   const [connectorSettings, setConnectorSettings] = useState<ConnectorSettings | null>(null);
   const appShellRef = useRef<HTMLDivElement | null>(null);
   const aiComposerInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -376,21 +398,27 @@ export default function App({ api }: { api: AppApi }) {
       defaultReaderFitMode: readStoredString(READER_FIT_MODE_KEY, DEFAULT_READER_FIT_MODE, ["fit_width", "manual"] as const),
       defaultReaderZoom: readStoredNumber(READER_ZOOM_KEY, DEFAULT_READER_ZOOM),
     });
-    setAiEnvDraft("");
-    setTranslationEnvDraft("");
+    setAiEnvDrafts(emptyProviderEnvDrafts());
+    setTranslationEnvDrafts(emptyTranslationEnvDrafts());
     setIsSettingsOpen(true);
   }, [getApi]);
 
   const closeSettingsDialog = useCallback(() => {
     setIsSettingsOpen(false);
-    setAiEnvDraft("");
-    setTranslationEnvDraft("");
+    setAiEnvDrafts(emptyProviderEnvDrafts());
+    setTranslationEnvDrafts(emptyTranslationEnvDrafts());
   }, []);
 
   const handleSaveAiSettings = useCallback(async () => {
+    const aiEnvDraft = Object.values(aiEnvDrafts).filter((value) => value.trim()).join("\n");
+    const translationEnvDraft = Object.values(translationEnvDrafts).filter((value) => value.trim()).join("\n");
     const envSettings = parseAiEnvSettings(aiEnvDraft);
     const translationEnvSettings = parseAiEnvSettings(translationEnvDraft);
-    const mergedAiSettingsDraft = applyTranslationEnvSettings(applyAiEnvSettings(aiSettingsDraft, aiEnvDraft), translationEnvDraft);
+    const mergedAiSettingsDraft = {
+      ...applyTranslationEnvSettings(applyAiEnvSettings(aiSettingsDraft, aiEnvDraft), translationEnvDraft),
+      active_provider: aiSettingsDraft.active_provider,
+      translation_provider: aiSettingsDraft.translation_provider,
+    };
     const next = await (await getApi()).updateAiSettings({
       ...mergedAiSettingsDraft,
       openai_api_key: envSettings.OPENAI_API_KEY,
@@ -404,24 +432,33 @@ export default function App({ api }: { api: AppApi }) {
     readerState.setReaderZoom(clamp(generalSettingsDraft.defaultReaderZoom, 70, 180));
     setAiSettings(next);
     setAiSettingsDraft(draftFromAiSettings(next));
-    setAiEnvDraft("");
-    setTranslationEnvDraft("");
+    setAiEnvDrafts(emptyProviderEnvDrafts());
+    setTranslationEnvDrafts(emptyTranslationEnvDrafts());
     setIsSettingsOpen(false);
     setStatusMessage("Saved settings.");
-  }, [aiEnvDraft, aiSettingsDraft, generalSettingsDraft, getApi, library, readerState, translationEnvDraft]);
+  }, [aiEnvDrafts, aiSettingsDraft, generalSettingsDraft, getApi, library, readerState, translationEnvDrafts]);
 
   const handleReadSystemAiEnv = useCallback(async () => {
     const next = await (await getApi()).getSystemAiEnv();
+    const drafts = {
+      openai: filterEnvText(next.text, providerEnvKeysByProvider.openai),
+      anthropic: filterEnvText(next.text, providerEnvKeysByProvider.anthropic),
+    };
     const providerText = filterEnvText(next.text, providerEnvKeys);
-    setAiEnvDraft(providerText);
+    setAiEnvDrafts(drafts);
     setAiSettingsDraft((current) => applyAiEnvSettings(current, providerText));
     setStatusMessage(providerText.trim() ? "Loaded provider env variables." : "No provider env variables found.");
   }, [getApi]);
 
   const handleReadSystemTranslationEnv = useCallback(async () => {
     const next = await (await getApi()).getSystemAiEnv();
+    const drafts = {
+      openai: filterEnvText(next.text, translationEnvKeysByProvider.openai),
+      anthropic: filterEnvText(next.text, translationEnvKeysByProvider.anthropic),
+      deepl: filterEnvText(next.text, translationEnvKeysByProvider.deepl),
+    };
     const translationText = filterEnvText(next.text, translationEnvKeys);
-    setTranslationEnvDraft(translationText);
+    setTranslationEnvDrafts(drafts);
     setAiSettingsDraft((current) => applyTranslationEnvSettings(current, translationText));
     setStatusMessage(translationText.trim() ? "Loaded translation env variables." : "No translation env variables found.");
   }, [getApi]);
@@ -858,14 +895,18 @@ export default function App({ api }: { api: AppApi }) {
         <SettingsDialog
           generalSettingsDraft={generalSettingsDraft}
           connectorSettings={connectorSettings}
-          aiEnvDraft={aiEnvDraft}
-          translationEnvDraft={translationEnvDraft}
+          activeAiProvider={aiSettingsDraft.active_provider}
+          activeTranslationProvider={aiSettingsDraft.translation_provider}
+          aiEnvDrafts={aiEnvDrafts}
+          translationEnvDrafts={translationEnvDrafts}
           readerMinZoom={70}
           readerMaxZoom={180}
           defaultReaderZoom={DEFAULT_READER_ZOOM}
           onGeneralSettingsDraftChange={setGeneralSettingsDraft}
-          onAiEnvDraftChange={setAiEnvDraft}
-          onTranslationEnvDraftChange={setTranslationEnvDraft}
+          onActiveAiProviderChange={(provider) => setAiSettingsDraft((current) => ({ ...current, active_provider: provider }))}
+          onActiveTranslationProviderChange={(provider) => setAiSettingsDraft((current) => ({ ...current, translation_provider: provider }))}
+          onAiEnvDraftChange={(provider, value) => setAiEnvDrafts((current) => ({ ...current, [provider]: value }))}
+          onTranslationEnvDraftChange={(provider, value) => setTranslationEnvDrafts((current) => ({ ...current, [provider]: value }))}
           onClampReaderZoom={(value) => clamp(value, 70, 180)}
           onResetLayoutWidths={() => {
             setSidebarWidth(DEFAULT_SIDEBAR_WIDTH);
