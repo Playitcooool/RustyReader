@@ -312,6 +312,7 @@ p {
 .drop-helper {
   margin-bottom: 12px;
   color: #f7c9a1;
+  font-weight: 700;
 }
 
 .section-title-row {
@@ -501,6 +502,28 @@ p {
   background: linear-gradient(135deg, rgba(226, 139, 83, 0.13), rgba(102, 164, 212, 0.07));
   border-color: var(--focus-outline);
   box-shadow: none;
+}
+
+.resource-tree-row-drop-target {
+  position: relative;
+  background: linear-gradient(135deg, rgba(226, 139, 83, 0.34), rgba(102, 164, 212, 0.18));
+  border-color: rgba(255, 209, 163, 0.92);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 240, 223, 0.18),
+    0 0 0 2px rgba(226, 139, 83, 0.34),
+    0 10px 24px rgba(0, 0, 0, 0.24);
+}
+
+.resource-tree-row-drop-target::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 7px;
+  bottom: 7px;
+  width: 3px;
+  border-radius: 999px;
+  background: #ffd1a3;
+  box-shadow: 0 0 12px rgba(255, 209, 163, 0.72);
 }
 
 .resource-tree-collection {

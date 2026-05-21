@@ -70,6 +70,7 @@ export function ResourceSidebar(props: Props) {
 
   const importHasIssues = Boolean(lastImportResult && (lastImportResult.duplicates.length > 0 || lastImportResult.failed.length > 0));
   const focusSidebarEnabled = Boolean(onHideFocusSidebar && focusPdfAttachmentId && onGetPdfOutline && onNavigatePdfOutline);
+  const activeDropCollection = collections.find((collection) => collection.id === selectedCollectionId) ?? null;
   const [uncontrolledFocusPanel, setUncontrolledFocusPanel] = useState<"library" | "outline">("library");
   const focusPanel = focusSidebarEnabled ? controlledFocusPanel ?? uncontrolledFocusPanel : "library";
   const [outlineItems, setOutlineItems] = useState<PdfOutlineItem[]>([]);
@@ -151,9 +152,11 @@ export function ResourceSidebar(props: Props) {
       .flatMap((collection) => {
         const collectionChildren = renderTreeNodes(collection.id, depth + 1);
         const isRenaming = renamingCollectionId === collection.id;
+        const isSelected = selectedCollectionId === collection.id;
+        const isDropTarget = draggedFileCount > 0 && isSelected;
         return [
           <div key={`collection-${collection.id}`} role="none">
-            <div className={`resource-tree-row resource-tree-collection ${selectedCollectionId === collection.id ? "resource-tree-row-active" : ""}`} role="treeitem" aria-label={collection.name} style={{ paddingLeft: `${10 + depth * 18}px` }} onContextMenu={(event) => onContextMenu(event, { x: event.clientX, y: event.clientY, kind: "collection", targetId: collection.id })}>
+            <div className={`resource-tree-row resource-tree-collection ${isSelected ? "resource-tree-row-active" : ""} ${isDropTarget ? "resource-tree-row-drop-target" : ""}`} role="treeitem" aria-label={collection.name} style={{ paddingLeft: `${10 + depth * 18}px` }} onContextMenu={(event) => onContextMenu(event, { x: event.clientX, y: event.clientY, kind: "collection", targetId: collection.id })}>
               {isRenaming ? (
                 <input
                   aria-label="Rename collection"
@@ -265,6 +268,7 @@ export function ResourceSidebar(props: Props) {
             ) : null}
           </div>
         </div>
+        {draggedFileCount > 0 && activeDropCollection ? <p className="drop-helper">Drop to import into {activeDropCollection.name}.</p> : null}
         {collections.length === 0 ? (
           <div className="citation-card">
             <p className="eyebrow">Empty Library</p>

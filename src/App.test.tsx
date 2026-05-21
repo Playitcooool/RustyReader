@@ -217,6 +217,24 @@ describe("App reading workspace", () => {
     expect(screen.queryByRole("button", { name: /Expand Machine Learning/i })).not.toBeInTheDocument();
   });
 
+  it("emphasizes the selected collection while files are dragged over the collection panel", async () => {
+    const user = userEvent.setup();
+    render(<App api={fakeApi} />);
+
+    expect(await screen.findByRole("tree", { name: "Library resources" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Systems" }));
+
+    fireEvent.dragEnter(screen.getByRole("region", { name: "Collection drop zone" }), {
+      dataTransfer: {
+        files: [new File(["mock"], "extra-paper.pdf", { type: "application/pdf" })],
+      },
+    });
+
+    expect(screen.getByText("Drop to import into Systems.")).toBeInTheDocument();
+    expect(screen.getByRole("treeitem", { name: "Systems" })).toHaveClass("resource-tree-row-drop-target");
+    expect(screen.getByRole("treeitem", { name: "Machine Learning" })).not.toHaveClass("resource-tree-row-drop-target");
+  });
+
   it("does not keep a startup loading status after the library renders", async () => {
     render(<App api={fakeApi} />);
 
