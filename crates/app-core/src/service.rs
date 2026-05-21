@@ -1,6 +1,6 @@
 use std::{
     collections::HashSet,
-    fs,
+    env, fs,
     io::{BufRead, BufReader, Cursor, Read, Seek},
     mem::ManuallyDrop,
     ops::{Deref, DerefMut},
@@ -243,15 +243,20 @@ pub struct AISettings {
     pub openai_model: String,
     pub openai_base_url: String,
     pub has_openai_api_key: bool,
+    pub provider_env_openai: String,
     pub anthropic_model: String,
     pub anthropic_base_url: String,
     pub has_anthropic_api_key: bool,
+    pub provider_env_anthropic: String,
     pub translation_provider: TranslationProvider,
     pub translation_openai_model: String,
     pub translation_anthropic_model: String,
     pub translation_target_lang: String,
     pub deepl_base_url: String,
     pub has_deepl_api_key: bool,
+    pub translation_env_openai: String,
+    pub translation_env_anthropic: String,
+    pub translation_env_deepl: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -400,15 +405,20 @@ struct StoredAISettings {
     openai_model: String,
     openai_base_url: String,
     openai_api_key: String,
+    provider_env_openai: String,
     anthropic_model: String,
     anthropic_base_url: String,
     anthropic_api_key: String,
+    provider_env_anthropic: String,
     translation_provider: TranslationProvider,
     translation_openai_model: String,
     translation_anthropic_model: String,
     translation_target_lang: String,
     deepl_base_url: String,
     deepl_api_key: String,
+    translation_env_openai: String,
+    translation_env_anthropic: String,
+    translation_env_deepl: String,
 }
 
 struct InferredMetadata {
@@ -703,6 +713,7 @@ impl LibraryService {
             connection_pool: Arc::new(Mutex::new(Vec::new())),
         };
         service.migrate()?;
+        service.apply_saved_ai_environment()?;
         Ok(service)
     }
 
@@ -1775,6 +1786,8 @@ impl LibraryService {
             } else {
                 current.anthropic_api_key
             },
+            provider_env_openai: current.provider_env_openai,
+            provider_env_anthropic: current.provider_env_anthropic,
             translation_provider: input.translation_provider,
             translation_openai_model: input.translation_openai_model.trim().to_string(),
             translation_anthropic_model: input.translation_anthropic_model.trim().to_string(),
@@ -1787,8 +1800,38 @@ impl LibraryService {
             } else {
                 current.deepl_api_key
             },
+            translation_env_openai: current.translation_env_openai,
+            translation_env_anthropic: current.translation_env_anthropic,
+            translation_env_deepl: current.translation_env_deepl,
         };
         self.save_ai_settings(&conn, &next)?;
+        apply_ai_environment(&next);
+        Ok(to_public_ai_settings(&next))
+    }
+
+    pub fn update_ai_environment_settings(
+        &self,
+        provider_env_openai: Option<String>,
+        provider_env_anthropic: Option<String>,
+        translation_env_openai: Option<String>,
+        translation_env_anthropic: Option<String>,
+        translation_env_deepl: Option<String>,
+    ) -> Result<AISettings> {
+        let conn = self.connect()?;
+        let current = self.load_ai_settings(&conn)?;
+        let next = StoredAISettings {
+            provider_env_openai: provider_env_openai.unwrap_or(current.provider_env_openai),
+            provider_env_anthropic: provider_env_anthropic
+                .unwrap_or(current.provider_env_anthropic),
+            translation_env_openai: translation_env_openai
+                .unwrap_or(current.translation_env_openai),
+            translation_env_anthropic: translation_env_anthropic
+                .unwrap_or(current.translation_env_anthropic),
+            translation_env_deepl: translation_env_deepl.unwrap_or(current.translation_env_deepl),
+            ..current
+        };
+        self.save_ai_settings(&conn, &next)?;
+        apply_ai_environment(&next);
         Ok(to_public_ai_settings(&next))
     }
 
@@ -2925,6 +2968,13 @@ impl LibraryService {
         Ok(())
     }
 
+    fn apply_saved_ai_environment(&self) -> Result<()> {
+        let conn = self.connect()?;
+        let settings = self.load_ai_settings(&conn)?;
+        apply_ai_environment(&settings);
+        Ok(())
+    }
+
     fn migrate(&self) -> Result<()> {
         let conn = self.connect()?;
         conn.execute_batch(
@@ -3195,6 +3245,36 @@ impl LibraryService {
             &conn,
             "ai_settings",
             "deepl_api_key",
+            "TEXT NOT NULL DEFAULT ''",
+        )?;
+        ensure_column(
+            &conn,
+            "ai_settings",
+            "provider_env_openai",
+            "TEXT NOT NULL DEFAULT ''",
+        )?;
+        ensure_column(
+            &conn,
+            "ai_settings",
+            "provider_env_anthropic",
+            "TEXT NOT NULL DEFAULT ''",
+        )?;
+        ensure_column(
+            &conn,
+            "ai_settings",
+            "translation_env_openai",
+            "TEXT NOT NULL DEFAULT ''",
+        )?;
+        ensure_column(
+            &conn,
+            "ai_settings",
+            "translation_env_anthropic",
+            "TEXT NOT NULL DEFAULT ''",
+        )?;
+        ensure_column(
+            &conn,
+            "ai_settings",
+            "translation_env_deepl",
             "TEXT NOT NULL DEFAULT ''",
         )?;
         conn.execute("INSERT OR IGNORE INTO ai_settings(id) VALUES (1)", [])?;
@@ -3727,21 +3807,26 @@ fn to_public_ai_settings(settings: &StoredAISettings) -> AISettings {
         openai_model: settings.openai_model.clone(),
         openai_base_url: settings.openai_base_url.clone(),
         has_openai_api_key: !settings.openai_api_key.trim().is_empty(),
+        provider_env_openai: settings.provider_env_openai.clone(),
         anthropic_model: settings.anthropic_model.clone(),
         anthropic_base_url: settings.anthropic_base_url.clone(),
         has_anthropic_api_key: !settings.anthropic_api_key.trim().is_empty(),
+        provider_env_anthropic: settings.provider_env_anthropic.clone(),
         translation_provider: settings.translation_provider,
         translation_openai_model: settings.translation_openai_model.clone(),
         translation_anthropic_model: settings.translation_anthropic_model.clone(),
         translation_target_lang: settings.translation_target_lang.clone(),
         deepl_base_url: settings.deepl_base_url.clone(),
         has_deepl_api_key: !settings.deepl_api_key.trim().is_empty(),
+        translation_env_openai: settings.translation_env_openai.clone(),
+        translation_env_anthropic: settings.translation_env_anthropic.clone(),
+        translation_env_deepl: settings.translation_env_deepl.clone(),
     }
 }
 
 fn load_ai_settings_row(conn: &Connection) -> Result<StoredAISettings> {
     conn.query_row(
-        "SELECT active_provider, openai_model, openai_base_url, openai_api_key, anthropic_model, anthropic_base_url, anthropic_api_key, translation_provider, translation_openai_model, translation_anthropic_model, translation_target_lang, deepl_base_url, deepl_api_key FROM ai_settings WHERE id = 1",
+        "SELECT active_provider, openai_model, openai_base_url, openai_api_key, anthropic_model, anthropic_base_url, anthropic_api_key, translation_provider, translation_openai_model, translation_anthropic_model, translation_target_lang, deepl_base_url, deepl_api_key, provider_env_openai, provider_env_anthropic, translation_env_openai, translation_env_anthropic, translation_env_deepl FROM ai_settings WHERE id = 1",
         [],
         |row| {
             let active_provider: String = row.get(0)?;
@@ -3774,6 +3859,11 @@ fn load_ai_settings_row(conn: &Connection) -> Result<StoredAISettings> {
                 translation_target_lang: row.get(10)?,
                 deepl_base_url: row.get(11)?,
                 deepl_api_key: row.get(12)?,
+                provider_env_openai: row.get(13)?,
+                provider_env_anthropic: row.get(14)?,
+                translation_env_openai: row.get(15)?,
+                translation_env_anthropic: row.get(16)?,
+                translation_env_deepl: row.get(17)?,
             })
         },
     )
@@ -3795,7 +3885,12 @@ fn save_ai_settings_row(conn: &Connection, settings: &StoredAISettings) -> Resul
              translation_anthropic_model = ?10,
              translation_target_lang = ?11,
              deepl_base_url = ?12,
-             deepl_api_key = ?13
+             deepl_api_key = ?13,
+             provider_env_openai = ?14,
+             provider_env_anthropic = ?15,
+             translation_env_openai = ?16,
+             translation_env_anthropic = ?17,
+             translation_env_deepl = ?18
          WHERE id = 1",
         params![
             settings.active_provider.as_str(),
@@ -3810,10 +3905,67 @@ fn save_ai_settings_row(conn: &Connection, settings: &StoredAISettings) -> Resul
             settings.translation_anthropic_model,
             settings.translation_target_lang,
             settings.deepl_base_url,
-            settings.deepl_api_key
+            settings.deepl_api_key,
+            settings.provider_env_openai,
+            settings.provider_env_anthropic,
+            settings.translation_env_openai,
+            settings.translation_env_anthropic,
+            settings.translation_env_deepl
         ],
     )?;
     Ok(())
+}
+
+fn apply_ai_environment(settings: &StoredAISettings) {
+    for text in [
+        settings.provider_env_openai.as_str(),
+        settings.provider_env_anthropic.as_str(),
+        settings.translation_env_openai.as_str(),
+        settings.translation_env_anthropic.as_str(),
+        settings.translation_env_deepl.as_str(),
+    ] {
+        apply_env_text(text);
+    }
+}
+
+fn apply_env_text(text: &str) {
+    for (key, value) in parse_env_text(text) {
+        env::set_var(key, value);
+    }
+}
+
+fn parse_env_text(text: &str) -> Vec<(String, String)> {
+    text.lines()
+        .filter_map(|raw_line| {
+            let line = raw_line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                return None;
+            }
+            let line = line.strip_prefix("export ").unwrap_or(line).trim();
+            let (key, value) = line.split_once('=')?;
+            let key = key.trim();
+            if key.is_empty()
+                || !key
+                    .chars()
+                    .all(|character| character == '_' || character.is_ascii_alphanumeric())
+            {
+                return None;
+            }
+            let value = trim_env_value(value.trim()).to_string();
+            Some((key.to_string(), value))
+        })
+        .collect()
+}
+
+fn trim_env_value(value: &str) -> &str {
+    if value.len() >= 2 {
+        let first = value.as_bytes()[0];
+        let last = value.as_bytes()[value.len() - 1];
+        if (first == b'\'' && last == b'\'') || (first == b'"' && last == b'"') {
+            return &value[1..value.len() - 1];
+        }
+    }
+    value
 }
 
 fn parse_translation_provider(value: &str) -> Result<TranslationProvider> {

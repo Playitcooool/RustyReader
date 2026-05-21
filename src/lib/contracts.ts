@@ -169,15 +169,20 @@ export type AISettings = {
   openai_model: string;
   openai_base_url: string;
   has_openai_api_key: boolean;
+  provider_env_openai: string;
   anthropic_model: string;
   anthropic_base_url: string;
   has_anthropic_api_key: boolean;
+  provider_env_anthropic: string;
   translation_provider: TranslationProvider;
   translation_openai_model: string;
   translation_anthropic_model: string;
   translation_target_lang: string;
   deepl_base_url: string;
   has_deepl_api_key: boolean;
+  translation_env_openai: string;
+  translation_env_anthropic: string;
+  translation_env_deepl: string;
 };
 
 export type AIEnvSettings = {
@@ -198,10 +203,12 @@ export type UpdateAISettingsInput = {
   openai_base_url: string;
   openai_api_key?: string;
   clear_openai_api_key?: boolean;
+  provider_env_openai?: string;
   anthropic_model: string;
   anthropic_base_url: string;
   anthropic_api_key?: string;
   clear_anthropic_api_key?: boolean;
+  provider_env_anthropic?: string;
   translation_provider: TranslationProvider;
   translation_openai_model: string;
   translation_anthropic_model: string;
@@ -209,6 +216,9 @@ export type UpdateAISettingsInput = {
   deepl_base_url: string;
   deepl_api_key?: string;
   clear_deepl_api_key?: boolean;
+  translation_env_openai?: string;
+  translation_env_anthropic?: string;
+  translation_env_deepl?: string;
 };
 
 export type TranslateSelectionInput = {

@@ -32,7 +32,7 @@ const aiProviderCards: Array<{ id: AIProvider; title: string; meta: string; plac
     id: "anthropic",
     title: "Anthropic",
     meta: "Claude profile for active reading workflows",
-    placeholder: "ANTHROPIC_MODEL=claude-...\nANTHROPIC_API_KEY=sk-...\nANTHROPIC_BASE_URL=https://api.anthropic.com/v1",
+    placeholder: "ANTHROPIC_MODEL=claude-...\nANTHROPIC_API_KEY=sk-...\nANTHROPIC_AUTH_TOKEN=sk-...\nANTHROPIC_BASE_URL=https://api.anthropic.com/v1",
   },
 ];
 

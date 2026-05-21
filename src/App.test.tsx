@@ -1066,6 +1066,45 @@ describe("App reading workspace", () => {
     });
   });
 
+  it("maps auth token aliases from provider env settings", async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).__TAURI_INTERNALS__ = {
+      transformCallback: (callback: unknown) => callback,
+      invoke: vi.fn(async () => null),
+    };
+    const user = userEvent.setup();
+    const updateAiSettingsSpy = vi.spyOn(fakeApi, "updateAiSettings");
+    render(<App api={fakeApi} />);
+
+    expect(await screen.findByRole("tree", { name: "Library resources" })).toBeInTheDocument();
+    menuListeners.get("menu:open-settings")?.();
+    await user.click(await screen.findByRole("button", { name: /AI Providers/ }));
+    await user.click(screen.getByRole("tab", { name: /Anthropic/ }));
+    await user.type(
+      screen.getByLabelText("AI environment variables"),
+      "ANTHROPIC_MODEL=claude-alias-model\nANTHROPIC_AUTH_TOKEN=alias-auth-token\nANTHROPIC_BASE_URL=https://alias.anthropic.example/v1",
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(updateAiSettingsSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          active_provider: "anthropic",
+          anthropic_model: "claude-alias-model",
+          anthropic_api_key: "alias-auth-token",
+          anthropic_base_url: "https://alias.anthropic.example/v1",
+        }),
+      );
+    });
+
+    menuListeners.get("menu:open-settings")?.();
+    await user.click(await screen.findByRole("button", { name: /AI Providers/ }));
+    await user.click(screen.getByRole("tab", { name: /Anthropic/ }));
+    expect(screen.getByLabelText("AI environment variables")).toHaveValue(
+      "ANTHROPIC_MODEL=claude-alias-model\nANTHROPIC_AUTH_TOKEN=alias-auth-token\nANTHROPIC_BASE_URL=https://alias.anthropic.example/v1",
+    );
+  });
+
   it("loads translation values from env-style settings", async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).__TAURI_INTERNALS__ = {

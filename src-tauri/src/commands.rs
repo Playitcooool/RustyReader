@@ -118,10 +118,12 @@ pub(crate) struct UpdateAiSettingsPayload {
     openai_base_url: String,
     openai_api_key: Option<String>,
     clear_openai_api_key: Option<bool>,
+    provider_env_openai: Option<String>,
     anthropic_model: String,
     anthropic_base_url: String,
     anthropic_api_key: Option<String>,
     clear_anthropic_api_key: Option<bool>,
+    provider_env_anthropic: Option<String>,
     translation_provider: String,
     translation_openai_model: String,
     translation_anthropic_model: String,
@@ -129,6 +131,9 @@ pub(crate) struct UpdateAiSettingsPayload {
     deepl_base_url: String,
     deepl_api_key: Option<String>,
     clear_deepl_api_key: Option<bool>,
+    translation_env_openai: Option<String>,
+    translation_env_anthropic: Option<String>,
+    translation_env_deepl: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -345,9 +350,11 @@ pub(crate) fn get_system_ai_env() -> Result<AIEnvSettingsPayload, String> {
         "ACTIVE_PROVIDER",
         "OPENAI_MODEL",
         "OPENAI_API_KEY",
+        "OPENAI_AUTH_TOKEN",
         "OPENAI_BASE_URL",
         "ANTHROPIC_MODEL",
         "ANTHROPIC_API_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
         "ANTHROPIC_BASE_URL",
         "TRANSLATION_PROVIDER",
         "TRANSLATION_TARGET_LANG",
@@ -369,6 +376,11 @@ pub(crate) fn update_ai_settings(
     state: State<'_, AppState>,
     input: UpdateAiSettingsPayload,
 ) -> Result<AISettings, String> {
+    let provider_env_openai = input.provider_env_openai.clone();
+    let provider_env_anthropic = input.provider_env_anthropic.clone();
+    let translation_env_openai = input.translation_env_openai.clone();
+    let translation_env_anthropic = input.translation_env_anthropic.clone();
+    let translation_env_deepl = input.translation_env_deepl.clone();
     service(&state)
         .update_ai_settings(UpdateAISettingsInput {
             active_provider: match input.active_provider.as_str() {
@@ -396,6 +408,15 @@ pub(crate) fn update_ai_settings(
             deepl_base_url: input.deepl_base_url,
             deepl_api_key: input.deepl_api_key,
             clear_deepl_api_key: input.clear_deepl_api_key,
+        })
+        .and_then(|_| {
+            service(&state).update_ai_environment_settings(
+                provider_env_openai,
+                provider_env_anthropic,
+                translation_env_openai,
+                translation_env_anthropic,
+                translation_env_deepl,
+            )
         })
         .map_err(|error| error.to_string())
 }

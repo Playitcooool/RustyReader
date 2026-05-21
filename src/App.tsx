@@ -56,13 +56,18 @@ const draftFromAiSettings = (settings: AISettings): UpdateAISettingsInput => ({
   active_provider: settings.active_provider,
   openai_model: settings.openai_model,
   openai_base_url: settings.openai_base_url,
+  provider_env_openai: settings.provider_env_openai,
   anthropic_model: settings.anthropic_model,
   anthropic_base_url: settings.anthropic_base_url,
+  provider_env_anthropic: settings.provider_env_anthropic,
   translation_provider: settings.translation_provider,
   translation_openai_model: settings.translation_openai_model,
   translation_anthropic_model: settings.translation_anthropic_model,
   translation_target_lang: settings.translation_target_lang,
   deepl_base_url: settings.deepl_base_url,
+  translation_env_openai: settings.translation_env_openai,
+  translation_env_anthropic: settings.translation_env_anthropic,
+  translation_env_deepl: settings.translation_env_deepl,
 });
 
 const parseAiEnvSettings = (text: string) => {
@@ -80,6 +85,15 @@ const parseAiEnvSettings = (text: string) => {
       value = value.slice(1, -1);
     }
     if (key) env[key] = value;
+  });
+  const aliases: Record<string, string> = {
+    OPENAI_AUTH_TOKEN: "OPENAI_API_KEY",
+    OPENAI_MODLE: "OPENAI_MODEL",
+    ANTHROPIC_AUTH_TOKEN: "ANTHROPIC_API_KEY",
+    ANTHROPIC_MODLE: "ANTHROPIC_MODEL",
+  };
+  Object.entries(aliases).forEach(([alias, canonical]) => {
+    if (env[alias] && !env[canonical]) env[canonical] = env[alias];
   });
   return env;
 };
@@ -135,18 +149,22 @@ const filterEnvText = (text: string, keys: string[]) => {
 };
 
 const providerEnvKeysByProvider: Record<AIProvider, string[]> = {
-  openai: ["OPENAI_MODEL", "OPENAI_API_KEY", "OPENAI_BASE_URL"],
-  anthropic: ["ANTHROPIC_MODEL", "ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL"],
+  openai: ["OPENAI_MODEL", "OPENAI_MODLE", "OPENAI_API_KEY", "OPENAI_AUTH_TOKEN", "OPENAI_BASE_URL"],
+  anthropic: ["ANTHROPIC_MODEL", "ANTHROPIC_MODLE", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL"],
 };
 
 const providerEnvKeys = [
   "AI_PROVIDER",
   "ACTIVE_PROVIDER",
   "OPENAI_MODEL",
+  "OPENAI_MODLE",
   "OPENAI_API_KEY",
+  "OPENAI_AUTH_TOKEN",
   "OPENAI_BASE_URL",
   "ANTHROPIC_MODEL",
+  "ANTHROPIC_MODLE",
   "ANTHROPIC_API_KEY",
+  "ANTHROPIC_AUTH_TOKEN",
   "ANTHROPIC_BASE_URL",
 ];
 
@@ -391,6 +409,15 @@ export default function App({ api }: { api: AppApi }) {
     setAiSettings(settings);
     setConnectorSettings(connector);
     setAiSettingsDraft(draftFromAiSettings(settings));
+    setAiEnvDrafts({
+      openai: settings.provider_env_openai,
+      anthropic: settings.provider_env_anthropic,
+    });
+    setTranslationEnvDrafts({
+      openai: settings.translation_env_openai,
+      anthropic: settings.translation_env_anthropic,
+      deepl: settings.translation_env_deepl,
+    });
     setGeneralSettingsDraft({
       resourcesSidebarOpen: readStoredBoolean(SIDEBAR_OPEN_KEY, true),
       defaultItemSort: readStoredString(ITEM_SORT_KEY, DEFAULT_ITEM_SORT, ["recent", "title", "year_desc"] as const),
@@ -398,8 +425,6 @@ export default function App({ api }: { api: AppApi }) {
       defaultReaderFitMode: readStoredString(READER_FIT_MODE_KEY, DEFAULT_READER_FIT_MODE, ["fit_width", "manual"] as const),
       defaultReaderZoom: readStoredNumber(READER_ZOOM_KEY, DEFAULT_READER_ZOOM),
     });
-    setAiEnvDrafts(emptyProviderEnvDrafts());
-    setTranslationEnvDrafts(emptyTranslationEnvDrafts());
     setIsSettingsOpen(true);
   }, [getApi]);
 
@@ -422,8 +447,13 @@ export default function App({ api }: { api: AppApi }) {
     const next = await (await getApi()).updateAiSettings({
       ...mergedAiSettingsDraft,
       openai_api_key: envSettings.OPENAI_API_KEY,
+      provider_env_openai: aiEnvDrafts.openai,
       anthropic_api_key: envSettings.ANTHROPIC_API_KEY,
+      provider_env_anthropic: aiEnvDrafts.anthropic,
       deepl_api_key: translationEnvSettings.DEEPL_API_KEY,
+      translation_env_openai: translationEnvDrafts.openai,
+      translation_env_anthropic: translationEnvDrafts.anthropic,
+      translation_env_deepl: translationEnvDrafts.deepl,
     });
     setIsSidebarVisible(generalSettingsDraft.resourcesSidebarOpen);
     library.setItemSort?.(generalSettingsDraft.defaultItemSort);

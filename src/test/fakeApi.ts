@@ -228,10 +228,12 @@ const initialState = (): MockState => ({
     openai_base_url: "",
     has_openai_api_key: true,
     openai_api_key: "openai-secret",
+    provider_env_openai: "",
     anthropic_model: "claude-3-5-sonnet-latest",
     anthropic_base_url: "",
     has_anthropic_api_key: false,
     anthropic_api_key: "",
+    provider_env_anthropic: "",
     translation_provider: "openai",
     translation_openai_model: "",
     translation_anthropic_model: "",
@@ -239,6 +241,9 @@ const initialState = (): MockState => ({
     deepl_base_url: "https://api-free.deepl.com",
     has_deepl_api_key: false,
     deepl_api_key: "",
+    translation_env_openai: "",
+    translation_env_anthropic: "",
+    translation_env_deepl: "",
   },
   connectorSettings: {
     connector_url: "http://127.0.0.1:17654",
@@ -501,15 +506,20 @@ const publicAiSettings = (): AISettings => ({
   openai_model: state.aiSettings.openai_model,
   openai_base_url: state.aiSettings.openai_base_url,
   has_openai_api_key: Boolean(state.aiSettings.openai_api_key),
+  provider_env_openai: state.aiSettings.provider_env_openai,
   anthropic_model: state.aiSettings.anthropic_model,
   anthropic_base_url: state.aiSettings.anthropic_base_url,
   has_anthropic_api_key: Boolean(state.aiSettings.anthropic_api_key),
+  provider_env_anthropic: state.aiSettings.provider_env_anthropic,
   translation_provider: state.aiSettings.translation_provider,
   translation_openai_model: state.aiSettings.translation_openai_model,
   translation_anthropic_model: state.aiSettings.translation_anthropic_model,
   translation_target_lang: state.aiSettings.translation_target_lang,
   deepl_base_url: state.aiSettings.deepl_base_url,
   has_deepl_api_key: Boolean(state.aiSettings.deepl_api_key),
+  translation_env_openai: state.aiSettings.translation_env_openai,
+  translation_env_anthropic: state.aiSettings.translation_env_anthropic,
+  translation_env_deepl: state.aiSettings.translation_env_deepl,
 });
 
 const collectionTaskOutput = (collectionId: number, kind: string, scopeItemIds: number[]) => {
@@ -1110,13 +1120,18 @@ export const fakeApi: AppApi = {
     state.aiSettings.active_provider = input.active_provider as AIProvider;
     state.aiSettings.openai_model = input.openai_model;
     state.aiSettings.openai_base_url = input.openai_base_url;
+    state.aiSettings.provider_env_openai = input.provider_env_openai ?? "";
     state.aiSettings.anthropic_model = input.anthropic_model;
     state.aiSettings.anthropic_base_url = input.anthropic_base_url;
+    state.aiSettings.provider_env_anthropic = input.provider_env_anthropic ?? "";
     state.aiSettings.translation_provider = input.translation_provider;
     state.aiSettings.translation_openai_model = input.translation_openai_model;
     state.aiSettings.translation_anthropic_model = input.translation_anthropic_model;
     state.aiSettings.translation_target_lang = input.translation_target_lang;
     state.aiSettings.deepl_base_url = input.deepl_base_url;
+    state.aiSettings.translation_env_openai = input.translation_env_openai ?? "";
+    state.aiSettings.translation_env_anthropic = input.translation_env_anthropic ?? "";
+    state.aiSettings.translation_env_deepl = input.translation_env_deepl ?? "";
     if (input.clear_openai_api_key) state.aiSettings.openai_api_key = "";
     else if (input.openai_api_key && input.openai_api_key.trim()) state.aiSettings.openai_api_key = input.openai_api_key;
     if (input.clear_anthropic_api_key) state.aiSettings.anthropic_api_key = "";
