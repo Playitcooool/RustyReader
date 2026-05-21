@@ -382,7 +382,9 @@ fn session_ask_does_not_expose_internal_prompt_metadata() {
     assert_eq!(requests.len(), 1);
     assert!(!requests[0].prompt.contains("Target title:"));
     assert!(!requests[0].prompt.contains("Task kind: session.ask"));
-    assert!(requests[0].prompt.contains("section/chapter, page, or paragraph block"));
+    assert!(requests[0]
+        .prompt
+        .contains("section/chapter, page, or paragraph block"));
     assert!(requests[0]
         .prompt
         .contains("User question:\n合并是怎么做到的呢？"));

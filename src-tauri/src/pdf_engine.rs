@@ -159,7 +159,10 @@ fn normalized_query(input: &str) -> String {
     input.trim().to_lowercase()
 }
 
-fn outline_dict_from_object<'a>(doc: &'a LopdfDocument, object: &'a Object) -> Option<&'a Dictionary> {
+fn outline_dict_from_object<'a>(
+    doc: &'a LopdfDocument,
+    object: &'a Object,
+) -> Option<&'a Dictionary> {
     match object {
         Object::Dictionary(dictionary) => Some(dictionary),
         Object::Reference(object_id) => doc.get_dictionary(*object_id).ok(),
@@ -193,7 +196,10 @@ fn outline_page_index_for_node(
     if let Ok(destination) = node.get(b"Dest") {
         return outline_page_index_from_destination(doc, destination, page_index_by_id);
     }
-    let action = node.get(b"A").ok().and_then(|object| outline_dict_from_object(doc, object))?;
+    let action = node
+        .get(b"A")
+        .ok()
+        .and_then(|object| outline_dict_from_object(doc, object))?;
     if action.get(b"S").ok()?.as_name().ok()? != b"GoTo" {
         return None;
     }
@@ -261,7 +267,15 @@ fn collect_outline_items(
             .get(b"First")
             .ok()
             .cloned()
-            .map(|first_child| collect_outline_items(doc, first_child, page_index_by_id, item_path.clone(), visited))
+            .map(|first_child| {
+                collect_outline_items(
+                    doc,
+                    first_child,
+                    page_index_by_id,
+                    item_path.clone(),
+                    visited,
+                )
+            })
             .unwrap_or_default();
 
         if let (Some(title), Some(page_index0)) = (
@@ -1398,7 +1412,8 @@ mod tests {
 
     #[test]
     fn outline_extraction_returns_empty_for_pdf_without_outline() {
-        let outline = extract_pdf_outline(&make_two_page_pdf_with_distinct_sizes()).expect("outline should parse");
+        let outline = extract_pdf_outline(&make_two_page_pdf_with_distinct_sizes())
+            .expect("outline should parse");
 
         assert!(outline.is_empty());
     }
