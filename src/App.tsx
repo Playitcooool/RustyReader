@@ -196,7 +196,7 @@ const emptyTranslationEnvDrafts = (): Record<TranslationProvider, string> => ({
 
 export default function App({ api }: { api: AppApi }) {
   const getApi = useCallback(() => Promise.resolve(api), [api]);
-  const [statusMessage, setStatusMessage] = useState("");
+  const [, setStatusMessage] = useState("");
   const [isSidebarVisible, setIsSidebarVisible] = useState(() => readStoredBoolean(SIDEBAR_OPEN_KEY, true));
   const [focusSidebarPanel, setFocusSidebarPanel] = useState<FocusSidebarPanel>("library");
   const [sidebarWidth, setSidebarWidth] = useState(() => readStoredNumber(SIDEBAR_WIDTH_KEY, DEFAULT_SIDEBAR_WIDTH));
@@ -685,11 +685,6 @@ export default function App({ api }: { api: AppApi }) {
       className={`app-shell ${isPdfFocusMode ? "app-shell-focus" : "app-shell-workspace"} ${isPdfFocusMode && isSidebarVisible ? "app-shell-focus-sidebar-open" : ""} ${ai.isAiPanelOpen ? "app-shell-ai-open" : ""}`}
       style={{ "--sidebar-width": `${clamp(sidebarWidth, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH)}px`, "--ai-panel-width": `${clamp(aiPanelWidth, AI_PANEL_MIN_WIDTH, AI_PANEL_MAX_WIDTH)}px` } as CSSProperties}
     >
-      {statusMessage && !ai.isAiPanelOpen ? (
-        <div className="status-pill app-status" role="status">
-          {statusMessage}
-        </div>
-      ) : null}
       {library.resourceContextMenu && (library.contextMenuCollection || library.contextMenuItem) ? (
         <div ref={library.resourceContextMenuRef} aria-label="Resource actions" className="floating-menu resource-context-menu" role="menu" style={{ left: library.resourceContextMenu.x, top: library.resourceContextMenu.y }}>
           {library.contextMenuCollection ? (

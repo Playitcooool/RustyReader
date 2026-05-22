@@ -342,7 +342,7 @@ describe("App reading workspace", () => {
     expect(await screen.findByTestId("pdf-reader")).toBeInTheDocument();
   });
 
-  it("shows reader load failures instead of swallowing them", async () => {
+  it("keeps failed reader loads out of the workspace without showing a status prompt", async () => {
     const apiWithFailure = {
       ...fakeApi,
       getReaderView: vi.fn(async () => {
@@ -355,7 +355,10 @@ describe("App reading workspace", () => {
 
     await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
 
-    expect(await screen.findByText("Reader view exploded")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(apiWithFailure.getReaderView).toHaveBeenCalled();
+    });
+    expect(screen.queryByText("Reader view exploded")).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /Transformer Scaling Laws/i })).not.toBeInTheDocument();
   });
 
@@ -1832,7 +1835,7 @@ describe("App reading workspace", () => {
     });
 
     expect(await screen.findByRole("listitem", { name: /External Paper/i })).toBeInTheDocument();
-    expect(screen.getByText("Library updated from browser extension.")).toBeInTheDocument();
+    expect(screen.queryByText("Library updated from browser extension.")).not.toBeInTheDocument();
     expect(refreshStatuses).toHaveBeenCalledTimes(1);
   });
 
@@ -1850,7 +1853,9 @@ describe("App reading workspace", () => {
       duplicate_item_ids: [3],
     });
 
-    expect(await screen.findByText("Browser extension found this item already exists in the library.")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText("Browser extension found this item already exists in the library.")).not.toBeInTheDocument();
+    });
     await waitFor(() => {
       expect(screen.getByRole("treeitem", { name: "Systems" })).toHaveClass("resource-tree-row-active");
     });
