@@ -12,7 +12,7 @@
 [![SQLite](https://img.shields.io/badge/SQLite-local--first-003B57?style=flat&logo=sqlite&logoColor=white)](https://www.sqlite.org/)
 ![License](https://img.shields.io/badge/License-MIT-2E8B57?style=flat)
 
-[Features](#features) · [Quick Start](#quick-start) · [Browser Extensions](#browser-extensions) · [Architecture](#architecture) · [Development](#development)
+[Download](#download) · [Features](#features) · [Quick Start](#quick-start) · [Browser Extensions](#browser-extensions) · [Architecture](#architecture) · [Development](#development)
 
 </div>
 
@@ -43,6 +43,12 @@ Paper Reader 是一个面向论文阅读和研究整理的桌面应用。它把�
 3. Read in the desktop reader, highlight passages, and save notes.
 4. Ask AI questions against a paper, a collection, or a curated session.
 5. Capture new PDFs and readable pages directly from Chrome or Safari.
+
+## Download
+
+Download the latest macOS Apple Silicon build:
+
+[Paper Reader v0.1.0 DMG](https://github.com/Playitcooool/rust-ai-paper-reader/releases/download/v0.1.0/Paper.Reader_0.1.0_aarch64.dmg)
 
 ## Quick Start
 
