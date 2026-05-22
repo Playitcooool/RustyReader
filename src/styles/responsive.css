@@ -127,6 +127,8 @@
   }
 
   .ai-shell {
+    height: auto;
+    margin-top: 0;
     min-height: auto;
     border-left: none;
     border-top: 1px solid var(--panel-border);

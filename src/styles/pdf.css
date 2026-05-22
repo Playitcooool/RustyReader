@@ -28,7 +28,18 @@
 }
 
 .app-shell.app-shell-ai-open.app-shell-focus .ai-shell {
+  --focus-ai-panel-top: 56px;
+  align-self: start;
+  height: calc(100vh - var(--focus-ai-panel-top));
+  margin-top: var(--focus-ai-panel-top);
   z-index: 2;
+}
+
+.app-shell.app-shell-ai-open.app-shell-focus > .pane-resizer {
+  --focus-ai-panel-top: 56px;
+  align-self: start;
+  height: calc(100vh - var(--focus-ai-panel-top));
+  margin-top: var(--focus-ai-panel-top);
 }
 
 .app-shell-focus .focus-sidebar-embedded-toggle {
