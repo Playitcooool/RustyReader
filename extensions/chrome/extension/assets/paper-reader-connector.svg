@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Paper Reader Chrome Connector</title>
+  <desc id="desc">A browser extension icon for sending papers from Chrome into Paper Reader.</desc>
+  <defs>
+    <linearGradient id="bg" x1="36" y1="18" x2="214" y2="236" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#17313f"/>
+      <stop offset="0.54" stop-color="#1c5157"/>
+      <stop offset="1" stop-color="#0f2028"/>
+    </linearGradient>
+    <linearGradient id="page" x1="77" y1="45" x2="176" y2="205" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff8ea"/>
+      <stop offset="1" stop-color="#ead8bb"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="39" y1="29" x2="216" y2="222" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f45b44"/>
+      <stop offset="0.36" stop-color="#f5c84c"/>
+      <stop offset="0.66" stop-color="#25a95a"/>
+      <stop offset="1" stop-color="#4385f5"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="10" stdDeviation="13" flood-color="#071014" flood-opacity="0.34"/>
+    </filter>
+  </defs>
+  <rect width="256" height="256" rx="54" fill="url(#bg)"/>
+  <circle cx="128" cy="128" r="97" fill="none" stroke="url(#ring)" stroke-width="16" opacity="0.94"/>
+  <g filter="url(#shadow)">
+    <path d="M78 45h73l38 38v111c0 11-9 20-20 20H78c-11 0-20-9-20-20V65c0-11 9-20 20-20Z" fill="url(#page)"/>
+    <path d="M151 45v31c0 7 6 13 13 13h25" fill="#d8c09e"/>
+    <path d="M83 102h62M83 126h39M83 150h34" fill="none" stroke="#6f837d" stroke-width="9" stroke-linecap="round" opacity="0.74"/>
+    <circle cx="146" cy="148" r="34" fill="none" stroke="#65d9c8" stroke-width="14"/>
+    <path d="m169 173 27 27" fill="none" stroke="#65d9c8" stroke-width="14" stroke-linecap="round"/>
+  </g>
+  <circle cx="197" cy="59" r="29" fill="#ffffff"/>
+  <circle cx="197" cy="59" r="16" fill="#4385f5"/>
+</svg>

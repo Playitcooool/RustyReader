@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Paper Reader Safari Connector</title>
+  <desc id="desc">A browser extension icon for sending papers from Safari into Paper Reader.</desc>
+  <defs>
+    <linearGradient id="bg" x1="38" y1="18" x2="218" y2="238" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#153340"/>
+      <stop offset="0.52" stop-color="#1d5358"/>
+      <stop offset="1" stop-color="#102028"/>
+    </linearGradient>
+    <linearGradient id="page" x1="78" y1="45" x2="177" y2="205" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff8ea"/>
+      <stop offset="1" stop-color="#ead8bb"/>
+    </linearGradient>
+    <linearGradient id="safari" x1="49" y1="36" x2="211" y2="219" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#70e6ff"/>
+      <stop offset="0.48" stop-color="#1c9eff"/>
+      <stop offset="1" stop-color="#2759d8"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="10" stdDeviation="13" flood-color="#071014" flood-opacity="0.34"/>
+    </filter>
+  </defs>
+  <rect width="256" height="256" rx="54" fill="url(#bg)"/>
+  <circle cx="128" cy="128" r="96" fill="none" stroke="url(#safari)" stroke-width="16" opacity="0.96"/>
+  <path d="M128 43v20M128 193v20M43 128h20M193 128h20M68 68l14 14M174 174l14 14M188 68l-14 14M82 174l-14 14" fill="none" stroke="#d9f7ff" stroke-width="6" stroke-linecap="round" opacity="0.65"/>
+  <g filter="url(#shadow)">
+    <path d="M79 45h73l38 38v111c0 11-9 20-20 20H79c-11 0-20-9-20-20V65c0-11 9-20 20-20Z" fill="url(#page)"/>
+    <path d="M152 45v31c0 7 6 13 13 13h25" fill="#d8c09e"/>
+    <path d="M84 102h62M84 126h39M84 150h34" fill="none" stroke="#6f837d" stroke-width="9" stroke-linecap="round" opacity="0.74"/>
+    <circle cx="147" cy="148" r="34" fill="none" stroke="#64d8c8" stroke-width="14"/>
+    <path d="m170 173 27 27" fill="none" stroke="#64d8c8" stroke-width="14" stroke-linecap="round"/>
+  </g>
+  <path d="m208 46-27 61 20 20 28-71c2-6-7-14-21-10Z" fill="#f04c5d"/>
+  <path d="m48 210 27-61-20-20-28 71c-2 6 7 14 21 10Z" fill="#ffffff"/>
+</svg>
