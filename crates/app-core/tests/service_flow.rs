@@ -377,7 +377,7 @@ fn session_ask_does_not_expose_internal_prompt_metadata() {
         .starts_with("合并是通过专家重要性评估、相似度识别和部分保留策略完成的。"));
     assert!(task.output_markdown.contains("## Evidence References"));
     assert!(task.output_markdown.contains("paragraph block 1"));
-    assert!(task.output_markdown.contains("[E"));
+    assert!(!task.output_markdown.contains("[E"));
     let requests = transport.requests.lock().unwrap();
     assert_eq!(requests.len(), 1);
     assert!(!requests[0].prompt.contains("Target title:"));
@@ -528,7 +528,9 @@ fn markdown_export_appends_evidence_references() {
 
     let exported = service.export_note_markdown(note.id).unwrap();
     assert!(exported.contains("## Evidence References"));
-    assert!(exported.contains(&format!("[E{}] Export Paper", chunk.id)));
+    assert!(!exported.contains(&format!("[E{}]", chunk.id)));
+    assert!(exported.contains("Export Paper:"));
+    assert!(exported.contains("paragraph block 1"));
     assert!(exported.contains("retain evidence references"));
 }
 

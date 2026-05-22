@@ -1,4 +1,4 @@
-import type { ComponentProps, RefObject } from "react";
+import { Children, type ComponentProps, type RefObject } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -24,13 +24,9 @@ import type {
 } from "../../lib/contracts";
 import type { AiDockSection, AiPendingMessage, AiReferencePickerResult } from "../../hooks/useAiSessionState";
 
-const citationHrefPrefix = "evidence://";
-
-const withCitationLinks = (markdown: string) =>
-  markdown.replace(/\[E(\d+)\]/g, (_match, id) => `[[E${id}]](${citationHrefPrefix}${id})`);
-
-const evidenceIdsFromMarkdown = (markdown: string) =>
-  Array.from(new Set(Array.from(markdown.matchAll(/\[E(\d+)\]/g), (match) => Number(match[1])).filter(Number.isFinite)));
+const evidenceMarkerPattern = /\[E\d+\]/g;
+const evidenceMarkerTestPattern = /\[E\d+\]/;
+const locationCitationPattern = /\b(?:p\.|pp\.|page|pages|section|chapter|paragraph block)\b/i;
 
 const hasCitationLintWarning = (markdown: string) => {
   if (!/review|comparison|compare|method|gap|theme/i.test(markdown)) return false;
@@ -38,20 +34,59 @@ const hasCitationLintWarning = (markdown: string) => {
     .split(/\n+/)
     .map((line) => line.trim())
     .filter((line) => line.length > 80 && !line.startsWith("#") && !line.startsWith("|"))
-    .some((line) => !/\[E\d+\]/.test(line));
+    .some((line) => !evidenceMarkerTestPattern.test(line) && !locationCitationPattern.test(line));
 };
 
-const markdownComponents = (onCitationClick?: (evidenceId: number) => void) => ({
+const isMathDisplayLine = (line: string) => {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.length > 220) return false;
+  if (/^(```|~~~|\$\$|#|>|[-*+]\s|\d+\.\s|\||<)/.test(trimmed)) return false;
+  if (/[。！？.!?]\s*$/.test(trimmed)) return false;
+  if (/\\(?:frac|sum|prod|int|sqrt|left|right|begin|end|alpha|beta|gamma|theta|lambda|mu|sigma|phi|psi|omega)\b/.test(trimmed)) return true;
+  if (/[=≈≃≅≠≤≥<>±×÷∑∏√∞∫]/.test(trimmed) && /[A-Za-z0-9)]/.test(trimmed)) return true;
+  return false;
+};
+
+const normalizeDisplayMath = (markdown: string) => {
+  let inFence = false;
+  return markdown
+    .split("\n")
+    .map((line) => {
+      const trimmed = line.trim();
+      if (/^(```|~~~)/.test(trimmed)) {
+        inFence = !inFence;
+        return line;
+      }
+      if (inFence || !isMathDisplayLine(line)) return line;
+      return `$$\n${trimmed}\n$$`;
+    })
+    .join("\n");
+};
+
+const removeLegacyEvidenceMarkers = (markdown: string) => markdown.replace(evidenceMarkerPattern, "").replace(/[ \t]+([,.;:])/g, "$1");
+
+const displayMarkdown = (markdown: string) => normalizeDisplayMath(removeLegacyEvidenceMarkers(markdown));
+
+const childText = (children: ComponentProps<"p">["children"]) =>
+  Children.toArray(children)
+    .map((child) => (typeof child === "string" || typeof child === "number" ? String(child) : ""))
+    .join("")
+    .trim();
+
+const markdownComponents = {
   a: ({ href, children, ...props }: ComponentProps<"a">) => {
-    if (href?.startsWith(citationHrefPrefix)) {
-      const evidenceId = Number(href.slice(citationHrefPrefix.length));
+    return <a href={href} {...props} rel="noreferrer" target="_blank">{children}</a>;
+  },
+  p({ children, ...props }: ComponentProps<"p">) {
+    const text = childText(children);
+    if (/^\$\$[\s\S]*\$\$$/.test(text)) {
       return (
-        <button className="ai-citation-chip" type="button" onClick={() => Number.isFinite(evidenceId) && onCitationClick?.(evidenceId)}>
-          {children}
-        </button>
+        <div className="ai-display-equation" role="math">
+          {text.replace(/^\$\$\s*/, "").replace(/\s*\$\$$/, "")}
+        </div>
       );
     }
-    return <a href={href} {...props} rel="noreferrer" target="_blank">{children}</a>;
+    return <p {...props}>{children}</p>;
   },
   pre: (props: ComponentProps<"pre">) => <pre className="ai-markdown-pre" {...props} />,
   code({
@@ -65,7 +100,7 @@ const markdownComponents = (onCitationClick?: (evidenceId: number) => void) => (
       </code>
     );
   },
-});
+};
 
 export const ChatHistoryIcon = MessageIcon;
 export const NewSessionIcon = PlusIcon;
@@ -77,24 +112,14 @@ export const ClosePanelIcon = CloseIcon;
 export const DeleteSessionIcon = TrashIcon;
 
 export function MarkdownMessage({ markdown, onCitationClick }: { markdown: string; onCitationClick?: (evidenceId: number) => void }) {
-  const evidenceIds = evidenceIdsFromMarkdown(markdown);
   const showCitationWarning = hasCitationLintWarning(markdown);
   return (
     <div className="ai-message-with-evidence">
       <div className="ai-markdown">
-        <ReactMarkdown components={markdownComponents(onCitationClick)} remarkPlugins={[remarkGfm]}>
-          {withCitationLinks(markdown)}
+        <ReactMarkdown components={markdownComponents} remarkPlugins={[remarkGfm]}>
+          {displayMarkdown(markdown)}
         </ReactMarkdown>
       </div>
-      {evidenceIds.length > 0 ? (
-        <div className="ai-evidence-strip" aria-label="Evidence references">
-          {evidenceIds.map((evidenceId) => (
-            <button className="ai-evidence-strip-chip" key={evidenceId} type="button" onClick={() => onCitationClick?.(evidenceId)}>
-              E{evidenceId}
-            </button>
-          ))}
-        </div>
-      ) : null}
       {showCitationWarning ? (
         <div className="ai-citation-warning" role="note">
           Some synthesis sentences do not include evidence citations.

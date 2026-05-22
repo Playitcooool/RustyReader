@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     env, fs,
     io::{BufRead, BufReader, Cursor, Read, Seek},
     mem::ManuallyDrop,
@@ -4498,7 +4498,7 @@ fn build_session_prompt(
             format!("Task kind: {kind}\n")
         };
         return Ok(format!(
-            "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nDo not include internal metadata such as target title, collection, or task kind in the answer.\nPreserve the heading and section style shown below.\nCite evidence for key claims, comparisons, and synthesis using the provided bracket ids like [E23]. Use only the evidence chunks below.\nWhen answering a user question, include the cited paper location in natural language when helpful, such as section/chapter, page, or paragraph block; the [E] ids are clickable in the reader.\n{}\n\n{}{}\n\nEvidence chunks:\n\n{}\n{}",
+            "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nDo not include internal metadata such as target title, collection, or task kind in the answer.\nPreserve the heading and section style shown below.\nCite evidence for key claims, comparisons, and synthesis using the provided bracket ids like [E23]. Use only the evidence chunks below.\nWhen answering a user question, include the cited paper location in natural language when helpful, such as section/chapter, page, or paragraph block. The final answer will display paper locations instead of evidence ids.\n{}\n\n{}{}\n\nEvidence chunks:\n\n{}\n{}",
             review_draft_rules(kind),
             task_kind_context,
             task_instructions,
@@ -4598,7 +4598,7 @@ fn build_session_prompt(
         format!("Task kind: {kind}\n")
     };
     Ok(format!(
-        "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nDo not include internal metadata such as target title, collection, or task kind in the answer.\nPreserve the heading and section style shown below.\nWhen answering a user question, cite the paper location in natural language when possible, such as section/chapter, page, or paragraph block. Prefer evidence chunks with clickable [E] ids when they are provided.\n{}\n\n{}{}\n\nUse only this extracted evidence in the exact paper order provided:\n\n{}\n{}",
+        "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nDo not include internal metadata such as target title, collection, or task kind in the answer.\nPreserve the heading and section style shown below.\nWhen answering a user question, cite the paper location in natural language when possible, such as section/chapter, page, or paragraph block.\n{}\n\n{}{}\n\nUse only this extracted evidence in the exact paper order provided:\n\n{}\n{}",
         review_draft_rules(kind),
         task_kind_context,
         task_instructions,
@@ -4661,7 +4661,7 @@ fn build_single_session_prompt(
         format!("\nTarget title: {title}\nCollection: {collection_name}\nTask kind: {kind}")
     };
     Ok(format!(
-        "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nDo not include internal metadata such as target title, collection, or task kind in the answer.\nPreserve the heading and section style shown below.\nWhen answering a user question, cite the paper location in natural language when possible, such as section/chapter, page, or paragraph block. Prefer evidence chunks with clickable [E] ids when they are provided.\n{}\n{}{}\n\nUse only this extracted paper text:\n\"\"\"\n{}\n\"\"\"\n{}",
+        "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nDo not include internal metadata such as target title, collection, or task kind in the answer.\nPreserve the heading and section style shown below.\nWhen answering a user question, cite the paper location in natural language when possible, such as section/chapter, page, or paragraph block.\n{}\n{}{}\n\nUse only this extracted paper text:\n\"\"\"\n{}\n\"\"\"\n{}",
         review_draft_rules(kind),
         task_instructions
             .replace("{title}", title)
@@ -4688,7 +4688,7 @@ fn build_item_prompt(
     };
     let prompt_text = prompt.unwrap_or("");
     Ok(format!(
-        "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nPreserve the heading and section style shown below.\nCite evidence for key claims using the provided bracket ids like [E23]. Use only the evidence chunks below.\nWhen answering a user question, include the cited paper location in natural language when helpful, such as section/chapter, page, or paragraph block; the [E] ids are clickable in the reader.\n\nTarget title: {title}\nCollection: {collection_name}\nTask kind: {kind}\n{}\n\nEvidence chunks:\n\n{}\n{}",
+        "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nPreserve the heading and section style shown below.\nCite evidence for key claims using the provided bracket ids like [E23]. Use only the evidence chunks below.\nWhen answering a user question, include the cited paper location in natural language when helpful, such as section/chapter, page, or paragraph block. The final answer will display paper locations instead of evidence ids.\n\nTarget title: {title}\nCollection: {collection_name}\nTask kind: {kind}\n{}\n\nEvidence chunks:\n\n{}\n{}",
         task_instructions
             .replace("{title}", title)
             .replace("{collection}", collection_name),
@@ -4732,48 +4732,93 @@ fn evidence_context(chunks: &[EvidenceChunk]) -> String {
         .join("\n\n")
 }
 
-fn evidence_reference_line(chunk: &EvidenceChunk) -> String {
+fn evidence_location_label(chunk: &EvidenceChunk) -> String {
     let page = match (chunk.page_start.or(chunk.page_number), chunk.page_end) {
         (Some(start), Some(end)) if start != end => format!("pp. {start}-{end}"),
         (Some(start), _) => format!("p. {start}"),
         _ => "no page".into(),
     };
-    let section = chunk
-        .section_title
+    let heading_path = chunk
+        .heading_path_json
         .as_deref()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or("no section");
+        .and_then(|value| serde_json::from_str::<Vec<String>>(value).ok())
+        .unwrap_or_default()
+        .into_iter()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>();
+    let section = if heading_path.is_empty() {
+        chunk
+            .section_title
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("no section")
+            .to_string()
+    } else {
+        heading_path.join(" > ")
+    };
     format!(
-        "- [E{}] {}, {}, {}, paragraph block {}; {}",
-        chunk.id,
+        "{page}, {section}, paragraph block {}",
+        chunk.chunk_index + 1
+    )
+}
+
+fn evidence_reference_line(chunk: &EvidenceChunk) -> String {
+    format!(
+        "- {}: {}; {}",
         chunk.item_title,
-        page,
-        section,
-        chunk.chunk_index + 1,
+        evidence_location_label(chunk),
         truncate_chars(&chunk.text, 240)
     )
 }
 
-fn append_evidence_references_for_chunks(markdown: &str, chunks: &[EvidenceChunk]) -> String {
-    if chunks.is_empty() || markdown.contains("## Evidence References") {
+fn cited_evidence_ids(markdown: &str) -> HashSet<i64> {
+    let citation_re = Regex::new(r"\[E(\d+)\]").unwrap();
+    citation_re
+        .captures_iter(markdown)
+        .filter_map(|capture| capture.get(1)?.as_str().parse::<i64>().ok())
+        .collect::<HashSet<_>>()
+}
+
+fn replace_evidence_markers_with_locations(markdown: &str, chunks: &[EvidenceChunk]) -> String {
+    if chunks.is_empty() {
         return markdown.to_string();
     }
     let citation_re = Regex::new(r"\[E(\d+)\]").unwrap();
-    let cited_ids = citation_re
-        .captures_iter(markdown)
-        .filter_map(|capture| capture.get(1)?.as_str().parse::<i64>().ok())
-        .collect::<HashSet<_>>();
+    let locations = chunks
+        .iter()
+        .map(|chunk| (chunk.id, evidence_location_label(chunk)))
+        .collect::<HashMap<_, _>>();
+    citation_re
+        .replace_all(markdown, |captures: &regex::Captures<'_>| {
+            captures
+                .get(1)
+                .and_then(|value| value.as_str().parse::<i64>().ok())
+                .and_then(|id| locations.get(&id))
+                .map(|location| format!("({location})"))
+                .unwrap_or_else(|| captures[0].to_string())
+        })
+        .to_string()
+}
+
+fn append_evidence_references_for_chunks(markdown: &str, chunks: &[EvidenceChunk]) -> String {
+    if chunks.is_empty() || markdown.contains("## Evidence References") {
+        return replace_evidence_markers_with_locations(markdown, chunks);
+    }
+    let cited_ids = cited_evidence_ids(markdown);
+    let visible_markdown = replace_evidence_markers_with_locations(markdown, chunks);
     let references = chunks
         .iter()
         .filter(|chunk| cited_ids.is_empty() || cited_ids.contains(&chunk.id))
         .map(evidence_reference_line)
         .collect::<Vec<_>>();
     if references.is_empty() {
-        return markdown.to_string();
+        return visible_markdown;
     }
     format!(
         "{}\n\n## Evidence References\n\n{}",
-        markdown.trim_end(),
+        visible_markdown.trim_end(),
         references.join("\n")
     )
 }
@@ -4793,10 +4838,10 @@ fn append_evidence_references(conn: &Connection, markdown: &str) -> Result<Strin
             ids.push(id);
         }
     }
-    if ids.is_empty() || markdown.contains("## Evidence References") {
+    if ids.is_empty() {
         return Ok(markdown.to_string());
     }
-    let mut references = Vec::new();
+    let mut chunks = Vec::new();
     for id in ids {
         if let Some(chunk) = conn
             .query_row(
@@ -4813,15 +4858,23 @@ fn append_evidence_references(conn: &Connection, markdown: &str) -> Result<Strin
             )
             .optional()?
         {
-            references.push(evidence_reference_line(&chunk));
+            chunks.push(chunk);
         }
     }
+    let visible_markdown = replace_evidence_markers_with_locations(markdown, &chunks);
+    if markdown.contains("## Evidence References") {
+        return Ok(visible_markdown);
+    }
+    let references = chunks
+        .iter()
+        .map(evidence_reference_line)
+        .collect::<Vec<_>>();
     if references.is_empty() {
-        return Ok(markdown.to_string());
+        return Ok(visible_markdown);
     }
     Ok(format!(
         "{}\n\n## Evidence References\n\n{}",
-        markdown.trim_end(),
+        visible_markdown.trim_end(),
         references.join("\n")
     ))
 }
@@ -4861,7 +4914,7 @@ fn build_collection_prompt(
             _ => return Err(anyhow!("unsupported collection task kind")),
         };
         return Ok(format!(
-            "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nPreserve the heading and section style shown below.\nCite evidence for key claims, comparisons, and synthesis using the provided bracket ids like [E23]. Use only the evidence chunks below.\nWhen answering a user question, include the cited paper location in natural language when helpful, such as section/chapter, page, or paragraph block; the [E] ids are clickable in the reader.\n{}\n\nCollection: {collection_name}\nTask kind: {kind}\n{}\n\nEvidence chunks:\n\n{}\n{}",
+            "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nPreserve the heading and section style shown below.\nCite evidence for key claims, comparisons, and synthesis using the provided bracket ids like [E23]. Use only the evidence chunks below.\nWhen answering a user question, include the cited paper location in natural language when helpful, such as section/chapter, page, or paragraph block. The final answer will display paper locations instead of evidence ids.\n{}\n\nCollection: {collection_name}\nTask kind: {kind}\n{}\n\nEvidence chunks:\n\n{}\n{}",
             review_draft_rules(kind),
             task_instructions.replace("{collection}", collection_name),
             evidence_context(&chunks),

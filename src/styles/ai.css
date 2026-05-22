@@ -501,50 +501,20 @@
   color: var(--muted-text);
 }
 
-.ai-citation-chip {
-  border: 1px solid rgba(244, 192, 120, 0.45);
-  border-radius: 999px;
-  background: rgba(244, 192, 120, 0.1);
-  color: var(--text);
-  cursor: pointer;
-  display: inline-flex;
-  font: inherit;
-  font-size: 0.85em;
-  line-height: 1;
-  margin: 0 2px;
-  padding: 3px 7px;
-}
-
-.ai-citation-chip:hover {
-  border-color: rgba(244, 192, 120, 0.9);
-}
-
 .ai-message-with-evidence {
   display: grid;
   gap: 8px;
 }
 
-.ai-evidence-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.ai-evidence-strip-chip {
-  border: 1px solid rgba(244, 192, 120, 0.42);
-  border-radius: 999px;
-  background: rgba(244, 192, 120, 0.08);
-  color: var(--muted-text);
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  line-height: 1;
-  padding: 5px 8px;
-}
-
-.ai-evidence-strip-chip:hover {
-  color: var(--text);
-  border-color: rgba(244, 192, 120, 0.82);
+.ai-display-equation {
+  margin: 14px 0;
+  overflow-x: auto;
+  padding: 8px 12px;
+  text-align: center;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.96em;
+  line-height: 1.6;
+  white-space: pre-wrap;
 }
 
 .ai-citation-warning {
