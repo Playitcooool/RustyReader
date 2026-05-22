@@ -144,6 +144,12 @@ Build the Safari Web Extension input directory:
 npm run extension:safari:build
 ```
 
+For a quick local test archive that Safari can load from the Developer settings:
+
+```bash
+npm run extension:safari:zip
+```
+
 Package it as a Safari Web Extension App:
 
 ```bash
@@ -154,10 +160,11 @@ Outputs:
 
 ```text
 extensions/safari/build/extension
+extensions/safari/dist/paper-reader-safari-temporary-extension.zip
 extensions/safari/build/PaperReaderSafari
 ```
 
-Run and enable it in Safari:
+Run and enable it in Safari for persistent development:
 
 1. Start Paper Reader with `npm run tauri:dev` or open the built desktop app.
 2. Open `extensions/safari/build/PaperReaderSafari` in Xcode.
@@ -165,6 +172,8 @@ Run and enable it in Safari:
 4. In Safari, open `Settings` -> `Extensions`.
 5. Enable `Paper Reader Connector`.
 6. Open the extension popup, choose a collection, and import the current page or document.
+
+For the temporary zip flow, open Safari `Settings` -> `Developer` -> `Add Temporary Extension...`, select `extensions/safari/dist/paper-reader-safari-temporary-extension.zip`, then enable it from `Settings` -> `Extensions`. Safari removes temporary extensions after 24 hours or when Safari quits.
 
 Safari usage notes:
 
@@ -179,6 +188,7 @@ npm run extension:test
 npm run extension:smoke
 npm run extension:package
 npm run extension:safari:build
+npm run extension:safari:zip
 npm run extension:safari:package
 ```
 

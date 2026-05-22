@@ -16,6 +16,7 @@
     "extension:build": "node scripts/build-browser-extensions.js",
     "extension:package": "npm --prefix extensions/chrome run package",
     "extension:safari:build": "npm --prefix extensions/safari run build",
+    "extension:safari:zip": "npm --prefix extensions/safari run zip",
     "extension:safari:package": "npm --prefix extensions/safari run package",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
