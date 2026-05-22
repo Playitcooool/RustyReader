@@ -319,7 +319,7 @@ export default function App({ api }: { api: AppApi }) {
     return sessionId;
   }, [ai, getApi, readerState.activePaper]);
 
-  const handleOpenCopilotWithSelection = useCallback(async (quoted: string | null) => {
+  const handleOpenChatWithSelection = useCallback(async (quoted: string | null) => {
     await ensureAiSessionWithCurrentPaper();
     if (quoted) ai.setAiComposerValue(`${quoted}\n\nQuestion: `);
     focusAiComposer();
@@ -328,8 +328,8 @@ export default function App({ api }: { api: AppApi }) {
   const handleAskWithSelection = useCallback(async () => {
     const quoted = selectionCitation();
     if (!quoted) return;
-    await handleOpenCopilotWithSelection(quoted);
-  }, [handleOpenCopilotWithSelection, selectionCitation]);
+    await handleOpenChatWithSelection(quoted);
+  }, [handleOpenChatWithSelection, selectionCitation]);
 
   const handleAddHighlightToSession = useCallback(async () => {
     const quoted = selectionCitation();
@@ -337,8 +337,8 @@ export default function App({ api }: { api: AppApi }) {
       await readerState.handleCreatePdfFocusHighlight("yellow");
     }
     if (!quoted || !readerState.activePaper) return;
-    await handleOpenCopilotWithSelection(quoted);
-  }, [handleOpenCopilotWithSelection, readerState, selectionCitation]);
+    await handleOpenChatWithSelection(quoted);
+  }, [handleOpenChatWithSelection, readerState, selectionCitation]);
 
   const handleSaveSelectionAsNote = useCallback(async () => {
     const quoted = selectionCitation();
@@ -571,7 +571,7 @@ export default function App({ api }: { api: AppApi }) {
         event.preventDefault();
         const selection = readerState.pdfSelection ?? readerState.translationSelection;
         const quoted = selectionCitation(selection);
-        void handleOpenCopilotWithSelection(quoted);
+        void handleOpenChatWithSelection(quoted);
         return;
       }
       if (event.key === "Escape" && readerState.translationPopover) {
@@ -585,7 +585,7 @@ export default function App({ api }: { api: AppApi }) {
     }
     window.addEventListener("keydown", handleWindowKeydown);
     return () => window.removeEventListener("keydown", handleWindowKeydown);
-  }, [handleOpenCopilotWithSelection, readerState, selectionCitation, setIsSidebarVisible]);
+  }, [handleOpenChatWithSelection, readerState, selectionCitation, setIsSidebarVisible]);
 
   const startPaneResize = useCallback((target: "sidebar" | "ai", event: ReactPointerEvent<HTMLDivElement>) => {
     if (window.innerWidth <= 820) return;
@@ -849,7 +849,7 @@ export default function App({ api }: { api: AppApi }) {
                 <div className="ai-shell-header">
                   <div className="ai-copilot-header">
                     <div className="ai-copilot-heading">
-                      <span className="ai-copilot-title">Copilot</span>
+                      <span className="ai-copilot-title">Chat</span>
                       <span className="meta-count">Panel crashed</span>
                     </div>
                     <button className="icon-button" type="button" aria-label="Close AI panel" onClick={closeAiPanel}>

@@ -96,7 +96,7 @@ export const NewSessionIcon = PlusIcon;
 export const ArtifactIcon = NoteIcon;
 export const TaskHistoryIcon = NoteIcon;
 export const ResearchNotesIcon = NoteIcon;
-export const CloseCopilotIcon = CloseIcon;
+export const CloseChatIcon = CloseIcon;
 export const ClosePanelIcon = CloseIcon;
 export const DeleteSessionIcon = TrashIcon;
 
@@ -228,7 +228,7 @@ export function AiPanel(props: Props) {
       <div className="ai-shell-header">
         <div className="ai-copilot-header">
           <div className="ai-copilot-heading">
-            <span className="ai-copilot-title">Copilot</span>
+            <span className="ai-copilot-title">Chat</span>
             {activeAiSession ? (
               <span className="meta-count ai-session-title" title={activeAiSession.title}>
                 {activeAiSession.title}
@@ -251,8 +251,8 @@ export function AiPanel(props: Props) {
             <button aria-label="Research Notes" aria-pressed={aiDockOpen.notes} className="icon-button icon-button-small" type="button" onClick={() => onToggleDockSection("notes")}>
               <ResearchNotesIcon />
             </button>
-            <button aria-label="Close Copilot" className="icon-button icon-button-small" type="button" onClick={onClosePanel}>
-              <CloseCopilotIcon />
+            <button aria-label="Close Chat" className="icon-button icon-button-small" type="button" onClick={onClosePanel}>
+              <CloseChatIcon />
             </button>
           </div>
         </div>

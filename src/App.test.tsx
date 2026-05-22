@@ -439,7 +439,7 @@ describe("App reading workspace", () => {
     expect(await screen.findByRole("menu", { name: "Reader selection actions" })).toBeInTheDocument();
   });
 
-  it("opens Copilot with the current paper on Ctrl+J without a selection", async () => {
+  it("opens Chat with the current paper on Ctrl+J without a selection", async () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
 
@@ -452,7 +452,7 @@ describe("App reading workspace", () => {
     });
   });
 
-  it("opens Copilot with PDF selection context on Ctrl+J", async () => {
+  it("opens Chat with PDF selection context on Ctrl+J", async () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
 
@@ -479,7 +479,7 @@ describe("App reading workspace", () => {
     expect(screen.queryByLabelText("AI panel")).not.toBeInTheDocument();
   });
 
-  it("asks with selection by opening Copilot, adding the paper reference, and focusing the composer", async () => {
+  it("asks with selection by opening Chat, adding the paper reference, and focusing the composer", async () => {
     const user = userEvent.setup();
     const addReferenceSpy = vi.spyOn(fakeApi, "addAiSessionReference");
     render(<App api={fakeApi} />);
@@ -859,7 +859,7 @@ describe("App reading workspace", () => {
     expect(screen.getByRole("button", { name: "Compare" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Theme Map" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Review Draft" })).not.toBeInTheDocument();
-    expect(screen.getByText("Copilot")).toBeInTheDocument();
+    expect(screen.getByText("Chat")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Chat History" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "New Session" })).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "History Sessions" })).not.toBeInTheDocument();
@@ -913,7 +913,7 @@ describe("App reading workspace", () => {
     expect(container.querySelector(".ai-session-history-panel")).toBeInTheDocument();
     expect(screen.getByLabelText("Task History panel")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Close Copilot" }));
+    await user.click(screen.getByRole("button", { name: "Close Chat" }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
 
     await waitFor(() => {
@@ -1573,7 +1573,7 @@ describe("App reading workspace", () => {
     await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
 
-    for (const label of ["Chat History", "New Session", "Artifacts", "Task History", "Research Notes", "Close Copilot"]) {
+    for (const label of ["Chat History", "New Session", "Artifacts", "Task History", "Research Notes", "Close Chat"]) {
       expect(screen.getByRole("button", { name: label }).textContent?.trim()).toBe("");
     }
 
