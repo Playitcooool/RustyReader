@@ -25,17 +25,6 @@ import type {
 import type { AiDockSection, AiPendingMessage, AiReferencePickerResult } from "../../hooks/useAiSessionState";
 
 const evidenceMarkerPattern = /\[E\d+\]/g;
-const evidenceMarkerTestPattern = /\[E\d+\]/;
-const locationCitationPattern = /\b(?:p\.|pp\.|page|pages|section|chapter|paragraph block)\b/i;
-
-const hasCitationLintWarning = (markdown: string) => {
-  if (!/review|comparison|compare|method|gap|theme/i.test(markdown)) return false;
-  return markdown
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 80 && !line.startsWith("#") && !line.startsWith("|"))
-    .some((line) => !evidenceMarkerTestPattern.test(line) && !locationCitationPattern.test(line));
-};
 
 const isMathDisplayLine = (line: string) => {
   const trimmed = line.trim();
@@ -112,7 +101,6 @@ export const ClosePanelIcon = CloseIcon;
 export const DeleteSessionIcon = TrashIcon;
 
 export function MarkdownMessage({ markdown, onCitationClick }: { markdown: string; onCitationClick?: (evidenceId: number) => void }) {
-  const showCitationWarning = hasCitationLintWarning(markdown);
   return (
     <div className="ai-message-with-evidence">
       <div className="ai-markdown">
@@ -120,11 +108,6 @@ export function MarkdownMessage({ markdown, onCitationClick }: { markdown: strin
           {displayMarkdown(markdown)}
         </ReactMarkdown>
       </div>
-      {showCitationWarning ? (
-        <div className="ai-citation-warning" role="note">
-          Some synthesis sentences do not include evidence citations.
-        </div>
-      ) : null}
     </div>
   );
 }

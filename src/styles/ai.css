@@ -517,14 +517,6 @@
   white-space: pre-wrap;
 }
 
-.ai-citation-warning {
-  border-left: 3px solid rgba(244, 192, 120, 0.7);
-  color: var(--muted-text);
-  font-size: 12px;
-  line-height: 1.4;
-  padding-left: 10px;
-}
-
 .ai-markdown table {
   width: 100%;
   border-collapse: collapse;

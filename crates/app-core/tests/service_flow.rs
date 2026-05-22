@@ -531,7 +531,11 @@ fn markdown_export_appends_evidence_references() {
     assert!(!exported.contains(&format!("[E{}]", chunk.id)));
     assert!(exported.contains("Export Paper:"));
     assert!(exported.contains("paragraph block 1"));
-    assert!(exported.contains("retain evidence references"));
+    let references = exported
+        .split("## Evidence References")
+        .nth(1)
+        .unwrap_or_default();
+    assert!(!references.contains("retain evidence references"));
 }
 
 #[test]

@@ -4765,12 +4765,7 @@ fn evidence_location_label(chunk: &EvidenceChunk) -> String {
 }
 
 fn evidence_reference_line(chunk: &EvidenceChunk) -> String {
-    format!(
-        "- {}: {}; {}",
-        chunk.item_title,
-        evidence_location_label(chunk),
-        truncate_chars(&chunk.text, 240)
-    )
+    format!("- {}: {}", chunk.item_title, evidence_location_label(chunk))
 }
 
 fn cited_evidence_ids(markdown: &str) -> HashSet<i64> {

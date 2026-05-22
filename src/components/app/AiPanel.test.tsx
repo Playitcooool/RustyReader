@@ -25,4 +25,10 @@ describe("MarkdownMessage", () => {
     expect(equation).not.toBeNull();
     expect(equation).toHaveTextContent("L(theta) = sum_i x_i");
   });
+
+  it("does not show the old citation lint warning", () => {
+    render(<MarkdownMessage markdown={"这是一段较长的中文解读，用于确认界面不会在正常回答后面追加旧的证据引用警告。".repeat(3)} />);
+
+    expect(screen.queryByText(/Some synthesis sentences/)).not.toBeInTheDocument();
+  });
 });
