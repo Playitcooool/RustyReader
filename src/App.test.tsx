@@ -962,17 +962,13 @@ describe("App reading workspace", () => {
 
     expect(await screen.findByRole("dialog", { name: "Settings" })).toBeInTheDocument();
     expect(getAiSettingsSpy).toHaveBeenCalled();
-    expect(getConnectorSettingsSpy).toHaveBeenCalled();
+    expect(getConnectorSettingsSpy).not.toHaveBeenCalled();
     expect(screen.getByRole("heading", { name: "General" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Chrome Connector/ })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Connector URL")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /Chrome Connector/ }));
-    expect(screen.getByLabelText("Connector URL")).toHaveValue("http://127.0.0.1:17654");
-    expect(screen.getByLabelText("Connector token")).toHaveValue("mock-connector-token");
-    await user.click(screen.getByRole("button", { name: "Regenerate token" }));
-    await waitFor(() => {
-      expect(regenerateConnectorTokenSpy).toHaveBeenCalled();
-      expect(screen.getByLabelText("Connector token")).not.toHaveValue("mock-connector-token");
-    });
+    expect(screen.queryByLabelText("Connector token")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Regenerate token" })).not.toBeInTheDocument();
+    expect(regenerateConnectorTokenSpy).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: /Translation/ }));
     expect(screen.getByLabelText("Translation environment variables")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /OpenAI/ })).toHaveAttribute("aria-selected", "true");

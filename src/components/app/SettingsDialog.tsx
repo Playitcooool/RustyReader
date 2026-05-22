@@ -1,7 +1,7 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 
 import { CloseIcon, RefreshIcon, SaveIcon } from "./Icons";
-import type { AIProvider, ConnectorSettings, TranslationProvider } from "../../lib/contracts";
+import type { AIProvider, TranslationProvider } from "../../lib/contracts";
 import type { AttachmentFilter, ItemSort, ReaderFitMode } from "../../lib/appView";
 
 export type GeneralSettingsDraft = {
@@ -12,12 +12,11 @@ export type GeneralSettingsDraft = {
   defaultReaderZoom: number;
 };
 
-type SettingsSection = "general" | "translation" | "connector" | "ai";
+type SettingsSection = "general" | "translation" | "ai";
 
 const settingsSections: Array<{ id: SettingsSection; title: string; meta: string }> = [
   { id: "general", title: "General", meta: "Workspace defaults" },
   { id: "translation", title: "Translation", meta: "Selection output" },
-  { id: "connector", title: "Chrome Connector", meta: "Local import" },
   { id: "ai", title: "AI Providers", meta: "Model profiles" },
 ];
 
@@ -59,7 +58,6 @@ const translationProviderCards: Array<{ id: TranslationProvider; title: string; 
 
 export function SettingsDialog({
   generalSettingsDraft,
-  connectorSettings,
   activeAiProvider,
   activeTranslationProvider,
   aiEnvDrafts,
@@ -76,12 +74,10 @@ export function SettingsDialog({
   onResetLayoutWidths,
   onReadSystemAiEnv,
   onReadSystemTranslationEnv,
-  onRegenerateConnectorToken,
   onCancel,
   onSave,
 }: {
   generalSettingsDraft: GeneralSettingsDraft;
-  connectorSettings: ConnectorSettings | null;
   activeAiProvider: AIProvider;
   activeTranslationProvider: TranslationProvider;
   aiEnvDrafts: Record<AIProvider, string>;
@@ -98,7 +94,6 @@ export function SettingsDialog({
   onResetLayoutWidths: () => void;
   onReadSystemAiEnv: () => void;
   onReadSystemTranslationEnv: () => void;
-  onRegenerateConnectorToken: () => void;
   onCancel: () => void;
   onSave: () => void;
 }) {
@@ -118,7 +113,7 @@ export function SettingsDialog({
             <p className="eyebrow">Settings</p>
             <h2>Preferences</h2>
             <p className="settings-dialog-summary">
-              Tune the reading workspace, integrations, translation, and AI provider profiles.
+              Tune the reading workspace, translation, and AI provider profiles.
             </p>
           </div>
           <button aria-label="Cancel" className="icon-button" title="Cancel" type="button" onClick={cancelSettings}>
@@ -281,52 +276,6 @@ export function SettingsDialog({
             <div className="settings-provider-actions settings-provider-actions-inline">
               <span className="settings-inline-note">Only variables for the selected translation provider are shown here.</span>
               <button aria-label="Read system translation env variables" className="icon-button" title="Read system translation env variables" type="button" onClick={onReadSystemTranslationEnv}>
-                <RefreshIcon />
-              </button>
-            </div>
-          </section>
-          ) : null}
-
-          {activeSection === "connector" ? (
-          <section className="settings-section-card" aria-labelledby="settings-connector-heading">
-            <div className="settings-section-heading">
-              <p className="eyebrow">Chrome Connector</p>
-              <h3 id="settings-connector-heading">Local Import</h3>
-            </div>
-            <div className="settings-form-grid">
-              <label className="settings-field">
-                <span>Connector URL</span>
-                <input
-                  aria-label="Connector URL"
-                  className="settings-input"
-                  readOnly
-                  value={connectorSettings?.connector_url ?? ""}
-                />
-              </label>
-              <label className="settings-field">
-                <span>Status</span>
-                <input
-                  aria-label="Connector status"
-                  className="settings-input"
-                  readOnly
-                  value={connectorSettings?.status ?? "error"}
-                />
-              </label>
-              <label className="settings-field settings-field-full">
-                <span>Connector token</span>
-                <input
-                  aria-label="Connector token"
-                  className="settings-input"
-                  readOnly
-                  value={connectorSettings?.token ?? ""}
-                />
-              </label>
-            </div>
-            <div className="settings-provider-actions settings-provider-actions-inline">
-              <span className="settings-inline-note">
-                Paste this token into the Chrome extension popup to enable local imports.
-              </span>
-              <button aria-label="Regenerate token" className="icon-button" title="Regenerate token" type="button" onClick={onRegenerateConnectorToken}>
                 <RefreshIcon />
               </button>
             </div>

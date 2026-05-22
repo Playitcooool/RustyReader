@@ -12,7 +12,7 @@ import { SettingsDialog, type GeneralSettingsDraft } from "./components/app/Sett
 import { clamp, collectionDeleteSummary, readStoredBoolean, readStoredNumber, readStoredString, type AttachmentFilter, type ItemSort, type ReaderFitMode } from "./lib/appView";
 import { isTauriRuntime } from "./lib/api";
 import { getRuntimePolyfillDiagnostics } from "./lib/runtimePolyfills";
-import type { AIProvider, AISettings, AppApi, Collection, ConnectorSettings, TranslationProvider, UpdateAISettingsInput } from "./lib/contracts";
+import type { AIProvider, AISettings, AppApi, Collection, TranslationProvider, UpdateAISettingsInput } from "./lib/contracts";
 import { useAiSessionState } from "./hooks/useAiSessionState";
 import { useLibraryState } from "./hooks/useLibraryState";
 import { useReaderState } from "./hooks/useReaderState";
@@ -214,7 +214,6 @@ export default function App({ api }: { api: AppApi }) {
   });
   const [aiEnvDrafts, setAiEnvDrafts] = useState<Record<AIProvider, string>>(emptyProviderEnvDrafts);
   const [translationEnvDrafts, setTranslationEnvDrafts] = useState<Record<TranslationProvider, string>>(emptyTranslationEnvDrafts);
-  const [connectorSettings, setConnectorSettings] = useState<ConnectorSettings | null>(null);
   const appShellRef = useRef<HTMLDivElement | null>(null);
   const aiComposerInputRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -402,12 +401,8 @@ export default function App({ api }: { api: AppApi }) {
 
   const openSettingsDialog = useCallback(async () => {
     const runtimeApi = await getApi();
-    const [settings, connector] = await Promise.all([
-      runtimeApi.getAiSettings(),
-      runtimeApi.getConnectorSettings(),
-    ]);
+    const settings = await runtimeApi.getAiSettings();
     setAiSettings(settings);
-    setConnectorSettings(connector);
     setAiSettingsDraft(draftFromAiSettings(settings));
     setAiEnvDrafts({
       openai: settings.provider_env_openai,
@@ -491,12 +486,6 @@ export default function App({ api }: { api: AppApi }) {
     setTranslationEnvDrafts(drafts);
     setAiSettingsDraft((current) => applyTranslationEnvSettings(current, translationText));
     setStatusMessage(translationText.trim() ? "Loaded translation env variables." : "No translation env variables found.");
-  }, [getApi]);
-
-  const handleRegenerateConnectorToken = useCallback(async () => {
-    const next = await (await getApi()).regenerateConnectorToken();
-    setConnectorSettings(next);
-    setStatusMessage("Regenerated connector token.");
   }, [getApi]);
 
   useEffect(() => {
@@ -919,7 +908,6 @@ export default function App({ api }: { api: AppApi }) {
       {isSettingsOpen ? (
         <SettingsDialog
           generalSettingsDraft={generalSettingsDraft}
-          connectorSettings={connectorSettings}
           activeAiProvider={aiSettingsDraft.active_provider}
           activeTranslationProvider={aiSettingsDraft.translation_provider}
           aiEnvDrafts={aiEnvDrafts}
@@ -939,7 +927,6 @@ export default function App({ api }: { api: AppApi }) {
           }}
           onReadSystemAiEnv={() => void handleReadSystemAiEnv()}
           onReadSystemTranslationEnv={() => void handleReadSystemTranslationEnv()}
-          onRegenerateConnectorToken={() => void handleRegenerateConnectorToken()}
           onCancel={closeSettingsDialog}
           onSave={() => void handleSaveAiSettings()}
         />
