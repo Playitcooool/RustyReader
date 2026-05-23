@@ -157,13 +157,8 @@ export function useReaderState({
   useEffect(() => {
     if (!activePaper) {
       setWorkspaceMode("workspace");
-      return;
     }
-    if (workspaceMode === "pdf_focus" && activePaper.attachment_format !== "pdf") {
-      setWorkspaceMode("workspace");
-      setIsSidebarVisible(true);
-    }
-  }, [activePaper, setIsSidebarVisible, workspaceMode]);
+  }, [activePaper]);
 
   useEffect(() => {
     setReaderSearchMatchIndex(0);
@@ -207,11 +202,10 @@ export function useReaderState({
     setReaderPageClamped(parsed - 1);
   }, [readerPage, readerPageInput, setReaderPageClamped]);
 
-  const activateItem = useCallback((item: LibraryItem, options?: { focusPdf?: boolean }) => {
-    const shouldEnterPdfFocus = Boolean(options?.focusPdf && item.attachment_format === "pdf");
+  const activateItem = useCallback((item: LibraryItem) => {
     setActivePaperId(item.id);
     setOpenPaperIds((current) => (current.includes(item.id) ? current : [...current, item.id]));
-    setWorkspaceMode(shouldEnterPdfFocus ? "pdf_focus" : "workspace");
+    setWorkspaceMode("pdf_focus");
   }, [setActivePaperId]);
 
   const closePaperTab = useCallback((itemId: number) => {

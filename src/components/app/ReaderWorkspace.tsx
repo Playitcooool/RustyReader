@@ -95,7 +95,7 @@ type ReaderWorkspaceUi = {
 };
 
 type ReaderWorkspaceActions = {
-  onActivateItem: (item: LibraryItem, options?: { focusPdf?: boolean }) => void;
+  onActivateItem: (item: LibraryItem) => void;
   onDocumentContextMenu: (event: ReactMouseEvent<HTMLElement>, item: LibraryItem) => void;
   onActivePdfHighlight: (highlight: ActivePdfHighlight) => void;
   onAiToggle: () => void | Promise<void>;
@@ -334,15 +334,15 @@ export function ReaderWorkspace(props: Props) {
         openReaderSelectionMenu(event.nativeEvent);
       }}
     >
-      <div className={`reader-tabs ${workspaceMode === "pdf_focus" || (activePaper && activePaper.attachment_format !== "pdf") ? "reader-tabs-focus" : ""}`} role="tablist" aria-label="Open papers">
-        {(workspaceMode === "pdf_focus" && activePaper?.attachment_format === "pdf") || (activePaper && activePaper.attachment_format !== "pdf") ? (
+      <div className={`reader-tabs ${workspaceMode === "pdf_focus" ? "reader-tabs-focus" : ""}`} role="tablist" aria-label="Open papers">
+        {workspaceMode === "pdf_focus" ? (
           <button aria-label="Back to library" className="reader-back-button" title="Back to library" type="button" onClick={() => activePaper && onCloseTab(activePaper.id)}>
             <ChevronLeftIcon />
           </button>
         ) : null}
         {openPapers.map((paper) => (
           <div key={paper.id} className={`reader-tab-shell ${paper.id === activePaper?.id ? "reader-tab-active" : ""}`}>
-            <button aria-selected={paper.id === activePaper?.id} className="reader-tab" role="tab" type="button" onClick={() => (workspaceMode === "pdf_focus" && paper.attachment_format === "pdf" ? onActivateItem(paper, { focusPdf: true }) : onActivateItem(paper))}>
+            <button aria-selected={paper.id === activePaper?.id} className="reader-tab" role="tab" type="button" onClick={() => onActivateItem(paper)}>
               {paper.title}
             </button>
             <button aria-label={`Close tab ${paper.title}`} className="tab-close-button" type="button" onClick={() => onCloseTab(paper.id)}>
@@ -543,7 +543,7 @@ export function ReaderWorkspace(props: Props) {
             </div>
           )}
         </section>
-      ) : activePaper && activePaper.attachment_format !== "pdf" && readerView ? (
+      ) : workspaceMode === "pdf_focus" && activePaper && activePaper.attachment_format !== "pdf" && readerView ? (
         <section className="reader-panel reader-panel-focus">
           <div className="reader-toolbar reader-toolbar-focus" role="toolbar" aria-label="Reader toolbar">
             <div className="reader-control-group reader-control-group-zoom">
@@ -597,7 +597,7 @@ export function ReaderWorkspace(props: Props) {
                   type="button"
                   onClick={() => onActivateItem(item)}
                   onContextMenu={(event) => onDocumentContextMenu(event, item)}
-                  onDoubleClick={() => item.attachment_format === "pdf" ? onActivateItem(item, { focusPdf: true }) : onActivateItem(item)}
+                  onDoubleClick={() => onActivateItem(item)}
                 >
                   <span className="collection-document-main">
                     <span className="collection-document-title">{item.title}</span>

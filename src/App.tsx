@@ -276,7 +276,7 @@ export default function App({ api }: { api: AppApi }) {
       setStatusMessage(`Evidence E${evidenceId} belongs to a paper outside the current library view.`);
       return;
     }
-    readerState.activateItem(item, { focusPdf: item.attachment_format === "pdf" });
+    readerState.activateItem(item);
     if (item.attachment_format === "pdf" && target.page_number) {
       readerState.setReaderPageClamped(target.page_number - 1);
     }
@@ -374,12 +374,6 @@ export default function App({ api }: { api: AppApi }) {
     setIsSidebarVisible(false);
     closeReaderFloatingUi();
   }, [ai, closeReaderFloatingUi, readerState.workspaceMode]);
-
-  useEffect(() => {
-    if (isNonPdfReading) {
-      setIsSidebarVisible(false);
-    }
-  }, [isNonPdfReading]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -659,8 +653,6 @@ export default function App({ api }: { api: AppApi }) {
 
   const showActivePdfHighlightBar = Boolean(readerState.activePdfHighlight);
   const isPdfFocusMode = readerState.workspaceMode === "pdf_focus";
-  const isNonPdfReading = Boolean(activePaper && activePaper.attachment_format !== "pdf" && readerState.workspaceMode !== "pdf_focus");
-  const isFocusedMode = isPdfFocusMode || isNonPdfReading;
   const activePdfHighlightBarStyle = useMemo(() => {
     const rect = readerState.activePdfHighlight?.rect;
     if (!rect) return {};
@@ -679,7 +671,7 @@ export default function App({ api }: { api: AppApi }) {
   return (
     <div
       ref={appShellRef}
-      className={`app-shell ${isFocusedMode ? "app-shell-focus" : "app-shell-workspace"} ${isFocusedMode && isSidebarVisible ? "app-shell-focus-sidebar-open" : ""} ${ai.isAiPanelOpen ? "app-shell-ai-open" : ""}`}
+      className={`app-shell ${isPdfFocusMode ? "app-shell-focus" : "app-shell-workspace"} ${isPdfFocusMode && isSidebarVisible ? "app-shell-focus-sidebar-open" : ""} ${ai.isAiPanelOpen ? "app-shell-ai-open" : ""}`}
       style={{ "--sidebar-width": `${clamp(sidebarWidth, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH)}px`, "--ai-panel-width": `${clamp(aiPanelWidth, AI_PANEL_MIN_WIDTH, AI_PANEL_MAX_WIDTH)}px` } as CSSProperties}
     >
       {library.resourceContextMenu && (library.contextMenuCollection || library.contextMenuItem) ? (
@@ -733,7 +725,7 @@ export default function App({ api }: { api: AppApi }) {
         />
       ) : null}
 
-      {isSidebarVisible && !isFocusedMode ? <div aria-hidden="true" className="pane-resizer" onPointerDown={(event) => startPaneResize("sidebar", event)} /> : null}
+      {isSidebarVisible && !isPdfFocusMode ? <div aria-hidden="true" className="pane-resizer" onPointerDown={(event) => startPaneResize("sidebar", event)} /> : null}
 
       <ReaderWorkspace
         data={{
@@ -781,7 +773,7 @@ export default function App({ api }: { api: AppApi }) {
           workspaceMode: readerState.workspaceMode,
         }}
         actions={{
-          onActivateItem: (item, options) => readerState.activateItem(item, options),
+          onActivateItem: (item) => readerState.activateItem(item),
           onDocumentContextMenu: (event, item) => library.openResourceContextMenu(event, { x: event.clientX, y: event.clientY, kind: "item", targetId: item.id }),
           onActivePdfHighlight: readerState.handleActivatePdfHighlight,
           onAiToggle: () => {
