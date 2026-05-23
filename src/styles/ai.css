@@ -507,13 +507,13 @@
 }
 
 .ai-display-equation {
-  margin: 14px 0;
+  margin: 10px 0;
   overflow-x: auto;
-  padding: 8px 12px;
+  padding: 6px 12px;
   text-align: center;
   font-family: "SFMono-Regular", Consolas, monospace;
-  font-size: 0.96em;
-  line-height: 1.6;
+  font-size: 0.94em;
+  line-height: 1.55;
   white-space: pre-wrap;
 }
 

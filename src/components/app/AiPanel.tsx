@@ -26,35 +26,144 @@ import type { AiDockSection, AiPendingMessage, AiReferencePickerResult } from ".
 
 const evidenceMarkerPattern = /\[E\d+\]/g;
 
+// LaTeX commands that indicate display-worthy standalone math
+const DISPLAY_MATH_PATTERN = /\\(?:frac|sum|prod|int|iint|iiint|oint|sqrt|left|right|begin|end|lim|max|min|sup|inf|partial|nabla|infty|forall|exists|times|cdot|div|pm|mp|oplus|otimes|equiv|approx|propto|sim|neq|leq|geq|mapsto|to|Rightarrow|Leftrightarrow|longrightarrow|bar|hat|tilde|vec|dot|ddot|overline|underline|widehat|widetilde|text|textbf|textit|mathrm|mathbf|mathcal|mathbb|mathfrak|alpha|beta|gamma|delta|epsilon|zeta|eta|theta|kappa|lambda|mu|nu|pi|rho|sigma|tau|phi|chi|psi|omega)\b/;
+
 const isMathDisplayLine = (line: string) => {
   const trimmed = line.trim();
-  if (!trimmed || trimmed.length > 220) return false;
+  if (!trimmed || trimmed.length > 300) return false;
+  // Skip markdown syntax, existing $$ blocks, and code spans
   if (/^(```|~~~|\$\$|#|>|[-*+]\s|\d+\.\s|\||<)/.test(trimmed)) return false;
+  if (/`/.test(trimmed)) return false;
+  // Skip lines ending with sentence-ending punctuation
   if (/[。！？.!?]\s*$/.test(trimmed)) return false;
-  if (/\\(?:frac|sum|prod|int|sqrt|left|right|begin|end|alpha|beta|gamma|theta|lambda|mu|sigma|phi|psi|omega)\b/.test(trimmed)) return true;
-  if (/[=≈≃≅≠≤≥<>±×÷∑∏√∞∫]/.test(trimmed) && /[A-Za-z0-9)]/.test(trimmed)) return true;
+  // LaTeX commands
+  if (DISPLAY_MATH_PATTERN.test(trimmed)) return true;
+  // Math operators/symbols with surrounding context
+  if (/[=≈≃≅≠≤≥<>±×÷∑∏√∞∫∂∇]/.test(trimmed) && /[A-Za-z0-9)\]}"]/.test(trimmed)) return true;
+  // Subscript/superscript: x_i, x^2, x^{ab}, x_{ab}
+  if (/[a-zA-Z]\^[a-zA-Z0-9{(\[]/.test(trimmed) || /[a-zA-Z]_[a-zA-Z0-9{(\[]/.test(trimmed)) return true;
   return false;
 };
 
-const normalizeDisplayMath = (markdown: string) => {
-  let inFence = false;
-  return markdown
-    .split("\n")
-    .map((line) => {
-      const trimmed = line.trim();
-      if (/^(```|~~~)/.test(trimmed)) {
-        inFence = !inFence;
-        return line;
-      }
-      if (inFence || !isMathDisplayLine(line)) return line;
-      return `$$\n${trimmed}\n$$`;
-    })
-    .join("\n");
+// Check if content inside $...$ looks like inline LaTeX math (not a dollar amount)
+const looksLikeInlineMath = (content: string) => {
+  const trimmed = content.trim();
+  if (!trimmed || /^\d+(\.\d+)?$/.test(trimmed)) return false;
+  return /\\[a-zA-Z]+|[\^_]\{?[a-zA-Z0-9]|[=±×÷∑∏∫]/.test(trimmed);
 };
 
-const removeLegacyEvidenceMarkers = (markdown: string) => markdown.replace(evidenceMarkerPattern, "").replace(/[ \t]+([,.;:])/g, "$1");
+// Convert $...$ inline math to code spans for monospace rendering.
+// Avoids $$...$$ display math and dollar amounts like $100.
+const preprocessInlineMath = (markdown: string) =>
+  markdown.replace(/(?<!\$)\$(?!\$)([^$\n]+?)\$(?!\$)/g, (match, content) =>
+    looksLikeInlineMath(content) ? `\`${content.trim()}\`` : match,
+  );
 
-const displayMarkdown = (markdown: string) => normalizeDisplayMath(removeLegacyEvidenceMarkers(markdown));
+// Wrap standalone math lines in $$...$$, preserving multi-line \begin{...}...\end{...} blocks.
+// Also preserves existing $$...$$ blocks and code fences.
+const normalizeDisplayMath = (markdown: string) => {
+  const lines = markdown.split("\n");
+  const result: string[] = [];
+  let inFence = false;
+  let inDollarMath = false;
+  let inBeginBlock = false;
+  let beginDepth = 0;
+  let mathLines: string[] = [];
+
+  const flush = () => {
+    const block = mathLines.join("\n").trim();
+    if (block) result.push(`$$\n${block}\n$$`);
+    mathLines = [];
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // Code fences
+    if (/^(```|~~~)/.test(trimmed)) {
+      if (inDollarMath || inBeginBlock) flush();
+      inDollarMath = false;
+      inBeginBlock = false;
+      beginDepth = 0;
+      inFence = !inFence;
+      result.push(line);
+      continue;
+    }
+
+    if (inFence) {
+      result.push(line);
+      continue;
+    }
+
+    // Existing $$...$$ blocks — pass through unchanged
+    if (trimmed === "$$") {
+      if (inDollarMath) {
+        inDollarMath = false;
+        mathLines.push(line);
+        flush();
+        continue;
+      }
+      if (!inBeginBlock) {
+        inDollarMath = true;
+        mathLines.push(line);
+        continue;
+      }
+    }
+
+    if (inDollarMath) {
+      mathLines.push(line);
+      continue;
+    }
+
+    // Multi-line \begin{...} ... \end{...} blocks
+    const begins = (trimmed.match(/\\begin\{/g) || []).length;
+    const ends = (trimmed.match(/\\end\{/g) || []).length;
+
+    if (begins > ends) {
+      if (!inBeginBlock) {
+        if (mathLines.length > 0) flush();
+        inBeginBlock = true;
+      }
+      beginDepth += begins - ends;
+      mathLines.push(line);
+      continue;
+    }
+
+    if (ends > begins && inBeginBlock) {
+      mathLines.push(line);
+      beginDepth -= ends - begins;
+      if (beginDepth <= 0) {
+        flush();
+        inBeginBlock = false;
+        beginDepth = 0;
+      }
+      continue;
+    }
+
+    if (inBeginBlock) {
+      mathLines.push(line);
+      continue;
+    }
+
+    // Single-line display math
+    if (isMathDisplayLine(line)) {
+      result.push(`$$\n${trimmed}\n$$`);
+    } else {
+      result.push(line);
+    }
+  }
+
+  // Flush any unclosed block at end of input
+  flush();
+  return result.join("\n");
+};
+
+const removeLegacyEvidenceMarkers = (markdown: string) =>
+  markdown.replace(evidenceMarkerPattern, "").replace(/[ \t]+([,.;:])/g, "$1");
+
+const displayMarkdown = (markdown: string) =>
+  normalizeDisplayMath(preprocessInlineMath(removeLegacyEvidenceMarkers(markdown)));
 
 const childText = (children: ComponentProps<"p">["children"]) =>
   Children.toArray(children)
