@@ -241,9 +241,6 @@ const initialState = (): MockState => ({
     deepl_base_url: "https://api-free.deepl.com",
     has_deepl_api_key: false,
     deepl_api_key: "",
-    translation_env_openai: "",
-    translation_env_anthropic: "",
-    translation_env_deepl: "",
   },
   connectorSettings: {
     connector_url: "http://127.0.0.1:17654",
@@ -517,9 +514,6 @@ const publicAiSettings = (): AISettings => ({
   translation_target_lang: state.aiSettings.translation_target_lang,
   deepl_base_url: state.aiSettings.deepl_base_url,
   has_deepl_api_key: Boolean(state.aiSettings.deepl_api_key),
-  translation_env_openai: state.aiSettings.translation_env_openai,
-  translation_env_anthropic: state.aiSettings.translation_env_anthropic,
-  translation_env_deepl: state.aiSettings.translation_env_deepl,
 });
 
 const collectionTaskOutput = (collectionId: number, kind: string, scopeItemIds: number[]) => {
@@ -1129,9 +1123,6 @@ export const fakeApi: AppApi = {
     state.aiSettings.translation_anthropic_model = input.translation_anthropic_model;
     state.aiSettings.translation_target_lang = input.translation_target_lang;
     state.aiSettings.deepl_base_url = input.deepl_base_url;
-    state.aiSettings.translation_env_openai = input.translation_env_openai ?? "";
-    state.aiSettings.translation_env_anthropic = input.translation_env_anthropic ?? "";
-    state.aiSettings.translation_env_deepl = input.translation_env_deepl ?? "";
     if (input.clear_openai_api_key) state.aiSettings.openai_api_key = "";
     else if (input.openai_api_key && input.openai_api_key.trim()) state.aiSettings.openai_api_key = input.openai_api_key;
     if (input.clear_anthropic_api_key) state.aiSettings.anthropic_api_key = "";

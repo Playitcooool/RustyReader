@@ -4,6 +4,21 @@ import { CloseIcon, RefreshIcon, SaveIcon } from "./Icons";
 import type { AIProvider, TranslationProvider } from "../../lib/contracts";
 import type { AttachmentFilter, ItemSort, ReaderFitMode } from "../../lib/appView";
 
+const TRANSLATION_TARGET_LANGS = [
+  { value: "ZH-HANS", label: "Chinese (Simplified)" },
+  { value: "ZH-HANT", label: "Chinese (Traditional)" },
+  { value: "EN", label: "English" },
+  { value: "JA", label: "Japanese" },
+  { value: "KO", label: "Korean" },
+  { value: "FR", label: "French" },
+  { value: "DE", label: "German" },
+  { value: "ES", label: "Spanish" },
+  { value: "PT", label: "Portuguese" },
+  { value: "RU", label: "Russian" },
+  { value: "AR", label: "Arabic" },
+  { value: "IT", label: "Italian" },
+] as const;
+
 export type GeneralSettingsDraft = {
   resourcesSidebarOpen: boolean;
   defaultItemSort: ItemSort;
@@ -35,24 +50,21 @@ const aiProviderCards: Array<{ id: AIProvider; title: string; meta: string; plac
   },
 ];
 
-const translationProviderCards: Array<{ id: TranslationProvider; title: string; meta: string; placeholder: string }> = [
+const translationProviderCards: Array<{ id: TranslationProvider; title: string; meta: string }> = [
   {
     id: "openai",
     title: "OpenAI",
-    meta: "Use the saved OpenAI provider key for translation",
-    placeholder: "TRANSLATION_TARGET_LANG=ZH-HANS\nTRANSLATION_OPENAI_MODEL=gpt-4.1-mini",
+    meta: "Translate using an OpenAI model with your saved provider key",
   },
   {
     id: "anthropic",
     title: "Anthropic",
-    meta: "Use the saved Anthropic provider key for translation",
-    placeholder: "TRANSLATION_TARGET_LANG=ZH-HANS\nTRANSLATION_ANTHROPIC_MODEL=claude-...",
+    meta: "Translate using a Claude model with your saved provider key",
   },
   {
     id: "deepl",
     title: "DeepL",
-    meta: "Use a dedicated DeepL translation profile",
-    placeholder: "TRANSLATION_TARGET_LANG=ZH-HANS\nDEEPL_API_KEY=...\nDEEPL_BASE_URL=https://api-free.deepl.com",
+    meta: "Translate using the DeepL API with a dedicated key",
   },
 ];
 
@@ -61,7 +73,12 @@ export function SettingsDialog({
   activeAiProvider,
   activeTranslationProvider,
   aiEnvDrafts,
-  translationEnvDrafts,
+  translationTargetLang,
+  translationOpenaiModel,
+  translationAnthropicModel,
+  deeplApiKey,
+  hasDeeplApiKey,
+  deeplBaseUrl,
   readerMinZoom,
   readerMaxZoom,
   defaultReaderZoom,
@@ -69,11 +86,14 @@ export function SettingsDialog({
   onActiveAiProviderChange,
   onActiveTranslationProviderChange,
   onAiEnvDraftChange,
-  onTranslationEnvDraftChange,
+  onTranslationTargetLangChange,
+  onTranslationOpenaiModelChange,
+  onTranslationAnthropicModelChange,
+  onDeeplApiKeyChange,
+  onDeeplBaseUrlChange,
   onClampReaderZoom,
   onResetLayoutWidths,
   onReadSystemAiEnv,
-  onReadSystemTranslationEnv,
   onCancel,
   onSave,
 }: {
@@ -81,7 +101,12 @@ export function SettingsDialog({
   activeAiProvider: AIProvider;
   activeTranslationProvider: TranslationProvider;
   aiEnvDrafts: Record<AIProvider, string>;
-  translationEnvDrafts: Record<TranslationProvider, string>;
+  translationTargetLang: string;
+  translationOpenaiModel: string;
+  translationAnthropicModel: string;
+  deeplApiKey: string;
+  hasDeeplApiKey: boolean;
+  deeplBaseUrl: string;
   readerMinZoom: number;
   readerMaxZoom: number;
   defaultReaderZoom: number;
@@ -89,18 +114,19 @@ export function SettingsDialog({
   onActiveAiProviderChange: (provider: AIProvider) => void;
   onActiveTranslationProviderChange: (provider: TranslationProvider) => void;
   onAiEnvDraftChange: (provider: AIProvider, value: string) => void;
-  onTranslationEnvDraftChange: (provider: TranslationProvider, value: string) => void;
+  onTranslationTargetLangChange: (value: string) => void;
+  onTranslationOpenaiModelChange: (value: string) => void;
+  onTranslationAnthropicModelChange: (value: string) => void;
+  onDeeplApiKeyChange: (value: string) => void;
+  onDeeplBaseUrlChange: (value: string) => void;
   onClampReaderZoom: (value: number) => number;
   onResetLayoutWidths: () => void;
   onReadSystemAiEnv: () => void;
-  onReadSystemTranslationEnv: () => void;
   onCancel: () => void;
   onSave: () => void;
 }) {
   const [activeSection, setActiveSection] = useState<SettingsSection>("general");
   const activeAiProviderCard = aiProviderCards.find((provider) => provider.id === activeAiProvider) ?? aiProviderCards[0];
-  const activeTranslationProviderCard =
-    translationProviderCards.find((provider) => provider.id === activeTranslationProvider) ?? translationProviderCards[0];
   const cancelSettings = () => {
     onCancel();
   };
@@ -248,6 +274,21 @@ export function SettingsDialog({
               <p className="eyebrow">Translation</p>
               <h3 id="settings-translation-heading">Selection Translation</h3>
             </div>
+            <div className="settings-form-grid">
+              <label className="settings-field">
+                <span>Target language</span>
+                <select
+                  aria-label="Target language"
+                  className="settings-input"
+                  value={translationTargetLang}
+                  onChange={(event) => onTranslationTargetLangChange(event.target.value)}
+                >
+                  {TRANSLATION_TARGET_LANGS.map((lang) => (
+                    <option key={lang.value} value={lang.value}>{lang.label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
             <div className="settings-provider-cards" role="tablist" aria-label="Translation provider">
               {translationProviderCards.map((provider) => (
                 <button
@@ -263,22 +304,60 @@ export function SettingsDialog({
                 </button>
               ))}
             </div>
-            <label className="settings-field">
-              <span>Environment variables</span>
-              <textarea
-                aria-label="Translation environment variables"
-                className="settings-input settings-textarea"
-                placeholder={activeTranslationProviderCard.placeholder}
-                value={translationEnvDrafts[activeTranslationProvider]}
-                onChange={(event) => onTranslationEnvDraftChange(activeTranslationProvider, event.target.value)}
-              />
-            </label>
-            <div className="settings-provider-actions settings-provider-actions-inline">
-              <span className="settings-inline-note">Only variables for the selected translation provider are shown here.</span>
-              <button aria-label="Read system translation env variables" className="icon-button" title="Read system translation env variables" type="button" onClick={onReadSystemTranslationEnv}>
-                <RefreshIcon />
-              </button>
-            </div>
+            {activeTranslationProvider === "openai" ? (
+              <div className="settings-form-grid">
+                <label className="settings-field">
+                  <span>Model</span>
+                  <input
+                    aria-label="OpenAI translation model"
+                    className="settings-input"
+                    type="text"
+                    placeholder="gpt-4.1-mini"
+                    value={translationOpenaiModel}
+                    onChange={(event) => onTranslationOpenaiModelChange(event.target.value)}
+                  />
+                </label>
+              </div>
+            ) : activeTranslationProvider === "anthropic" ? (
+              <div className="settings-form-grid">
+                <label className="settings-field">
+                  <span>Model</span>
+                  <input
+                    aria-label="Anthropic translation model"
+                    className="settings-input"
+                    type="text"
+                    placeholder="claude-haiku-4-5-20251001"
+                    value={translationAnthropicModel}
+                    onChange={(event) => onTranslationAnthropicModelChange(event.target.value)}
+                  />
+                </label>
+              </div>
+            ) : (
+              <div className="settings-form-grid">
+                <label className="settings-field">
+                  <span>API key</span>
+                  <input
+                    aria-label="DeepL API key"
+                    className="settings-input"
+                    type="password"
+                    placeholder={hasDeeplApiKey ? "API key is saved" : "Paste your DeepL API key"}
+                    value={deeplApiKey}
+                    onChange={(event) => onDeeplApiKeyChange(event.target.value)}
+                  />
+                </label>
+                <label className="settings-field">
+                  <span>Base URL</span>
+                  <input
+                    aria-label="DeepL base URL"
+                    className="settings-input"
+                    type="text"
+                    placeholder="https://api-free.deepl.com"
+                    value={deeplBaseUrl}
+                    onChange={(event) => onDeeplBaseUrlChange(event.target.value)}
+                  />
+                </label>
+              </div>
+            )}
           </section>
           ) : null}
 

@@ -254,9 +254,6 @@ pub struct AISettings {
     pub translation_target_lang: String,
     pub deepl_base_url: String,
     pub has_deepl_api_key: bool,
-    pub translation_env_openai: String,
-    pub translation_env_anthropic: String,
-    pub translation_env_deepl: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -416,9 +413,6 @@ struct StoredAISettings {
     translation_target_lang: String,
     deepl_base_url: String,
     deepl_api_key: String,
-    translation_env_openai: String,
-    translation_env_anthropic: String,
-    translation_env_deepl: String,
 }
 
 struct InferredMetadata {
@@ -1800,9 +1794,6 @@ impl LibraryService {
             } else {
                 current.deepl_api_key
             },
-            translation_env_openai: current.translation_env_openai,
-            translation_env_anthropic: current.translation_env_anthropic,
-            translation_env_deepl: current.translation_env_deepl,
         };
         self.save_ai_settings(&conn, &next)?;
         apply_ai_environment(&next);
@@ -1813,9 +1804,6 @@ impl LibraryService {
         &self,
         provider_env_openai: Option<String>,
         provider_env_anthropic: Option<String>,
-        translation_env_openai: Option<String>,
-        translation_env_anthropic: Option<String>,
-        translation_env_deepl: Option<String>,
     ) -> Result<AISettings> {
         let conn = self.connect()?;
         let current = self.load_ai_settings(&conn)?;
@@ -1823,11 +1811,6 @@ impl LibraryService {
             provider_env_openai: provider_env_openai.unwrap_or(current.provider_env_openai),
             provider_env_anthropic: provider_env_anthropic
                 .unwrap_or(current.provider_env_anthropic),
-            translation_env_openai: translation_env_openai
-                .unwrap_or(current.translation_env_openai),
-            translation_env_anthropic: translation_env_anthropic
-                .unwrap_or(current.translation_env_anthropic),
-            translation_env_deepl: translation_env_deepl.unwrap_or(current.translation_env_deepl),
             ..current
         };
         self.save_ai_settings(&conn, &next)?;
@@ -3259,24 +3242,6 @@ impl LibraryService {
             "provider_env_anthropic",
             "TEXT NOT NULL DEFAULT ''",
         )?;
-        ensure_column(
-            &conn,
-            "ai_settings",
-            "translation_env_openai",
-            "TEXT NOT NULL DEFAULT ''",
-        )?;
-        ensure_column(
-            &conn,
-            "ai_settings",
-            "translation_env_anthropic",
-            "TEXT NOT NULL DEFAULT ''",
-        )?;
-        ensure_column(
-            &conn,
-            "ai_settings",
-            "translation_env_deepl",
-            "TEXT NOT NULL DEFAULT ''",
-        )?;
         conn.execute("INSERT OR IGNORE INTO ai_settings(id) VALUES (1)", [])?;
         conn.execute(
             "INSERT OR IGNORE INTO connector_settings(id) VALUES (1)",
@@ -3818,15 +3783,12 @@ fn to_public_ai_settings(settings: &StoredAISettings) -> AISettings {
         translation_target_lang: settings.translation_target_lang.clone(),
         deepl_base_url: settings.deepl_base_url.clone(),
         has_deepl_api_key: !settings.deepl_api_key.trim().is_empty(),
-        translation_env_openai: settings.translation_env_openai.clone(),
-        translation_env_anthropic: settings.translation_env_anthropic.clone(),
-        translation_env_deepl: settings.translation_env_deepl.clone(),
     }
 }
 
 fn load_ai_settings_row(conn: &Connection) -> Result<StoredAISettings> {
     conn.query_row(
-        "SELECT active_provider, openai_model, openai_base_url, openai_api_key, anthropic_model, anthropic_base_url, anthropic_api_key, translation_provider, translation_openai_model, translation_anthropic_model, translation_target_lang, deepl_base_url, deepl_api_key, provider_env_openai, provider_env_anthropic, translation_env_openai, translation_env_anthropic, translation_env_deepl FROM ai_settings WHERE id = 1",
+        "SELECT active_provider, openai_model, openai_base_url, openai_api_key, anthropic_model, anthropic_base_url, anthropic_api_key, translation_provider, translation_openai_model, translation_anthropic_model, translation_target_lang, deepl_base_url, deepl_api_key, provider_env_openai, provider_env_anthropic FROM ai_settings WHERE id = 1",
         [],
         |row| {
             let active_provider: String = row.get(0)?;
@@ -3861,9 +3823,6 @@ fn load_ai_settings_row(conn: &Connection) -> Result<StoredAISettings> {
                 deepl_api_key: row.get(12)?,
                 provider_env_openai: row.get(13)?,
                 provider_env_anthropic: row.get(14)?,
-                translation_env_openai: row.get(15)?,
-                translation_env_anthropic: row.get(16)?,
-                translation_env_deepl: row.get(17)?,
             })
         },
     )
@@ -3887,10 +3846,7 @@ fn save_ai_settings_row(conn: &Connection, settings: &StoredAISettings) -> Resul
              deepl_base_url = ?12,
              deepl_api_key = ?13,
              provider_env_openai = ?14,
-             provider_env_anthropic = ?15,
-             translation_env_openai = ?16,
-             translation_env_anthropic = ?17,
-             translation_env_deepl = ?18
+             provider_env_anthropic = ?15
          WHERE id = 1",
         params![
             settings.active_provider.as_str(),
@@ -3908,9 +3864,6 @@ fn save_ai_settings_row(conn: &Connection, settings: &StoredAISettings) -> Resul
             settings.deepl_api_key,
             settings.provider_env_openai,
             settings.provider_env_anthropic,
-            settings.translation_env_openai,
-            settings.translation_env_anthropic,
-            settings.translation_env_deepl
         ],
     )?;
     Ok(())
@@ -3920,9 +3873,6 @@ fn apply_ai_environment(settings: &StoredAISettings) {
     for text in [
         settings.provider_env_openai.as_str(),
         settings.provider_env_anthropic.as_str(),
-        settings.translation_env_openai.as_str(),
-        settings.translation_env_anthropic.as_str(),
-        settings.translation_env_deepl.as_str(),
     ] {
         apply_env_text(text);
     }

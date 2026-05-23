@@ -180,9 +180,6 @@ export type AISettings = {
   translation_target_lang: string;
   deepl_base_url: string;
   has_deepl_api_key: boolean;
-  translation_env_openai: string;
-  translation_env_anthropic: string;
-  translation_env_deepl: string;
 };
 
 export type AIEnvSettings = {
@@ -216,9 +213,6 @@ export type UpdateAISettingsInput = {
   deepl_base_url: string;
   deepl_api_key?: string;
   clear_deepl_api_key?: boolean;
-  translation_env_openai?: string;
-  translation_env_anthropic?: string;
-  translation_env_deepl?: string;
 };
 
 export type TranslateSelectionInput = {
