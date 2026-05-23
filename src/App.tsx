@@ -376,6 +376,12 @@ export default function App({ api }: { api: AppApi }) {
   }, [ai, closeReaderFloatingUi, readerState.workspaceMode]);
 
   useEffect(() => {
+    if (isNonPdfReading) {
+      setIsSidebarVisible(false);
+    }
+  }, [isNonPdfReading]);
+
+  useEffect(() => {
     if (!isTauriRuntime()) return;
     void getRuntimePolyfillDiagnostics();
   }, []);
@@ -653,6 +659,8 @@ export default function App({ api }: { api: AppApi }) {
 
   const showActivePdfHighlightBar = Boolean(readerState.activePdfHighlight);
   const isPdfFocusMode = readerState.workspaceMode === "pdf_focus";
+  const isNonPdfReading = Boolean(activePaper && activePaper.attachment_format !== "pdf" && readerState.workspaceMode !== "pdf_focus");
+  const isFocusedMode = isPdfFocusMode || isNonPdfReading;
   const activePdfHighlightBarStyle = useMemo(() => {
     const rect = readerState.activePdfHighlight?.rect;
     if (!rect) return {};
@@ -671,7 +679,7 @@ export default function App({ api }: { api: AppApi }) {
   return (
     <div
       ref={appShellRef}
-      className={`app-shell ${isPdfFocusMode ? "app-shell-focus" : "app-shell-workspace"} ${isPdfFocusMode && isSidebarVisible ? "app-shell-focus-sidebar-open" : ""} ${ai.isAiPanelOpen ? "app-shell-ai-open" : ""}`}
+      className={`app-shell ${isFocusedMode ? "app-shell-focus" : "app-shell-workspace"} ${isFocusedMode && isSidebarVisible ? "app-shell-focus-sidebar-open" : ""} ${ai.isAiPanelOpen ? "app-shell-ai-open" : ""}`}
       style={{ "--sidebar-width": `${clamp(sidebarWidth, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH)}px`, "--ai-panel-width": `${clamp(aiPanelWidth, AI_PANEL_MIN_WIDTH, AI_PANEL_MAX_WIDTH)}px` } as CSSProperties}
     >
       {library.resourceContextMenu && (library.contextMenuCollection || library.contextMenuItem) ? (
@@ -700,7 +708,7 @@ export default function App({ api }: { api: AppApi }) {
           draggedFileCount={library.draggedFileCount}
           activePdfOutlinePage={readerState.readerPage}
           focusPanel={focusSidebarPanel}
-          focusPdfAttachmentId={isPdfFocusMode ? activePaper?.primary_attachment_id ?? null : null}
+          focusPdfAttachmentId={isPdfFocusMode && activePaper?.attachment_format === "pdf" ? activePaper?.primary_attachment_id ?? null : null}
           lastImportResult={library.lastImportResult}
           libraryItems={library.libraryItems}
           onCancelCollectionInlineEdit={library.cancelCollectionInlineEdit}
@@ -725,7 +733,7 @@ export default function App({ api }: { api: AppApi }) {
         />
       ) : null}
 
-      {isSidebarVisible && readerState.workspaceMode !== "pdf_focus" ? <div aria-hidden="true" className="pane-resizer" onPointerDown={(event) => startPaneResize("sidebar", event)} /> : null}
+      {isSidebarVisible && !isFocusedMode ? <div aria-hidden="true" className="pane-resizer" onPointerDown={(event) => startPaneResize("sidebar", event)} /> : null}
 
       <ReaderWorkspace
         data={{
