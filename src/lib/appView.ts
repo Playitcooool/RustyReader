@@ -66,7 +66,7 @@ export const filenameStem = (value: string, fallback: string) => {
   return sanitized.length > 0 ? sanitized : fallback;
 };
 
-export const supportedExtensions = [".pdf", ".docx", ".epub"];
+export const supportedExtensions = [".pdf", ".docx", ".epub", ".md", ".markdown"];
 
 export const isSupportedPath = (path: string) =>
   supportedExtensions.some((extension) => path.toLowerCase().endsWith(extension));

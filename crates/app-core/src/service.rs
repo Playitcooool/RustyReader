@@ -5304,7 +5304,9 @@ fn markdown_content_blocks(markdown: &str) -> Vec<ContentBlock> {
 fn markdown_to_safe_html(title: &str, markdown: &str) -> String {
     let mut html = format!("<article><h1>{}</h1>", encode_safe(title));
     let mut paragraph = Vec::new();
-    let mut list_items = Vec::new();
+    let mut unordered_items = Vec::new();
+    let mut ordered_items = Vec::new();
+    let mut table_rows: Vec<Vec<String>> = Vec::new();
     let mut in_code = false;
     let mut code = String::new();
 
@@ -5316,10 +5318,10 @@ fn markdown_to_safe_html(title: &str, markdown: &str) -> String {
             paragraph.clear();
         }
     };
-    let flush_list = |html: &mut String, list_items: &mut Vec<String>| {
-        if !list_items.is_empty() {
+    let flush_unordered = |html: &mut String, items: &mut Vec<String>| {
+        if !items.is_empty() {
             html.push_str("<ul>");
-            for item in list_items.drain(..) {
+            for item in items.drain(..) {
                 html.push_str("<li>");
                 html.push_str(&render_inline_markdown(&item));
                 html.push_str("</li>");
@@ -5327,10 +5329,111 @@ fn markdown_to_safe_html(title: &str, markdown: &str) -> String {
             html.push_str("</ul>");
         }
     };
+    let flush_ordered = |html: &mut String, items: &mut Vec<String>| {
+        if !items.is_empty() {
+            html.push_str("<ol>");
+            for item in items.drain(..) {
+                html.push_str("<li>");
+                html.push_str(&render_inline_markdown(&item));
+                html.push_str("</li>");
+            }
+            html.push_str("</ol>");
+        }
+    };
+    let flush_table = |html: &mut String, rows: &mut Vec<Vec<String>>| {
+        if rows.is_empty() {
+            return;
+        }
+        if rows.len() < 2 {
+            // Single row table — treat as header only.
+            html.push_str("<table><thead><tr>");
+            for cell in rows.drain(..).flatten() {
+                html.push_str("<th>");
+                html.push_str(&render_inline_markdown(&cell));
+                html.push_str("</th>");
+            }
+            html.push_str("</tr></thead></table>");
+            return;
+        }
+        // Check if second row is a separator (all cells consist of :?-+:?).
+        let is_sep = |cell: &str| {
+            let trimmed = cell.trim();
+            !trimmed.is_empty()
+                && trimmed
+                    .chars()
+                    .all(|c| c == '-' || c == ':' || c == '|' || c == ' ')
+        };
+        let has_separator = rows[1].iter().all(|c| is_sep(c));
+        let mut header = rows.remove(0);
+        if has_separator {
+            rows.remove(0); // drop separator
+        }
+        // Normalize all rows to the same column count.
+        let col_count = header
+            .len()
+            .max(rows.iter().map(|r| r.len()).max().unwrap_or(0));
+        header.resize(col_count, String::new());
+        for row in rows.iter_mut() {
+            row.resize(col_count, String::new());
+        }
+        html.push_str("<table><thead><tr>");
+        for cell in &header {
+            html.push_str("<th>");
+            html.push_str(&render_inline_markdown(cell));
+            html.push_str("</th>");
+        }
+        html.push_str("</tr></thead><tbody>");
+        for row in rows.drain(..) {
+            html.push_str("<tr>");
+            for cell in &row {
+                html.push_str("<td>");
+                html.push_str(&render_inline_markdown(cell));
+                html.push_str("</td>");
+            }
+            html.push_str("</tr>");
+        }
+        html.push_str("</tbody></table>");
+    };
+    let is_ordered_list_item = |line: &str| -> Option<String> {
+        let trimmed = line.trim();
+        if let Some(dot_pos) = trimmed.find(". ") {
+            let prefix = &trimmed[..dot_pos];
+            if !prefix.is_empty() && prefix.chars().all(|c| c.is_ascii_digit()) {
+                return Some(trimmed[dot_pos + 2..].to_string());
+            }
+        }
+        None
+    };
+    let is_table_line = |line: &str| -> Option<Vec<String>> {
+        let trimmed = line.trim();
+        if !trimmed.contains('|') {
+            return None;
+        }
+        let mut cells: Vec<String> = trimmed
+            .split('|')
+            .map(|c| c.trim().to_string())
+            .collect();
+        // Strip leading/trailing empty cells from outer pipe syntax (e.g. |a|b|).
+        if cells.first().map_or(false, |c| c.is_empty()) {
+            cells.remove(0);
+        }
+        if cells.last().map_or(false, |c| c.is_empty()) {
+            cells.pop();
+        }
+        if cells.len() >= 2 {
+            Some(cells)
+        } else {
+            None
+        }
+    };
 
     for line in markdown.lines() {
         let trimmed = line.trim();
         if trimmed.starts_with("```") {
+            flush_paragraph(&mut html, &mut paragraph);
+            flush_unordered(&mut html, &mut unordered_items);
+            flush_ordered(&mut html, &mut ordered_items);
+            flush_table(&mut html, &mut table_rows);
             if in_code {
                 html.push_str("<pre><code>");
                 html.push_str(&encode_safe(&code));
@@ -5338,8 +5441,6 @@ fn markdown_to_safe_html(title: &str, markdown: &str) -> String {
                 code.clear();
                 in_code = false;
             } else {
-                flush_paragraph(&mut html, &mut paragraph);
-                flush_list(&mut html, &mut list_items);
                 in_code = true;
             }
             continue;
@@ -5351,10 +5452,14 @@ fn markdown_to_safe_html(title: &str, markdown: &str) -> String {
         }
         if trimmed.is_empty() {
             flush_paragraph(&mut html, &mut paragraph);
-            flush_list(&mut html, &mut list_items);
+            flush_unordered(&mut html, &mut unordered_items);
+            flush_ordered(&mut html, &mut ordered_items);
+            flush_table(&mut html, &mut table_rows);
         } else if trimmed.starts_with('#') {
             flush_paragraph(&mut html, &mut paragraph);
-            flush_list(&mut html, &mut list_items);
+            flush_unordered(&mut html, &mut unordered_items);
+            flush_ordered(&mut html, &mut ordered_items);
+            flush_table(&mut html, &mut table_rows);
             let level = trimmed
                 .chars()
                 .take_while(|ch| *ch == '#')
@@ -5362,25 +5467,43 @@ fn markdown_to_safe_html(title: &str, markdown: &str) -> String {
                 .clamp(1, 3);
             let heading = trimmed.trim_start_matches('#').trim();
             html.push_str(&format!("<h{level}>{}</h{level}>", encode_safe(heading)));
+        } else if let Some(cells) = is_table_line(trimmed) {
+            flush_paragraph(&mut html, &mut paragraph);
+            flush_unordered(&mut html, &mut unordered_items);
+            flush_ordered(&mut html, &mut ordered_items);
+            table_rows.push(cells);
+        } else if let Some(item) = is_ordered_list_item(trimmed) {
+            flush_paragraph(&mut html, &mut paragraph);
+            flush_unordered(&mut html, &mut unordered_items);
+            flush_table(&mut html, &mut table_rows);
+            ordered_items.push(item);
         } else if let Some(item) = trimmed
             .strip_prefix("- ")
             .or_else(|| trimmed.strip_prefix("* "))
         {
             flush_paragraph(&mut html, &mut paragraph);
-            list_items.push(item.to_string());
+            flush_ordered(&mut html, &mut ordered_items);
+            flush_table(&mut html, &mut table_rows);
+            unordered_items.push(item.to_string());
         } else if let Some(quote) = trimmed.strip_prefix('>') {
             flush_paragraph(&mut html, &mut paragraph);
-            flush_list(&mut html, &mut list_items);
+            flush_unordered(&mut html, &mut unordered_items);
+            flush_ordered(&mut html, &mut ordered_items);
+            flush_table(&mut html, &mut table_rows);
             html.push_str("<blockquote>");
             html.push_str(&render_inline_markdown(quote.trim()));
             html.push_str("</blockquote>");
         } else {
-            flush_list(&mut html, &mut list_items);
+            flush_unordered(&mut html, &mut unordered_items);
+            flush_ordered(&mut html, &mut ordered_items);
+            flush_table(&mut html, &mut table_rows);
             paragraph.push(trimmed.to_string());
         }
     }
     flush_paragraph(&mut html, &mut paragraph);
-    flush_list(&mut html, &mut list_items);
+    flush_unordered(&mut html, &mut unordered_items);
+    flush_ordered(&mut html, &mut ordered_items);
+    flush_table(&mut html, &mut table_rows);
     if in_code {
         html.push_str("<pre><code>");
         html.push_str(&encode_safe(&code));
@@ -5392,6 +5515,15 @@ fn markdown_to_safe_html(title: &str, markdown: &str) -> String {
 
 fn render_inline_markdown(value: &str) -> String {
     let mut rendered = encode_safe(value).to_string();
+    // Strip images and links with empty URLs entirely (e.g. ![desc]() or [text]()).
+    rendered = Regex::new(r"!\[[^\]]*\]\(\)")
+        .unwrap()
+        .replace_all(&rendered, "")
+        .to_string();
+    rendered = Regex::new(r"\[([^\]]*)\]\(\)")
+        .unwrap()
+        .replace_all(&rendered, "$1")
+        .to_string();
     rendered = Regex::new(r"!\[([^\]]*)\]\([^)]+\)")
         .unwrap()
         .replace_all(&rendered, "$1")
@@ -5399,6 +5531,19 @@ fn render_inline_markdown(value: &str) -> String {
     rendered = Regex::new(r"\[([^\]]+)\]\([^)]+\)")
         .unwrap()
         .replace_all(&rendered, "$1")
+        .to_string();
+    // Render inline math $...$ as monospace spans, avoiding dollar amounts.
+    let math_re = Regex::new(r"\$([^$]+)\$").unwrap();
+    rendered = math_re
+        .replace_all(&rendered, |caps: &regex::Captures| {
+            let content = &caps[1];
+            // Only treat as math if it contains LaTeX-like patterns.
+            if content.contains('\\') || content.contains('^') || content.contains('_') || content.contains('{') {
+                format!("<code class=\"math-inline\">{}</code>", content)
+            } else {
+                caps[0].to_string()
+            }
+        })
         .to_string();
     rendered
         .replace("**", "")
@@ -5466,6 +5611,7 @@ fn extract_document(path: &Path, bytes: &[u8], format: &str) -> Result<Extracted
         "pdf" => extract_pdf(path, bytes),
         "docx" => extract_docx(path, bytes),
         "epub" => extract_epub(path, bytes),
+        "md" => extract_markdown(path, bytes),
         _ => Err(anyhow!("unsupported attachment format")),
     }
 }
@@ -5597,6 +5743,60 @@ fn extract_epub(path: &Path, bytes: &[u8]) -> Result<ExtractedDocument> {
             authors: authors.unwrap_or_else(|| "Imported Author".into()),
             publication_year: None,
             source: "Imported EPUB".into(),
+            doi: None,
+        },
+    })
+}
+
+fn extract_markdown(path: &Path, bytes: &[u8]) -> Result<ExtractedDocument> {
+    let markdown = String::from_utf8(bytes.to_vec())?;
+    let title = markdown
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("# "))
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .map(ToString::to_string)
+        .unwrap_or_else(|| {
+            path.file_stem()
+                .map(|value| value.to_string_lossy().to_string())
+                .filter(|value| !value.trim().is_empty())
+                .map(|value| title_from_slug(&value))
+                .unwrap_or_else(|| "Untitled".into())
+        });
+    // Strip the first level-1 heading to avoid duplicating it in the HTML output
+    // (markdown_to_safe_html already prepends an <h1> for the title).
+    let body_md = if markdown
+        .lines()
+        .next()
+        .map(|l| l.trim().starts_with("# "))
+        .unwrap_or(false)
+    {
+        markdown
+            .lines()
+            .skip(1)
+            .collect::<Vec<_>>()
+            .join("\n")
+    } else {
+        markdown
+    };
+    let plain_text = markdown_to_plain_text(&body_md);
+    let normalized_html = markdown_to_safe_html(&title, &body_md);
+    let blocks = markdown_content_blocks(&body_md);
+    let chunks = build_structured_chunks(&blocks, "md");
+
+    Ok(ExtractedDocument {
+        normalized_html,
+        plain_text,
+        chunks,
+        page_count: Some(blocks.len() as i64),
+        content_status: "ready".into(),
+        content_notice: None,
+        extractor_version: EXTRACTOR_VERSION,
+        metadata: InferredMetadata {
+            title: Some(title),
+            authors: "Imported Author".into(),
+            publication_year: None,
+            source: "Imported Markdown".into(),
             doi: None,
         },
     })

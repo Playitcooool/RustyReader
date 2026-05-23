@@ -466,8 +466,15 @@ function scanPageCandidates() {
         }
       }
       if (tag === "img") {
-        const alt = node.getAttribute("alt")?.replace(/\s+/g, " ").trim();
-        return alt ? `![${alt}]()` : "";
+        const alt = node.getAttribute("alt")?.replace(/\s+/g, " ").trim() || "";
+        const src = node.getAttribute("src") || "";
+        if (!src && !alt) return "";
+        try {
+          const url = src ? new URL(src, window.location.href).toString() : "";
+          return `![${alt}](${url})`;
+        } catch {
+          return alt ? `![${alt}](${src})` : "";
+        }
       }
       if (tag === "strong" || tag === "b") return `**${inline()}**`;
       if (tag === "em" || tag === "i") return `*${inline()}*`;

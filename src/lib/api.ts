@@ -163,7 +163,7 @@ export async function createTauriApi(): Promise<AppApi> {
         filters: [
           {
             name: "Documents",
-            extensions: ["pdf", "docx", "epub"],
+            extensions: ["pdf", "docx", "epub", "md", "markdown"],
           },
         ],
       });

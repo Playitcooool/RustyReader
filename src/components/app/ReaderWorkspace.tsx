@@ -17,6 +17,7 @@ import {
   ZoomOutIcon,
 } from "./Icons";
 import { PdfFocusHighlightBar } from "./PdfHighlightBars";
+import { NormalizedReader } from "../readers/NormalizedReader";
 import { PdfContinuousReader } from "../readers/PdfContinuousReader";
 import { attachmentFormatLabel, formatItemMetadata, type ReaderFitMode } from "../../lib/appView";
 import type { Collection, LibraryItem, ReaderView, Annotation } from "../../lib/contracts";
@@ -199,7 +200,6 @@ export function ReaderWorkspace(props: Props) {
     onRemovePdfInkAnnotation,
     onUpdatePdfTextBoxAnnotation,
     onRemovePdfTextBoxAnnotation,
-    onExitFocus,
     onFindQueryChange,
     onMoveMatch,
     onReaderFitModeChange,
@@ -214,6 +214,8 @@ export function ReaderWorkspace(props: Props) {
     onShowOutline,
     onSelectionChange,
     onCloseTranslationPopover,
+    openFindHud,
+    onStepNormalizedZoom,
     setPdfPageCount,
   } = props.actions;
   const readerShellRef = useRef<HTMLElement | null>(null);
@@ -332,9 +334,9 @@ export function ReaderWorkspace(props: Props) {
         openReaderSelectionMenu(event.nativeEvent);
       }}
     >
-      <div className={`reader-tabs ${workspaceMode === "pdf_focus" ? "reader-tabs-focus" : ""}`} role="tablist" aria-label="Open papers">
-        {workspaceMode === "pdf_focus" && activePaper?.attachment_format === "pdf" ? (
-          <button aria-label="Back to library" className="reader-back-button" title="Back to library" type="button" onClick={onExitFocus}>
+      <div className={`reader-tabs ${workspaceMode === "pdf_focus" || (activePaper && activePaper.attachment_format !== "pdf") ? "reader-tabs-focus" : ""}`} role="tablist" aria-label="Open papers">
+        {(workspaceMode === "pdf_focus" && activePaper?.attachment_format === "pdf") || (activePaper && activePaper.attachment_format !== "pdf") ? (
+          <button aria-label="Back to library" className="reader-back-button" title="Back to library" type="button" onClick={() => activePaper && onCloseTab(activePaper.id)}>
             <ChevronLeftIcon />
           </button>
         ) : null}
@@ -540,6 +542,33 @@ export function ReaderWorkspace(props: Props) {
               Loading PDF...
             </div>
           )}
+        </section>
+      ) : activePaper && activePaper.attachment_format !== "pdf" && readerView ? (
+        <section className="reader-panel reader-panel-focus">
+          <div className="reader-toolbar reader-toolbar-focus" role="toolbar" aria-label="Reader toolbar">
+            <div className="reader-control-group reader-control-group-zoom">
+              <button aria-label="Zoom out" className="icon-button" title="Zoom out" type="button" onClick={() => onStepNormalizedZoom(-1)}>
+                <ZoomOutIcon />
+              </button>
+              <span className="reader-zoom-label">{readerZoom}%</span>
+              <button aria-label="Zoom in" className="icon-button" title="Zoom in" type="button" onClick={() => onStepNormalizedZoom(1)}>
+                <ZoomInIcon />
+              </button>
+            </div>
+            <div className="reader-control-group">
+              <button aria-label="Find in document" className="icon-button" title="Find in document" type="button" onClick={openFindHud}>
+                <SearchIcon />
+              </button>
+            </div>
+          </div>
+          <NormalizedReader
+            pageHtml={readerView.normalized_html}
+            zoom={readerZoom}
+            searchQuery={readerSearchQuery}
+            activeSearchMatchIndex={readerSearchMatchIndex}
+            onSearchMatchesChange={onReaderSearchMatchesChange}
+            onSelectionChange={onSelectionChange}
+          />
         </section>
       ) : (
         <section className="reader-panel reader-panel-workspace">

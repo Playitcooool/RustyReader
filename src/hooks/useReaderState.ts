@@ -210,9 +210,7 @@ export function useReaderState({
   const activateItem = useCallback((item: LibraryItem, options?: { focusPdf?: boolean }) => {
     const shouldEnterPdfFocus = Boolean(options?.focusPdf && item.attachment_format === "pdf");
     setActivePaperId(item.id);
-    if (shouldEnterPdfFocus) {
-      setOpenPaperIds((current) => (current.includes(item.id) ? current : [...current, item.id]));
-    }
+    setOpenPaperIds((current) => (current.includes(item.id) ? current : [...current, item.id]));
     setWorkspaceMode(shouldEnterPdfFocus ? "pdf_focus" : "workspace");
   }, [setActivePaperId]);
 

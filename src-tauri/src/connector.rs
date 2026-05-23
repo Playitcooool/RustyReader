@@ -363,7 +363,7 @@ fn import_file(
     }
     if !matches!(
         filename.rsplit('.').next().map(|value| value.to_ascii_lowercase()),
-        Some(ext) if ext == "pdf" || ext == "docx" || ext == "epub"
+        Some(ext) if ext == "pdf" || ext == "docx" || ext == "epub" || ext == "md" || ext == "markdown"
     ) {
         return json_response(400, error_body("unsupported attachment format"));
     }
@@ -473,7 +473,7 @@ fn health_body() -> serde_json::Value {
         "app_name": "RustyReader",
         "connector_version": 1,
         "auth_modes": ["browser_extension_origin", "bearer"],
-        "supported_file_types": ["pdf", "docx", "epub"],
+        "supported_file_types": ["pdf", "docx", "epub", "md"],
         "capabilities": ["collections", "import_path", "import_file", "import_markdown"]
     })
 }
