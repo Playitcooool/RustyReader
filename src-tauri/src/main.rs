@@ -642,5 +642,5 @@ fn main() {
             pdf_engine::pdf_engine_search,
         ])
         .run(tauri::generate_context!())
-        .expect("failed to run paper-reader desktop app");
+        .expect("failed to run RustyReader desktop app");
 }
