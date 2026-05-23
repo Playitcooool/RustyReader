@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 
-const token = process.env.PAPER_READER_CONNECTOR_TOKEN || "paper-reader-dev-token";
-const port = Number(process.env.PAPER_READER_CONNECTOR_PORT || 17654);
+const token = process.env.RUSTYREADER_CONNECTOR_TOKEN || "rustyreader-dev-token";
+const port = Number(process.env.RUSTYREADER_CONNECTOR_PORT || 17654);
 const baseUrl = `http://127.0.0.1:${port}`;
 
 function startMockConnector() {
   const child = spawn(process.execPath, ["scripts/mock-connector.js"], {
-    env: { ...process.env, PAPER_READER_CONNECTOR_PORT: String(port), PAPER_READER_CONNECTOR_TOKEN: token },
+    env: { ...process.env, RUSTYREADER_CONNECTOR_PORT: String(port), RUSTYREADER_CONNECTOR_TOKEN: token },
     stdio: ["ignore", "pipe", "pipe"]
   });
 
@@ -51,7 +51,7 @@ async function main() {
     const health = await request("/v1/health", { bearer: null });
     assert.equal(health.status, 200);
     assert.equal(health.payload.ok, true);
-    assert.equal(health.payload.app_name, "Paper Reader");
+    assert.equal(health.payload.app_name, "RustyReader");
     assert.ok(health.payload.capabilities.includes("import_file"));
 
     const collections = await request("/v1/collections");
@@ -60,7 +60,7 @@ async function main() {
 
     const importPayload = {
       collection_id: 1,
-      path: "/tmp/paper-reader-smoke.pdf",
+      path: "/tmp/rustyreader-smoke.pdf",
       source_url: "https://example.com/paper.pdf",
       page_url: "https://example.com/article",
       download_id: 99

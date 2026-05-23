@@ -1,7 +1,7 @@
 import http from "node:http";
 
-const PORT = Number(process.env.PAPER_READER_CONNECTOR_PORT || 17654);
-const TOKEN = process.env.PAPER_READER_CONNECTOR_TOKEN || "paper-reader-dev-token";
+const PORT = Number(process.env.RUSTYREADER_CONNECTOR_PORT || 17654);
+const TOKEN = process.env.RUSTYREADER_CONNECTOR_TOKEN || "rustyreader-dev-token";
 
 const collections = [
   { id: 1, name: "Inbox", parent_id: null },
@@ -43,7 +43,7 @@ const server = http.createServer(async (request, response) => {
   if (request.url === "/v1/health" && request.method === "GET") {
     return json(response, 200, {
       ok: true,
-      app_name: "Paper Reader",
+      app_name: "RustyReader",
       connector_version: 1,
       supported_file_types: ["pdf", "docx", "epub"],
       capabilities: ["collections", "import_path", "import_file", "import_markdown"]

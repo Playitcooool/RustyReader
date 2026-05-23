@@ -23,9 +23,9 @@ async function request(baseUrl, path, { token, method = "GET", body, timeoutMs =
     });
   } catch (error) {
     if (error?.name === "AbortError") {
-      throw new Error("Paper Reader desktop connector did not respond in time. Confirm Paper Reader is running.");
+      throw new Error("RustyReader desktop connector did not respond in time. Confirm RustyReader is running.");
     }
-    throw new Error("Paper Reader desktop connector is unreachable. Start or update Paper Reader.");
+    throw new Error("RustyReader desktop connector is unreachable. Start or update RustyReader.");
   } finally {
     clearTimeout(timeout);
   }
@@ -45,23 +45,23 @@ function userMessageForError(status, statusText, data) {
   const normalized = serverMessage.toLowerCase();
 
   if (status === 401 || status === 403 || normalized.includes("unauthorized")) {
-    return "Paper Reader rejected the connector request. Update Paper Reader and try again.";
+    return "RustyReader rejected the connector request. Update RustyReader and try again.";
   }
 
   if (normalized.includes("collection")) {
-    return "The selected Paper Reader collection no longer exists. Refresh collections and choose another one.";
+    return "The selected RustyReader collection no longer exists. Refresh collections and choose another one.";
   }
 
   if (normalized.includes("unsupported")) {
-    return "Paper Reader does not support this file type. Import a PDF, DOCX, EPUB, or readable web page.";
+    return "RustyReader does not support this file type. Import a PDF, DOCX, EPUB, or readable web page.";
   }
 
   if (normalized.includes("absolute")) {
-    return "Paper Reader rejected the downloaded file path because it was not absolute.";
+    return "RustyReader rejected the downloaded file path because it was not absolute.";
   }
 
   if (status >= 500) {
-    return "Paper Reader import failed. The temporary download was kept for inspection.";
+    return "RustyReader import failed. The temporary download was kept for inspection.";
   }
 
   return serverMessage || `${status} ${statusText}`.trim();
@@ -76,7 +76,7 @@ export async function discoverConnectorUrl(preferredUrl = DEFAULT_CONNECTOR_URL)
   const health = await checkHealth(connectorUrl);
   if (health?.ok) {
     if (!health.auth_modes?.includes("browser_extension_origin")) {
-      throw new Error("Paper Reader needs an update before this extension can connect without a token.");
+      throw new Error("RustyReader needs an update before this extension can connect without a token.");
     }
     return { connectorUrl, health };
   }

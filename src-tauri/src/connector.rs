@@ -470,7 +470,7 @@ fn error_body(message: impl Into<String>) -> serde_json::Value {
 fn health_body() -> serde_json::Value {
     serde_json::json!({
         "ok": true,
-        "app_name": "Paper Reader",
+        "app_name": "RustyReader",
         "connector_version": 1,
         "auth_modes": ["browser_extension_origin", "bearer"],
         "supported_file_types": ["pdf", "docx", "epub"],
@@ -493,7 +493,7 @@ mod tests {
         let body = health_body();
 
         assert_eq!(body["ok"], true);
-        assert_eq!(body["app_name"], "Paper Reader");
+        assert_eq!(body["app_name"], "RustyReader");
         assert_eq!(body["connector_version"], 1);
         assert!(body["supported_file_types"]
             .as_array()

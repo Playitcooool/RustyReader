@@ -8,7 +8,7 @@ describe("DesktopRuntimeRequired", () => {
     render(<DesktopRuntimeRequired />);
 
     expect(screen.getByLabelText("Desktop runtime required")).toBeInTheDocument();
-    expect(screen.getByText(/Paper Reader needs the Tauri desktop runtime/i)).toBeInTheDocument();
+    expect(screen.getByText(/RustyReader needs the Tauri desktop runtime/i)).toBeInTheDocument();
     expect(screen.getByText(/npm run tauri:dev/i)).toBeInTheDocument();
   });
 });

@@ -166,7 +166,7 @@ Run:
 
 ```bash
 rtk npm test -- src/App.test.tsx
-rtk cargo check -p paper-reader-desktop
+rtk cargo check -p rustyreader-desktop
 ```
 
 Expected: tests still fail on missing UI split before Task 4, but Rust type checks succeed after contract updates.
@@ -315,7 +315,7 @@ Run:
 ```bash
 rtk npm test
 rtk npm run build
-rtk cargo check -p paper-reader-desktop
+rtk cargo check -p rustyreader-desktop
 ```
 
 Expected: tests pass, the frontend bundle builds with `pdfjs-dist`, and the desktop Rust host still type checks.

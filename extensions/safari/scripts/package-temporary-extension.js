@@ -7,7 +7,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const safariDir = join(root, "extensions/safari");
 const extensionDir = join(safariDir, "build/extension");
 const outputDir = join(safariDir, "dist");
-const zipPath = join(outputDir, "paper-reader-safari-temporary-extension.zip");
+const zipPath = join(outputDir, "rustyreader-safari-temporary-extension.zip");
 
 if (!existsSync(extensionDir)) {
   const build = spawnSync("npm", ["run", "build"], { cwd: safariDir, stdio: "inherit" });

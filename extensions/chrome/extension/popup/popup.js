@@ -66,7 +66,7 @@ function updateActionAvailability() {
   collectionSelect.disabled = state.busy || !state.collectionsLoaded || state.collections.length === 0;
   for (const button of candidateList.querySelectorAll("button")) {
     button.disabled = state.busy || !hasCollection;
-    button.title = hasCollection ? "" : "Paper Reader collections are still loading.";
+    button.title = hasCollection ? "" : "RustyReader collections are still loading.";
   }
 }
 
@@ -124,14 +124,14 @@ async function initialize() {
   const config = await sendMessage({ type: "paper-reader:get-state" });
   state.config = config;
   state.importModeLabel = await detectImportModeLabel();
-  renderCollectionPlaceholder("Waiting for Paper Reader");
+  renderCollectionPlaceholder("Waiting for RustyReader");
 
   scheduleConnectorRetry(0);
 }
 
 async function detectImportModeLabel() {
   const response = await sendMessage({ type: "paper-reader:get-capabilities" });
-  return response?.hasDownloads ? "Download then import" : "Upload to Paper Reader";
+  return response?.hasDownloads ? "Download then import" : "Upload to RustyReader";
 }
 
 async function saveConfig({ quiet = false } = {}) {
@@ -151,26 +151,26 @@ async function saveConfig({ quiet = false } = {}) {
 }
 
 async function discoverConnector() {
-  setConnection("Checking Paper Reader", "Looking for the local connector…");
+  setConnection("Checking RustyReader", "Looking for the local connector…");
   try {
     const { health } = await discoverConnectorUrl();
     const version = health.connector_version ? ` v${health.connector_version}` : "";
-    setConnection("Paper Reader connected", `${health.app_name || "Connector"}${version} is reachable.`, "success");
+    setConnection("RustyReader connected", `${health.app_name || "Connector"}${version} is reachable.`, "success");
     return health;
   } catch (error) {
-    setConnection("Paper Reader not reachable", error.message, "error");
+    setConnection("RustyReader not reachable", error.message, "error");
     throw error;
   }
 }
 
 async function loadCollections() {
-  setConnection("Loading collections", "Fetching Paper Reader collections…");
+  setConnection("Loading collections", "Fetching RustyReader collections…");
   const response = await sendMessage({ type: "paper-reader:load-collections" });
   state.collections = response.collections;
   state.config = response.config;
   state.collectionsLoaded = true;
   renderCollections();
-  setConnection("Paper Reader connected", `Loaded ${response.collections.length} collections.`, "success");
+  setConnection("RustyReader connected", `Loaded ${response.collections.length} collections.`, "success");
 }
 
 function renderCollectionPlaceholder(label) {
@@ -228,16 +228,16 @@ async function runConnectorCycle() {
 
   state.connectorCycleRunning = true;
   try {
-    setResult("Waiting for Paper Reader", "Start Paper Reader; collections will load automatically.", "error");
+    setResult("Waiting for RustyReader", "Start RustyReader; collections will load automatically.", "error");
     await discoverConnector();
     await loadCollections();
     await scanPage();
   } catch (error) {
     state.collectionsLoaded = false;
     state.collections = [];
-    renderCollectionPlaceholder("Waiting for Paper Reader");
-    setConnection("Waiting for Paper Reader", error.message, "error");
-    setResult("Waiting for Paper Reader", "Start Paper Reader; this popup will reconnect automatically.", "error");
+    renderCollectionPlaceholder("Waiting for RustyReader");
+    setConnection("Waiting for RustyReader", error.message, "error");
+    setResult("Waiting for RustyReader", "Start RustyReader; this popup will reconnect automatically.", "error");
     scheduleConnectorRetry();
   } finally {
     state.connectorCycleRunning = false;
@@ -248,7 +248,7 @@ async function scanPage() {
   cancelAutoImport();
   if (!state.activeTabId) return;
   if (!state.collectionsLoaded) {
-    setResult("Waiting for Paper Reader", "Collections will load automatically when Paper Reader is reachable.", "error");
+    setResult("Waiting for RustyReader", "Collections will load automatically when RustyReader is reachable.", "error");
     return;
   }
   setBusy(true);
@@ -396,5 +396,5 @@ collectionSelect.addEventListener("change", () => {
 
 void initialize().catch((error) => {
   setConnection("Setup needed", error.message, "error");
-  setResult("Not ready", "Start or update Paper Reader, then refresh.", "error");
+  setResult("Not ready", "Start or update RustyReader, then refresh.", "error");
 });

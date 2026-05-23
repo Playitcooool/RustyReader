@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Paper Reader Connector",
+  "name": "RustyReader",
   "version": "0.1.0",
-  "description": "Save PDFs, documents, and readable web pages from Safari into Paper Reader.",
+  "description": "Save PDFs, documents, and readable web pages from Safari into RustyReader.",
   "permissions": [
     "contextMenus",
     "storage",
@@ -21,7 +21,7 @@
     "type": "module"
   },
   "action": {
-    "default_title": "Save to Paper Reader",
+    "default_title": "Save to RustyReader",
     "default_popup": "extension/popup/popup.html"
   },
   "icons": {

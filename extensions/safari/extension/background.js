@@ -14,7 +14,7 @@ const downloadJobs = new Map();
 api.runtime.onInstalled.addListener(() => {
   api.contextMenus.create({
     id: MENU_ID_SAVE_LINK,
-    title: "Save to Paper Reader",
+    title: "Save to RustyReader",
     contexts: ["link"]
   });
 });

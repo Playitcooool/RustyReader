@@ -29,6 +29,6 @@ pub(crate) fn service_for_root(library_root: &Path) -> Result<LibraryService, St
 pub(crate) fn root_dir(app: &AppHandle) -> PathBuf {
     app.path().app_data_dir().unwrap_or_else(|error| {
         eprintln!("failed to resolve app data directory; using temp dir: {error}");
-        std::env::temp_dir().join("paper-reader-dev")
+        std::env::temp_dir().join("rustyreader-dev")
     })
 }

@@ -10,7 +10,7 @@ pub(crate) fn install_menu(app: &mut App) -> Result<(), Box<dyn std::error::Erro
         .separator()
         .quit()
         .build()?;
-    let app_menu = SubmenuBuilder::new(&*app, "Paper Reader")
+    let app_menu = SubmenuBuilder::new(&*app, "RustyReader")
         .text("app_import_documents", "Import")
         .separator()
         .text("open_settings", "Settings…")

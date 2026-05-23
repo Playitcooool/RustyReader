@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Paper Reader",
+  "productName": "RustyReader",
   "version": "0.1.0",
-  "identifier": "com.codex.paper-reader",
+  "identifier": "com.codex.rustyreader",
   "build": {
     "beforeDevCommand": "npm run dev:tauri",
     "beforeBuildCommand": "npm run build",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Paper Reader",
+        "title": "RustyReader",
         "width": 1560,
         "height": 960,
         "minWidth": 1120,

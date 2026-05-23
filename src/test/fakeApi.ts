@@ -446,7 +446,7 @@ const metadataFromTitle = (title: string) => {
   return {
     authors: "Imported Author",
     publication_year: 2026,
-    source: "Paper Reader Library",
+    source: "RustyReader Library",
     doi: null,
   };
 };

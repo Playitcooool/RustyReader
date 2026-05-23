@@ -101,7 +101,7 @@ test("discoverConnectorUrl checks only the default connector URL", async () => {
     calls.push(url);
     return new Response(JSON.stringify({
       ok: true,
-      app_name: "Paper Reader",
+      app_name: "RustyReader",
       connector_version: 1,
       auth_modes: ["browser_extension_origin", "bearer"]
     }), { status: 200 });
@@ -142,7 +142,7 @@ test("unsupported file errors use an actionable message", async () => {
 });
 
 test("discoverConnectorUrl rejects old token-only connectors", async () => {
-  global.fetch = async () => new Response(JSON.stringify({ ok: true, app_name: "Paper Reader", connector_version: 1 }), { status: 200 });
+  global.fetch = async () => new Response(JSON.stringify({ ok: true, app_name: "RustyReader", connector_version: 1 }), { status: 200 });
 
   await assert.rejects(
     () => discoverConnectorUrl("http://127.0.0.1:17654"),

@@ -3,7 +3,7 @@ export const STORAGE_KEYS = {
   connectorToken: "connectorToken",
   lastCollectionId: "lastCollectionId"
 };
-export const DOWNLOAD_FOLDER = "PaperReaderConnector";
+export const DOWNLOAD_FOLDER = "RustyReaderConnector";
 export const MENU_ID_SAVE_LINK = "paper-reader-save-link";
 export const SUPPORTED_EXTENSIONS = ["pdf", "docx", "epub"];
 export const SUPPORTED_CONTENT_TYPES = [

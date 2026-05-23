@@ -1,4 +1,4 @@
-# Paper Reader
+# RustyReader
 
 <div align="center">
 
@@ -20,9 +20,9 @@
 
 ## Overview
 
-Paper Reader is a native-feeling research workspace built around a local library, a focused document reader, and an AI copilot. It imports papers and citation records, keeps metadata and notes in a local SQLite-backed library, and helps turn reading into reusable research output.
+RustyReader is a native-feeling research workspace built around a local library, a focused document reader, and an AI copilot. It imports papers and citation records, keeps metadata and notes in a local SQLite-backed library, and helps turn reading into reusable research output.
 
-Paper Reader 是一个面向论文阅读和研究整理的桌面应用。它把资料库、阅读器、标注、AI 问答、研究笔记和浏览器采集整合到同一个本地优先工作流里。
+RustyReader 是一个面向论文阅读和研究整理的桌面应用。它把资料库、阅读器、标注、AI 问答、研究笔记和浏览器采集整合到同一个本地优先工作流里。
 
 ## Features
 
@@ -50,9 +50,9 @@ Download the latest macOS Apple Silicon desktop app and browser connectors:
 
 | Package | Download | Use for |
 | --- | --- | --- |
-| Desktop app | [Paper Reader v0.1.0 DMG](https://github.com/Playitcooool/rust-ai-paper-reader/releases/download/v0.1.0/Paper.Reader_0.1.0_aarch64.dmg) | Installing the Paper Reader desktop app |
-| Chrome extension | [Paper Reader Chrome Connector v0.1.0 ZIP](https://github.com/Playitcooool/rust-ai-paper-reader/releases/download/v0.1.0/paper-reader-connector-v0.1.0.zip) | Loading the connector in Chrome developer mode |
-| Safari extension | [Paper Reader Safari Temporary Extension ZIP](https://github.com/Playitcooool/rust-ai-paper-reader/releases/download/v0.1.0/paper-reader-safari-temporary-extension.zip) | Quick local Safari import through Developer settings |
+| Desktop app | [RustyReader v0.1.0 DMG](https://github.com/Playitcooool/rust-ai-paper-reader/releases/download/v0.1.0/RustyReader_0.1.0_aarch64.dmg) | Installing the RustyReader desktop app |
+| Chrome extension | [RustyReader Chrome Extension v0.1.0 ZIP](https://github.com/Playitcooool/rust-ai-paper-reader/releases/download/v0.1.0/rustyreader-connector-v0.1.0.zip) | Loading the connector in Chrome developer mode |
+| Safari extension | [RustyReader Safari Temporary Extension ZIP](https://github.com/Playitcooool/rust-ai-paper-reader/releases/download/v0.1.0/rustyreader-safari-temporary-extension.zip) | Quick local Safari import through Developer settings |
 
 Keep the desktop app running while using either browser extension.
 
@@ -93,29 +93,29 @@ npm run tauri:build
 
 ## Browser Extensions
 
-Paper Reader includes browser connectors for saving papers and readable web pages into the desktop library. Keep the Paper Reader desktop app running while using either extension so the local connector is available.
+RustyReader includes browser connectors for saving papers and readable web pages into the desktop library. Keep the RustyReader desktop app running while using either extension so the local connector is available.
 
 ### What the Extensions Can Import
 
 - Direct `PDF`, `DOCX`, and `EPUB` links
 - Currently opened PDF/document tabs
 - Readable web pages converted to Markdown snapshots
-- Right-click file links via `Save to Paper Reader`
+- Right-click file links via `Save to RustyReader`
 
-The extension popup loads your Paper Reader collections, lets you choose the destination collection, scans the current tab, and sends the import request to the local desktop connector.
+The extension popup loads your RustyReader collections, lets you choose the destination collection, scans the current tab, and sends the import request to the local desktop connector.
 
 ### Chrome Extension
 
 Use the downloaded Chrome extension zip:
 
-1. Download [Paper Reader Chrome Connector v0.1.0 ZIP](https://github.com/Playitcooool/rust-ai-paper-reader/releases/download/v0.1.0/paper-reader-connector-v0.1.0.zip).
+1. Download [RustyReader Chrome Extension v0.1.0 ZIP](https://github.com/Playitcooool/rust-ai-paper-reader/releases/download/v0.1.0/rustyreader-connector-v0.1.0.zip).
 2. Unzip it to a local folder.
-3. Start Paper Reader from the installed desktop app.
+3. Start RustyReader from the installed desktop app.
 4. Open `chrome://extensions`.
 5. Enable `Developer mode`.
 6. Click `Load unpacked`.
-7. Select the unzipped `paper-reader-connector` folder.
-8. Pin or open the `Paper Reader Connector` extension.
+7. Select the unzipped `rustyreader-connector` folder.
+8. Pin or open the `RustyReader` extension.
 9. Choose a collection and click the import action shown by the popup.
 
 Build it locally from the repository:
@@ -127,37 +127,37 @@ npm run extension:package
 Local outputs:
 
 ```text
-extensions/chrome/dist/paper-reader-connector
-extensions/chrome/dist/paper-reader-connector-v0.1.0.zip
+extensions/chrome/dist/rustyreader-connector
+extensions/chrome/dist/rustyreader-connector-v0.1.0.zip
 ```
 
 Load the local build in Chrome:
 
-1. Start Paper Reader with `npm run tauri:dev` or open the built desktop app.
+1. Start RustyReader with `npm run tauri:dev` or open the built desktop app.
 2. Open `chrome://extensions`.
 3. Enable `Developer mode`.
 4. Click `Load unpacked`.
-5. Select `extensions/chrome/dist/paper-reader-connector`.
-6. Pin or open the `Paper Reader Connector` extension.
+5. Select `extensions/chrome/dist/rustyreader-connector`.
+6. Pin or open the `RustyReader` extension.
 7. Choose a collection and click the import action shown by the popup.
 
 Chrome usage notes:
 
 - The popup scans the active tab after collections load.
 - Use `Scan Page` again if the page content changed.
-- Right-click a direct document link and choose `Save to Paper Reader` to import it into the last selected collection.
+- Right-click a direct document link and choose `Save to RustyReader` to import it into the last selected collection.
 - The connector uses `http://127.0.0.1:17654`; no manual token setup is required for the current desktop app.
 
 ### Safari Extension
 
 Use the downloaded Safari temporary extension zip:
 
-1. Download [Paper Reader Safari Temporary Extension ZIP](https://github.com/Playitcooool/rust-ai-paper-reader/releases/download/v0.1.0/paper-reader-safari-temporary-extension.zip).
-2. Start Paper Reader from the installed desktop app.
+1. Download [RustyReader Safari Temporary Extension ZIP](https://github.com/Playitcooool/rust-ai-paper-reader/releases/download/v0.1.0/rustyreader-safari-temporary-extension.zip).
+2. Start RustyReader from the installed desktop app.
 3. In Safari, open `Settings` -> `Developer` -> `Add Temporary Extension...`.
-4. Select the downloaded `paper-reader-safari-temporary-extension.zip`.
+4. Select the downloaded `rustyreader-safari-temporary-extension.zip`.
 5. Open `Settings` -> `Extensions`.
-6. Enable `Paper Reader Connector`.
+6. Enable `RustyReader`.
 7. Open the extension popup, choose a collection, and import the current page or document.
 
 Safari temporary extensions are intended for quick local use. Safari removes them after 24 hours or when Safari quits. For persistent development, build and run the Safari Web Extension App from Xcode.
@@ -190,20 +190,20 @@ Outputs:
 
 ```text
 extensions/safari/build/extension
-extensions/safari/dist/paper-reader-safari-temporary-extension.zip
-extensions/safari/build/PaperReaderSafari
+extensions/safari/dist/rustyreader-safari-temporary-extension.zip
+extensions/safari/build/RustyReaderSafari
 ```
 
 Run and enable it in Safari for persistent development:
 
-1. Start Paper Reader with `npm run tauri:dev` or open the built desktop app.
-2. Open `extensions/safari/build/PaperReaderSafari` in Xcode.
+1. Start RustyReader with `npm run tauri:dev` or open the built desktop app.
+2. Open `extensions/safari/build/RustyReaderSafari` in Xcode.
 3. Build and run the generated app.
 4. In Safari, open `Settings` -> `Extensions`.
-5. Enable `Paper Reader Connector`.
+5. Enable `RustyReader`.
 6. Open the extension popup, choose a collection, and import the current page or document.
 
-For the temporary zip flow, open Safari `Settings` -> `Developer` -> `Add Temporary Extension...`, select `extensions/safari/dist/paper-reader-safari-temporary-extension.zip`, then enable it from `Settings` -> `Extensions`. Safari removes temporary extensions after 24 hours or when Safari quits.
+For the temporary zip flow, open Safari `Settings` -> `Developer` -> `Add Temporary Extension...`, select `extensions/safari/dist/rustyreader-safari-temporary-extension.zip`, then enable it from `Settings` -> `Extensions`. Safari removes temporary extensions after 24 hours or when Safari quits.
 
 Safari usage notes:
 
@@ -222,12 +222,12 @@ npm run extension:safari:zip
 npm run extension:safari:package
 ```
 
-For implementation details, see [extensions/chrome/README.md](extensions/chrome/README.md), [extensions/safari/README.md](extensions/safari/README.md), and [extensions/chrome/docs/paper-reader-connector-api.md](extensions/chrome/docs/paper-reader-connector-api.md).
+For implementation details, see [extensions/chrome/README.md](extensions/chrome/README.md), [extensions/safari/README.md](extensions/safari/README.md), and [extensions/chrome/docs/rustyreader-connector-api.md](extensions/chrome/docs/rustyreader-connector-api.md).
 
 ## Architecture
 
 ```text
-Paper Reader
+RustyReader
 ├─ Tauri v2 desktop shell
 ├─ React + TypeScript frontend
 │  ├─ library workspace
@@ -264,7 +264,7 @@ src/components/         Reader, workspace, sidebar, AI, and settings components
 src/lib/                Runtime API contracts and browser helpers
 src-tauri/              Tauri shell, native commands, connector, app config
 crates/app-core/        Library, import, AI, note, search, and storage services
-extensions/chrome/      Chrome MV3 Paper Reader Connector
+extensions/chrome/      Chrome MV3 RustyReader extension
 extensions/safari/      Safari Web Extension packaging
 docs/                   Supporting project documentation
 ```
@@ -294,7 +294,7 @@ npm run extension:smoke
 
 ## Current Status
 
-Paper Reader already supports the core desktop research loop:
+RustyReader already supports the core desktop research loop:
 
 - local library management
 - multi-format imports and reading

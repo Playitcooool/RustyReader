@@ -3082,26 +3082,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "paper-reader-desktop"
-version = "0.1.0"
-dependencies = [
- "app-core",
- "base64 0.22.1",
- "image",
- "lopdf 0.35.0",
- "pdf_oxide",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-shell",
- "tempfile",
- "tesseract-ocr-static",
- "tokio",
-]
-
-[[package]]
 name = "parking_lot"
 version = "0.12.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4133,6 +4113,26 @@ dependencies = [
  "unicode-ccc",
  "unicode-properties",
  "unicode-script",
+]
+
+[[package]]
+name = "rustyreader-desktop"
+version = "0.1.0"
+dependencies = [
+ "app-core",
+ "base64 0.22.1",
+ "image",
+ "lopdf 0.35.0",
+ "pdf_oxide",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-shell",
+ "tempfile",
+ "tesseract-ocr-static",
+ "tokio",
 ]
 
 [[package]]

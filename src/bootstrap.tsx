@@ -11,7 +11,7 @@ export function DesktopRuntimeRequired() {
       <main className="app-shell" role="main">
         <section className="empty-state" aria-label="Desktop runtime required">
           <p className="eyebrow">Desktop Runtime Required</p>
-          <h1>Paper Reader needs the Tauri desktop runtime.</h1>
+          <h1>RustyReader needs the Tauri desktop runtime.</h1>
           <p>Run this app with `npm run tauri:dev` or a packaged desktop build to open your local library.</p>
         </section>
       </main>

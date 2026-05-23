@@ -1,4 +1,4 @@
-# Paper Reader Connector API Contract
+# RustyReader Connector API Contract
 
 This directory implements the Chrome side of the browser connector. The desktop app exposes the following localhost-only HTTP API on `127.0.0.1:17654`.
 

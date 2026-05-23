@@ -1,5 +1,5 @@
 [package]
-name = "paper-reader-desktop"
+name = "rustyreader-desktop"
 edition.workspace = true
 version.workspace = true
 license.workspace = true

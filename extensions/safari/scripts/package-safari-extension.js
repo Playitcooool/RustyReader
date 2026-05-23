@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const safariDir = join(root, "extensions/safari");
 const extensionDir = join(safariDir, "build/extension");
-const outputDir = join(safariDir, "build/PaperReaderSafari");
+const outputDir = join(safariDir, "build/RustyReaderSafari");
 
 const probe = spawnSync("xcrun", ["--find", "safari-web-extension-packager"], { encoding: "utf8" });
 if (probe.status !== 0) {
@@ -28,9 +28,9 @@ const result = spawnSync("xcrun", [
   "--project-location",
   outputDir,
   "--app-name",
-  "Paper Reader Safari",
+  "RustyReader Safari",
   "--bundle-identifier",
-  "com.paperreader.safari"
+  "com.rustyreader.safari"
 ], { stdio: "inherit" });
 
 process.exit(result.status ?? 1);

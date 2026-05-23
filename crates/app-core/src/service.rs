@@ -5455,7 +5455,7 @@ fn infer_metadata(title: &str) -> InferredMetadata {
             title: Some(title_from_slug(title)),
             authors: "Imported Author".into(),
             publication_year: None,
-            source: "Paper Reader Library".into(),
+            source: "RustyReader Library".into(),
             doi: None,
         },
     }

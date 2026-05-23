@@ -24,7 +24,7 @@ run("Package Safari Extension App project", "npm", ["run", "extension:safari:pac
 });
 
 console.log("\nBrowser extension outputs:");
-console.log("- Chrome unpacked: extensions/chrome/dist/paper-reader-connector");
-console.log("- Chrome zip: extensions/chrome/dist/paper-reader-connector-v0.1.0.zip");
+console.log("- Chrome unpacked: extensions/chrome/dist/rustyreader-connector");
+console.log("- Chrome zip: extensions/chrome/dist/rustyreader-connector-v0.1.0.zip");
 console.log("- Safari web extension input: extensions/safari/build/extension");
-console.log("- Safari Xcode project: extensions/safari/build/PaperReaderSafari");
+console.log("- Safari Xcode project: extensions/safari/build/RustyReaderSafari");

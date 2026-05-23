@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
-  <title id="title">Paper Reader</title>
+  <title id="title">RustyReader</title>
   <desc id="desc">A polished desktop app icon showing an academic paper, reader lens, and local library shelves.</desc>
   <defs>
     <linearGradient id="bg" x1="42" y1="18" x2="214" y2="238" gradientUnits="userSpaceOnUse">

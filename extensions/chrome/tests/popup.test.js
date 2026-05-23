@@ -68,7 +68,7 @@ test("popup discovers connector and requests import capabilities", () => {
 
   assert.match(source, /discoverConnectorUrl/);
   assert.match(source, /paper-reader:get-capabilities/);
-  assert.match(source, /Upload to Paper Reader/);
+  assert.match(source, /Upload to RustyReader/);
   assert.match(source, /Download then import/);
 });
 
@@ -92,7 +92,7 @@ test("popup retries connector failures and scans after collections load", () => 
   assert.match(discoverConnector, /discoverConnectorUrl\(\)/);
   assert.match(runConnectorCycle, /await discoverConnector\(\);\s*await loadCollections\(\);\s*await scanPage\(\);/);
   assert.match(runConnectorCycle, /scheduleConnectorRetry\(\)/);
-  assert.match(runConnectorCycle, /Waiting for Paper Reader/);
+  assert.match(runConnectorCycle, /Waiting for RustyReader/);
   assert.match(scanPage, /!state\.collectionsLoaded/);
   assert.doesNotMatch(discoverConnector, /saveConfig/);
   assert.doesNotMatch(source, /connectorUrlInput/);

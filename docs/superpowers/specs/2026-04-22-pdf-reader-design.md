@@ -99,7 +99,7 @@ PDF 第一阶段的用户可见能力：
 - 验证：
   - `npm test`
   - `npm run build`
-  - `cargo check -p paper-reader-desktop`
+  - `cargo check -p rustyreader-desktop`
 
 ## Out of Scope
 
