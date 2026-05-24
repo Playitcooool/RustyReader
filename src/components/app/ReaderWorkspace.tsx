@@ -325,6 +325,19 @@ export function ReaderWorkspace(props: Props) {
     return { left: `${left}px`, top: `${top}px` } as const;
   }, [translationPopover, viewportSize.height, viewportSize.width]);
 
+  const aiPanelToggle = (
+    <button
+      aria-label={isAiPanelOpen ? "Close AI panel" : "Open AI panel"}
+      aria-pressed={isAiPanelOpen}
+      className="icon-button reader-ai-toggle"
+      title={isAiPanelOpen ? "Close AI panel" : "Open AI panel"}
+      type="button"
+      onClick={() => void onAiToggle()}
+    >
+      <MessageIcon />
+    </button>
+  );
+
   return (
     <main
       ref={readerShellRef}
@@ -350,9 +363,7 @@ export function ReaderWorkspace(props: Props) {
             </button>
           </div>
         ))}
-        <button aria-label={isAiPanelOpen ? "Close AI panel" : "Open AI panel"} aria-pressed={isAiPanelOpen} className="icon-button reader-ai-toggle" title={isAiPanelOpen ? "Close AI panel" : "Open AI panel"} type="button" onClick={() => void onAiToggle()}>
-          <MessageIcon />
-        </button>
+        {workspaceMode === "pdf_focus" ? null : aiPanelToggle}
       </div>
 
       {workspaceMode === "pdf_focus" && activePaper?.attachment_format === "pdf" ? (
@@ -492,6 +503,7 @@ export function ReaderWorkspace(props: Props) {
                 </>
               ) : null}
             </div>
+            {aiPanelToggle}
           </div>
           {readerView ? (
             <>
@@ -560,6 +572,7 @@ export function ReaderWorkspace(props: Props) {
                 <SearchIcon />
               </button>
             </div>
+            {aiPanelToggle}
           </div>
           <NormalizedReader
             pageHtml={readerView.normalized_html}
