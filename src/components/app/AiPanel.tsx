@@ -1,6 +1,9 @@
-import { Children, type ComponentProps, type RefObject } from "react";
+import type { ComponentProps, RefObject } from "react";
+import rehypeKatex from "rehype-katex";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import type { PluggableList } from "unified";
 
 import {
   CloseIcon,
@@ -32,9 +35,9 @@ const DISPLAY_MATH_PATTERN = /\\(?:frac|sum|prod|int|iint|iiint|oint|sqrt|left|r
 const isMathDisplayLine = (line: string) => {
   const trimmed = line.trim();
   if (!trimmed || trimmed.length > 300) return false;
-  // Skip markdown syntax, existing $$ blocks, and code spans
+  // Skip markdown syntax, existing math, and code spans
   if (/^(```|~~~|\$\$|#|>|[-*+]\s|\d+\.\s|\||<)/.test(trimmed)) return false;
-  if (/`/.test(trimmed)) return false;
+  if (/[`$]/.test(trimmed)) return false;
   // Skip lines ending with sentence-ending punctuation
   if (/[。！？.!?]\s*$/.test(trimmed)) return false;
   // LaTeX commands
@@ -46,29 +49,59 @@ const isMathDisplayLine = (line: string) => {
   return false;
 };
 
-// Check if content inside $...$ looks like inline LaTeX math (not a dollar amount)
 const looksLikeInlineMath = (content: string) => {
   const trimmed = content.trim();
   if (!trimmed || /^\d+(\.\d+)?$/.test(trimmed)) return false;
   return /\\[a-zA-Z]+|[\^_]\{?[a-zA-Z0-9]|[=±×÷∑∏∫]/.test(trimmed);
 };
 
-// Convert $...$ inline math to code spans for monospace rendering.
-// Avoids $$...$$ display math and dollar amounts like $100.
-const preprocessInlineMath = (markdown: string) =>
-  markdown.replace(/(?<!\$)\$(?!\$)([^$\n]+?)\$(?!\$)/g, (match, content) =>
-    looksLikeInlineMath(content) ? `\`${content.trim()}\`` : match,
-  );
+const normalizeMathDelimitersInText = (text: string) =>
+  text
+    .split(/(`+[^`]*`+)/g)
+    .map((part) => {
+      if (part.startsWith("`")) return part;
+      return part
+        .replace(/\\\[([\s\S]*?)\\\]/g, (_match, content: string) => `$$\n${content.trim()}\n$$`)
+        .replace(/\\\(([^`\n]*?)\\\)/g, (match, content: string) =>
+          looksLikeInlineMath(content) ? `$${content.trim()}$` : match,
+        );
+    })
+    .join("");
 
-const preprocessLatexMathDelimiters = (markdown: string) =>
-  markdown
-    .replace(/\\\[([\s\S]*?)\\\]/g, (_match, content: string) => `$$\n${content.trim()}\n$$`)
-    .replace(/\\\(([\s\S]*?)\\\)/g, (match, content: string) =>
-      content.includes("\n") || !looksLikeInlineMath(content) ? match : `\`${content.trim()}\``,
-    );
+const normalizeLatexDelimiters = (markdown: string) => {
+  const lines = markdown.split("\n");
+  const result: string[] = [];
+  let inFence = false;
+  let textBlock: string[] = [];
 
-// Wrap standalone math lines in $$...$$, preserving multi-line \begin{...}...\end{...} blocks.
-// Also preserves existing $$...$$ blocks and code fences.
+  const flushTextBlock = () => {
+    if (textBlock.length > 0) {
+      result.push(normalizeMathDelimitersInText(textBlock.join("\n")));
+      textBlock = [];
+    }
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^(```|~~~)/.test(trimmed)) {
+      flushTextBlock();
+      inFence = !inFence;
+      result.push(line);
+      continue;
+    }
+    if (inFence) {
+      result.push(line);
+      continue;
+    }
+
+    textBlock.push(line);
+  }
+
+  flushTextBlock();
+  return result.join("\n");
+};
+
+// Wrap standalone math lines in $$...$$, preserving code fences and existing math blocks.
 const normalizeDisplayMath = (markdown: string) => {
   const lines = markdown.split("\n");
   const result: string[] = [];
@@ -87,7 +120,6 @@ const normalizeDisplayMath = (markdown: string) => {
   for (const line of lines) {
     const trimmed = line.trim();
 
-    // Code fences
     if (/^(```|~~~)/.test(trimmed)) {
       if (inDollarMath || inBeginBlock) flush();
       inDollarMath = false;
@@ -103,27 +135,17 @@ const normalizeDisplayMath = (markdown: string) => {
       continue;
     }
 
-    // Existing $$...$$ blocks — pass through unchanged
     if (trimmed === "$$") {
-      if (inDollarMath) {
-        inDollarMath = false;
-        mathLines.push(line);
-        flush();
-        continue;
-      }
-      if (!inBeginBlock) {
-        inDollarMath = true;
-        mathLines.push(line);
-        continue;
-      }
-    }
-
-    if (inDollarMath) {
-      mathLines.push(line);
+      inDollarMath = !inDollarMath;
+      result.push(line);
       continue;
     }
 
-    // Multi-line \begin{...} ... \end{...} blocks
+    if (inDollarMath) {
+      result.push(line);
+      continue;
+    }
+
     const begins = (trimmed.match(/\\begin\{/g) || []).length;
     const ends = (trimmed.match(/\\end\{/g) || []).length;
 
@@ -153,7 +175,6 @@ const normalizeDisplayMath = (markdown: string) => {
       continue;
     }
 
-    // Single-line display math
     if (isMathDisplayLine(line)) {
       result.push(`$$\n${trimmed}\n$$`);
     } else {
@@ -170,28 +191,11 @@ const removeLegacyEvidenceMarkers = (markdown: string) =>
   markdown.replace(evidenceMarkerPattern, "").replace(/[ \t]+([,.;:])/g, "$1");
 
 const displayMarkdown = (markdown: string) =>
-  normalizeDisplayMath(preprocessInlineMath(preprocessLatexMathDelimiters(removeLegacyEvidenceMarkers(markdown))));
-
-const childText = (children: ComponentProps<"p">["children"]) =>
-  Children.toArray(children)
-    .map((child) => (typeof child === "string" || typeof child === "number" ? String(child) : ""))
-    .join("")
-    .trim();
+  normalizeDisplayMath(normalizeLatexDelimiters(removeLegacyEvidenceMarkers(markdown)));
 
 const markdownComponents = {
   a: ({ href, children, ...props }: ComponentProps<"a">) => {
     return <a href={href} {...props} rel="noreferrer" target="_blank">{children}</a>;
-  },
-  p({ children, ...props }: ComponentProps<"p">) {
-    const text = childText(children);
-    if (/^\$\$[\s\S]*\$\$$/.test(text)) {
-      return (
-        <div className="ai-display-equation" role="math">
-          {text.replace(/^\$\$\s*/, "").replace(/\s*\$\$$/, "")}
-        </div>
-      );
-    }
-    return <p {...props}>{children}</p>;
   },
   pre: (props: ComponentProps<"pre">) => <pre className="ai-markdown-pre" {...props} />,
   code({
@@ -207,6 +211,8 @@ const markdownComponents = {
   },
 };
 
+const rehypePlugins: PluggableList = [[rehypeKatex, { strict: false, throwOnError: false }]];
+
 export const ChatHistoryIcon = MessageIcon;
 export const NewSessionIcon = PlusIcon;
 export const ArtifactIcon = NoteIcon;
@@ -220,7 +226,7 @@ export function MarkdownMessage({ markdown, onCitationClick }: { markdown: strin
   return (
     <div className="ai-message-with-evidence">
       <div className="ai-markdown">
-        <ReactMarkdown components={markdownComponents} remarkPlugins={[remarkGfm]}>
+        <ReactMarkdown components={markdownComponents} remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={rehypePlugins}>
           {displayMarkdown(markdown)}
         </ReactMarkdown>
       </div>

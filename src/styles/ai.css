@@ -506,15 +506,21 @@
   gap: 8px;
 }
 
-.ai-display-equation {
-  margin: 10px 0;
+.ai-markdown .katex {
+  color: inherit;
+  font-size: 1.02em;
+}
+
+.ai-markdown .katex-display {
+  margin: 10px 0 14px;
   overflow-x: auto;
-  padding: 6px 12px;
-  text-align: center;
-  font-family: "SFMono-Regular", Consolas, monospace;
-  font-size: 0.94em;
-  line-height: 1.55;
-  white-space: pre-wrap;
+  overflow-y: hidden;
+  padding: 4px 0;
+}
+
+.ai-markdown .katex-display > .katex {
+  display: inline-block;
+  max-width: 100%;
 }
 
 .ai-markdown table {
