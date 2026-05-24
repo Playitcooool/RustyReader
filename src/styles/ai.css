@@ -457,6 +457,30 @@
   min-height: 92px;
 }
 
+.ai-composer-input-frame {
+  position: relative;
+  min-width: 0;
+}
+
+.ai-composer-input-frame .ai-composer-input {
+  width: 100%;
+  min-height: 96px;
+  padding-right: 54px;
+  padding-bottom: 46px;
+  resize: vertical;
+}
+
+.ai-composer-send-button {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  padding: 0;
+  border-radius: 12px;
+}
+
 .ai-markdown > :first-child {
   margin-top: 0;
 }

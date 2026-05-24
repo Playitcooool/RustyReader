@@ -1305,42 +1305,28 @@ describe("App reading workspace", () => {
     expect(chatHistory?.querySelector(".ai-thread-entry")).toBeNull();
   });
 
-  it("renders quick actions in the dock and appends them to the AI chat history", async () => {
+  it("omits suggested quick prompts from the AI dock", async () => {
     const user = userEvent.setup();
-    const runSessionTaskSpy = vi.spyOn(fakeApi, "runAiSessionTask");
     const { container } = render(<App api={fakeApi} />);
 
     await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
-    expect(screen.getByRole("button", { name: "Summarize" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Summarize" }));
-
-    await waitFor(() => {
-      expect(runSessionTaskSpy).toHaveBeenCalledWith({
-        session_id: 910,
-        kind: "session.summarize",
-        prompt: undefined,
-        stream_id: expect.any(String),
-      });
-    });
-    expect(container.querySelector(".ai-bottom-dock .ai-quick-actions")).not.toBeNull();
-    expect(Array.from(container.querySelectorAll(".ai-message-user p")).some((node) => node.textContent === "Summarize")).toBe(true);
-    expect(screen.queryByText("Streaming")).not.toBeInTheDocument();
-    expect(screen.queryByText("succeeded")).not.toBeInTheDocument();
-    expect((await screen.findAllByText("Key Points")).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("The paper argues for predictable scaling trends.").length).toBeGreaterThan(0);
-    expect(screen.queryByText("succeeded")).not.toBeInTheDocument();
+    expect(container.querySelector(".ai-bottom-dock .ai-quick-actions")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Summarize" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Explain Terms" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Compare" })).not.toBeInTheDocument();
   });
 
-  it("keeps quick actions available after creating a new session", async () => {
+  it("keeps the composer available after creating a new session", async () => {
     const user = userEvent.setup();
     render(<App api={fakeApi} />);
 
     await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
     await user.click(screen.getByRole("button", { name: "Open AI panel" }));
     await user.click(screen.getByRole("button", { name: "New Session" }));
-    expect(await screen.findByRole("button", { name: "Summarize" })).toBeInTheDocument();
+    expect(await screen.findByRole("textbox", { name: "AI prompt" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send AI prompt" })).toBeInTheDocument();
   });
 
   it("shows current papers before collections in the empty context picker", async () => {
@@ -1358,6 +1344,26 @@ describe("App reading workspace", () => {
     expect(within(popover).getByRole("button", { name: /Graph Neural Survey/i })).toBeInTheDocument();
     expect(within(popover).getByRole("button", { name: /Distributed Consensus Notes/i })).toBeInTheDocument();
     expect(within(popover).getByRole("button", { name: /Machine Learning/i })).toBeInTheDocument();
+  });
+
+  it("adds paper references from @ mentions in the composer", async () => {
+    const user = userEvent.setup();
+    const addReferenceSpy = vi.spyOn(fakeApi, "addAiSessionReference");
+    render(<App api={fakeApi} />);
+
+    await user.click(await screen.findByRole("listitem", { name: /Transformer Scaling Laws/i }));
+    await user.click(screen.getByRole("button", { name: "Open AI panel" }));
+    const prompt = screen.getByRole("textbox", { name: "AI prompt" });
+    await user.type(prompt, "@Graph");
+
+    const popover = screen.getByRole("dialog", { name: "Add AI reference" });
+    await user.click(await within(popover).findByRole("button", { name: /Graph Neural Survey/i }));
+
+    await waitFor(() => {
+      expect(addReferenceSpy).toHaveBeenCalledWith({ session_id: 910, kind: "item", target_id: 2 });
+      expect(screen.getByText("Graph Neural Survey", { selector: ".ai-reference-chip-label" })).toBeInTheDocument();
+      expect(prompt).toHaveValue("");
+    });
   });
 
   it("preserves full long context names through truncation affordances", async () => {

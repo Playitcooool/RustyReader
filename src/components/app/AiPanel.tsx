@@ -1,4 +1,4 @@
-import type { ComponentProps, RefObject } from "react";
+import { useCallback, useMemo, useState, type ComponentProps, type RefObject } from "react";
 import rehypeKatex from "rehype-katex";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -15,7 +15,7 @@ import {
   SendIcon,
   TrashIcon,
 } from "./Icons";
-import { noteHeading, sessionActions, sessionReferenceLabel, taskLabel } from "../../lib/appView";
+import { noteHeading, sessionReferenceLabel, taskLabel } from "../../lib/appView";
 import type {
   AIArtifact,
   AISession,
@@ -290,6 +290,11 @@ type Props = {
   onUpdateNoteDraft: (value: string) => void;
 };
 
+type MentionRange = {
+  start: number;
+  end: number;
+};
+
 export function AiPanel(props: Props) {
   const {
     activeAiPending,
@@ -315,9 +320,7 @@ export function AiPanel(props: Props) {
     aiSessionTaskRuns,
     aiSessionThreadRuns,
     aiSessions,
-    areQuickActionsDisabled,
     collections,
-    compareEnabled,
     isAiSessionHistoryOpen,
     isReferencePickerOpen,
     libraryItems,
@@ -331,7 +334,6 @@ export function AiPanel(props: Props) {
     onDeleteSession,
     onExportMarkdown,
     onOpenSession,
-    onQuickAction,
     onAddReference,
     onOpenEvidenceCitation,
     onRemoveReference,
@@ -344,6 +346,59 @@ export function AiPanel(props: Props) {
     onUpdateNoteDraft,
   } = props;
   const hasThreadContent = aiSessionThreadRuns.length > 0 || Boolean(activeAiPending);
+  const [mentionRange, setMentionRange] = useState<MentionRange | null>(null);
+  const isMentionPickerActive = mentionRange !== null;
+  const visibleReferencePickerResults = useMemo(
+    () => (isMentionPickerActive ? aiReferencePickerResults.filter((result) => result.kind === "item") : aiReferencePickerResults),
+    [aiReferencePickerResults, isMentionPickerActive],
+  );
+
+  const updateMentionQuery = useCallback(
+    (value: string, cursor: number | null) => {
+      if (cursor === null) {
+        if (mentionRange && isReferencePickerOpen) onToggleReferencePicker();
+        setMentionRange(null);
+        return;
+      }
+
+      const beforeCursor = value.slice(0, cursor);
+      const match = /(^|\s)@([^\s@]*)$/.exec(beforeCursor);
+      if (!match) {
+        if (mentionRange && isReferencePickerOpen) onToggleReferencePicker();
+        setMentionRange(null);
+        return;
+      }
+
+      const token = match[0];
+      const leadingWhitespace = token.startsWith("@") ? 0 : 1;
+      const start = cursor - token.length + leadingWhitespace;
+      setMentionRange({ start, end: cursor });
+      onAiReferenceQueryChange(match[2] ?? "");
+      if (!isReferencePickerOpen) onToggleReferencePicker();
+    },
+    [isReferencePickerOpen, mentionRange, onAiReferenceQueryChange, onToggleReferencePicker],
+  );
+
+  const handleComposerChange = useCallback(
+    (value: string, cursor: number | null) => {
+      onAiComposerChange(value);
+      updateMentionQuery(value, cursor);
+    },
+    [onAiComposerChange, updateMentionQuery],
+  );
+
+  const handleReferencePick = useCallback(
+    async (result: AiReferencePickerResult, added: boolean) => {
+      if (!added) await onAddReference(result.kind, result.targetId);
+      if (mentionRange && result.kind === "item") {
+        const nextValue = `${aiComposerValue.slice(0, mentionRange.start)}${aiComposerValue.slice(mentionRange.end)}`.replace(/[ \t]{2,}/g, " ");
+        onAiComposerChange(nextValue);
+        setMentionRange(null);
+        window.setTimeout(() => aiComposerInputRef.current?.focus(), 0);
+      }
+    },
+    [aiComposerInputRef, aiComposerValue, mentionRange, onAddReference, onAiComposerChange],
+  );
 
   return (
     <aside className="ai-shell" aria-label="AI panel">
@@ -492,14 +547,6 @@ export function AiPanel(props: Props) {
       </div>
 
       <div className="ai-bottom-dock">
-        <div className="ai-quick-actions" aria-label="AI quick actions">
-          {sessionActions.map((action) => (
-            <button key={action.kind} className="ghost-button ai-quick-action" disabled={areQuickActionsDisabled || (action.kind === "session.compare" ? !compareEnabled : !aiPanelCanSend)} type="button" onClick={() => void onQuickAction(action.kind)}>
-              {action.label}
-            </button>
-          ))}
-        </div>
-
         <div className="ai-composer">
           <div className="ai-composer-header">
             <div className="ai-reference-chip-list" aria-label="Active AI references">
@@ -526,12 +573,12 @@ export function AiPanel(props: Props) {
                   </label>
                   <input id="ai-reference-search" ref={aiReferenceSearchInputRef} aria-label="Search context" className="search-input ai-reference-search-input" placeholder="Search papers and collections" type="search" value={aiReferenceQuery} onChange={(event) => onAiReferenceQueryChange(event.target.value)} />
                   <div className="ai-reference-results" aria-live="polite">
-                    {aiReferencePickerResults.map((result) => {
+                    {visibleReferencePickerResults.map((result) => {
                       const added = result.kind === "item" ? aiReferenceItemIds.has(result.targetId) : aiReferenceCollectionIds.has(result.targetId);
                       const badges = added ? [...result.badges, "Added"] : result.badges;
                       const accessibleLabel = pickerResultLabel(result, badges);
                       return (
-                        <button key={result.key} aria-label={accessibleLabel} className="ai-reference-result" disabled={added} title={accessibleLabel} type="button" onClick={() => void onAddReference(result.kind, result.targetId)}>
+                        <button key={result.key} aria-label={accessibleLabel} className="ai-reference-result" disabled={added && !isMentionPickerActive} title={accessibleLabel} type="button" onClick={() => void handleReferencePick(result, added)}>
                           <span className="ai-reference-result-main">
                             <span className="ai-reference-result-label">{result.label}</span>
                             {result.meta ? <span className="ai-reference-result-meta">{result.meta}</span> : null}
@@ -548,9 +595,15 @@ export function AiPanel(props: Props) {
                     })}
                     {aiReferenceSearchLoading ? <p className="ai-reference-results-empty">Searching…</p> : null}
                     {aiReferenceSearchError ? <p className="ai-error-text">{aiReferenceSearchError}</p> : null}
-                    {!aiReferenceSearchLoading && !aiReferenceSearchError && aiReferencePickerResults.length === 0 ? (
+                    {!aiReferenceSearchLoading && !aiReferenceSearchError && visibleReferencePickerResults.length === 0 ? (
                       <p className="ai-reference-results-empty">
-                        {aiReferenceQuery.trim().length === 0 ? "No papers or collections available." : "No matching context found."}
+                        {isMentionPickerActive
+                          ? aiReferenceQuery.trim().length === 0
+                            ? "No papers available."
+                            : "No matching paper found."
+                          : aiReferenceQuery.trim().length === 0
+                            ? "No papers or collections available."
+                            : "No matching context found."}
                       </p>
                     ) : null}
                   </div>
@@ -558,25 +611,28 @@ export function AiPanel(props: Props) {
               ) : null}
             </div>
           </div>
-          <textarea
-            ref={aiComposerInputRef}
-            aria-label="AI prompt"
-            className="note-editor ai-composer-input"
-            placeholder="Ask about the current references..."
-            rows={4}
-            value={aiComposerValue}
-            onChange={(event) => onAiComposerChange(event.target.value)}
-            onKeyDown={(event) => {
-              const isComposing = event.nativeEvent.isComposing;
-              if (event.key === "Enter" && !event.shiftKey && !isComposing) {
-                event.preventDefault();
-                void onSendPrompt();
-              }
-            }}
-          />
-          <button aria-label="Send AI prompt" className="primary-button icon-command-button" disabled={!aiPanelCanSend || aiComposerValue.trim().length === 0} title="Send AI prompt" type="button" onClick={() => void onSendPrompt()}>
-            <SendIcon />
-          </button>
+          <div className="ai-composer-input-frame">
+            <textarea
+              ref={aiComposerInputRef}
+              aria-label="AI prompt"
+              className="note-editor ai-composer-input"
+              placeholder="Ask about the current references..."
+              rows={4}
+              value={aiComposerValue}
+              onChange={(event) => handleComposerChange(event.target.value, event.target.selectionStart)}
+              onSelect={(event) => updateMentionQuery(event.currentTarget.value, event.currentTarget.selectionStart)}
+              onKeyDown={(event) => {
+                const isComposing = event.nativeEvent.isComposing;
+                if (event.key === "Enter" && !event.shiftKey && !isComposing) {
+                  event.preventDefault();
+                  void onSendPrompt();
+                }
+              }}
+            />
+            <button aria-label="Send AI prompt" className="primary-button icon-command-button ai-composer-send-button" disabled={!aiPanelCanSend || aiComposerValue.trim().length === 0} title="Send AI prompt" type="button" onClick={() => void onSendPrompt()}>
+              <SendIcon />
+            </button>
+          </div>
         </div>
       </div>
     </aside>
