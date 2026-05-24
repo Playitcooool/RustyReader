@@ -26,6 +26,18 @@ describe("MarkdownMessage", () => {
     expect(equation).toHaveTextContent("L(theta) = sum_i x_i");
   });
 
+  it("normalizes LaTeX markdown delimiters from model answers", () => {
+    const { container } = render(
+      <MarkdownMessage markdown={"输入 \\(\\mathbb{x} \\in \\mathbb{R}^{1 \\times C}\\) 被扩展。\n\n\\[\\mathbf{x}' = \\mathbf{x} \\oplus \\cdots\\]"} />,
+    );
+
+    expect(screen.queryByText(/\\\(/)).not.toBeInTheDocument();
+    expect(screen.getByText("\\mathbb{x} \\in \\mathbb{R}^{1 \\times C}")).toBeInTheDocument();
+    const equation = container.querySelector(".ai-display-equation");
+    expect(equation).not.toBeNull();
+    expect(equation).toHaveTextContent("\\mathbf{x}' = \\mathbf{x} \\oplus \\cdots");
+  });
+
   it("does not show the old citation lint warning", () => {
     render(<MarkdownMessage markdown={"这是一段较长的中文解读，用于确认界面不会在正常回答后面追加旧的证据引用警告。".repeat(3)} />);
 

@@ -60,6 +60,13 @@ const preprocessInlineMath = (markdown: string) =>
     looksLikeInlineMath(content) ? `\`${content.trim()}\`` : match,
   );
 
+const preprocessLatexMathDelimiters = (markdown: string) =>
+  markdown
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_match, content: string) => `$$\n${content.trim()}\n$$`)
+    .replace(/\\\(([\s\S]*?)\\\)/g, (match, content: string) =>
+      content.includes("\n") || !looksLikeInlineMath(content) ? match : `\`${content.trim()}\``,
+    );
+
 // Wrap standalone math lines in $$...$$, preserving multi-line \begin{...}...\end{...} blocks.
 // Also preserves existing $$...$$ blocks and code fences.
 const normalizeDisplayMath = (markdown: string) => {
@@ -163,7 +170,7 @@ const removeLegacyEvidenceMarkers = (markdown: string) =>
   markdown.replace(evidenceMarkerPattern, "").replace(/[ \t]+([,.;:])/g, "$1");
 
 const displayMarkdown = (markdown: string) =>
-  normalizeDisplayMath(preprocessInlineMath(removeLegacyEvidenceMarkers(markdown)));
+  normalizeDisplayMath(preprocessInlineMath(preprocessLatexMathDelimiters(removeLegacyEvidenceMarkers(markdown))));
 
 const childText = (children: ComponentProps<"p">["children"]) =>
   Children.toArray(children)
