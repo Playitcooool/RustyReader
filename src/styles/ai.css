@@ -347,7 +347,7 @@
   overflow: hidden;
   border-radius: 18px;
   border: 1px solid var(--panel-border);
-  background: rgba(18, 21, 29, 0.98);
+  background: #151820;
   box-shadow: 0 -12px 32px rgba(0, 0, 0, 0.28);
 }
 
@@ -460,6 +460,56 @@
 .ai-composer-input-frame {
   position: relative;
   min-width: 0;
+}
+
+.ai-mention-popover {
+  right: auto;
+  bottom: auto;
+  width: min(288px, calc(100% - 16px));
+  max-height: 220px;
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0;
+  padding: 6px;
+  border-radius: 12px;
+  background: #11141b;
+  box-shadow:
+    0 16px 36px rgba(0, 0, 0, 0.48),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.ai-mention-results {
+  gap: 4px;
+  max-height: 208px;
+}
+
+.ai-mention-result {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 9px;
+  border-radius: 9px;
+  background: transparent;
+}
+
+.ai-mention-result:hover {
+  transform: none;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.ai-mention-result-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.ai-mention-result-type {
+  justify-self: end;
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  font-size: 0.72rem;
 }
 
 .ai-composer-input-frame .ai-composer-input {

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ComponentProps, type RefObject } from "react";
+import { useCallback, useMemo, useRef, useState, type ComponentProps, type CSSProperties, type RefObject } from "react";
 import rehypeKatex from "rehype-katex";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -295,6 +295,50 @@ type MentionRange = {
   end: number;
 };
 
+const caretPositionInTextarea = (textarea: HTMLTextAreaElement, cursor: number) => {
+  const style = window.getComputedStyle(textarea);
+  const mirror = document.createElement("div");
+  const trackedProperties = [
+    "boxSizing",
+    "width",
+    "fontFamily",
+    "fontSize",
+    "fontWeight",
+    "fontStyle",
+    "letterSpacing",
+    "lineHeight",
+    "paddingTop",
+    "paddingRight",
+    "paddingBottom",
+    "paddingLeft",
+    "borderTopWidth",
+    "borderRightWidth",
+    "borderBottomWidth",
+    "borderLeftWidth",
+    "whiteSpace",
+    "wordBreak",
+    "overflowWrap",
+  ] as const;
+  for (const property of trackedProperties) {
+    mirror.style[property] = style[property];
+  }
+  mirror.style.position = "absolute";
+  mirror.style.visibility = "hidden";
+  mirror.style.overflow = "hidden";
+  mirror.style.height = "auto";
+  mirror.style.whiteSpace = "pre-wrap";
+  mirror.textContent = textarea.value.slice(0, cursor);
+
+  const marker = document.createElement("span");
+  marker.textContent = "\u200b";
+  mirror.append(marker);
+  document.body.append(mirror);
+  const top = marker.offsetTop - textarea.scrollTop;
+  const left = marker.offsetLeft - textarea.scrollLeft;
+  mirror.remove();
+  return { top, left };
+};
+
 export function AiPanel(props: Props) {
   const {
     activeAiPending,
@@ -346,18 +390,27 @@ export function AiPanel(props: Props) {
     onUpdateNoteDraft,
   } = props;
   const hasThreadContent = aiSessionThreadRuns.length > 0 || Boolean(activeAiPending);
+  const aiComposerInputFrameRef = useRef<HTMLDivElement | null>(null);
   const [mentionRange, setMentionRange] = useState<MentionRange | null>(null);
+  const [mentionPopoverStyle, setMentionPopoverStyle] = useState<CSSProperties>({});
   const isMentionPickerActive = mentionRange !== null;
   const visibleReferencePickerResults = useMemo(
     () => (isMentionPickerActive ? aiReferencePickerResults.filter((result) => result.kind === "item") : aiReferencePickerResults),
     [aiReferencePickerResults, isMentionPickerActive],
   );
+  const fileTypeByItemId = useMemo(
+    () => new Map(libraryItems.map((item) => [item.id, item.attachment_format.toUpperCase()])),
+    [libraryItems],
+  );
 
   const updateMentionQuery = useCallback(
-    (value: string, cursor: number | null) => {
+    (textarea: HTMLTextAreaElement | null) => {
+      const value = textarea?.value ?? "";
+      const cursor = textarea?.selectionStart ?? null;
       if (cursor === null) {
         if (mentionRange && isReferencePickerOpen) onToggleReferencePicker();
         setMentionRange(null);
+        setMentionPopoverStyle({});
         return;
       }
 
@@ -366,6 +419,7 @@ export function AiPanel(props: Props) {
       if (!match) {
         if (mentionRange && isReferencePickerOpen) onToggleReferencePicker();
         setMentionRange(null);
+        setMentionPopoverStyle({});
         return;
       }
 
@@ -374,15 +428,23 @@ export function AiPanel(props: Props) {
       const start = cursor - token.length + leadingWhitespace;
       setMentionRange({ start, end: cursor });
       onAiReferenceQueryChange(match[2] ?? "");
+      if (textarea && aiComposerInputFrameRef.current) {
+        const caret = caretPositionInTextarea(textarea, start);
+        const frameWidth = aiComposerInputFrameRef.current.clientWidth;
+        setMentionPopoverStyle({
+          left: `${Math.min(Math.max(caret.left + 12, 8), Math.max(frameWidth - 288, 8))}px`,
+          top: `${Math.max(caret.top - 8, 8)}px`,
+        });
+      }
       if (!isReferencePickerOpen) onToggleReferencePicker();
     },
     [isReferencePickerOpen, mentionRange, onAiReferenceQueryChange, onToggleReferencePicker],
   );
 
   const handleComposerChange = useCallback(
-    (value: string, cursor: number | null) => {
-      onAiComposerChange(value);
-      updateMentionQuery(value, cursor);
+    (textarea: HTMLTextAreaElement) => {
+      onAiComposerChange(textarea.value);
+      updateMentionQuery(textarea);
     },
     [onAiComposerChange, updateMentionQuery],
   );
@@ -394,6 +456,7 @@ export function AiPanel(props: Props) {
         const nextValue = `${aiComposerValue.slice(0, mentionRange.start)}${aiComposerValue.slice(mentionRange.end)}`.replace(/[ \t]{2,}/g, " ");
         onAiComposerChange(nextValue);
         setMentionRange(null);
+        setMentionPopoverStyle({});
         window.setTimeout(() => aiComposerInputRef.current?.focus(), 0);
       }
     },
@@ -566,7 +629,7 @@ export function AiPanel(props: Props) {
               <button ref={aiReferenceButtonRef} aria-label="Add AI reference" className="icon-button icon-button-small" type="button" onClick={onToggleReferencePicker}>
                 <NewSessionIcon />
               </button>
-              {isReferencePickerOpen ? (
+              {isReferencePickerOpen && !isMentionPickerActive ? (
                 <div ref={aiReferencePopoverRef} className="ai-reference-popover" role="dialog" aria-label="Add AI reference">
                   <label className="ai-reference-search-label" htmlFor="ai-reference-search">
                     Search context
@@ -611,7 +674,28 @@ export function AiPanel(props: Props) {
               ) : null}
             </div>
           </div>
-          <div className="ai-composer-input-frame">
+          <div ref={aiComposerInputFrameRef} className="ai-composer-input-frame">
+            {isReferencePickerOpen && isMentionPickerActive ? (
+              <div ref={aiReferencePopoverRef} className="ai-reference-popover ai-mention-popover" style={mentionPopoverStyle} role="dialog" aria-label="Add AI reference">
+                <div className="ai-reference-results ai-mention-results" aria-live="polite">
+                  {visibleReferencePickerResults.map((result) => {
+                    const added = aiReferenceItemIds.has(result.targetId);
+                    const accessibleLabel = pickerResultLabel(result, added ? [...result.badges, "Added"] : result.badges);
+                    return (
+                      <button key={result.key} aria-label={accessibleLabel} className="ai-reference-result ai-mention-result" title={accessibleLabel} type="button" onClick={() => void handleReferencePick(result, added)}>
+                        <span className="ai-mention-result-name">{result.label}</span>
+                        <span className="meta-count ai-mention-result-type">{fileTypeByItemId.get(result.targetId) ?? "FILE"}</span>
+                      </button>
+                    );
+                  })}
+                  {aiReferenceSearchLoading ? <p className="ai-reference-results-empty">Searching...</p> : null}
+                  {aiReferenceSearchError ? <p className="ai-error-text">{aiReferenceSearchError}</p> : null}
+                  {!aiReferenceSearchLoading && !aiReferenceSearchError && visibleReferencePickerResults.length === 0 ? (
+                    <p className="ai-reference-results-empty">{aiReferenceQuery.trim().length === 0 ? "No papers available." : "No matching paper found."}</p>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
             <textarea
               ref={aiComposerInputRef}
               aria-label="AI prompt"
@@ -619,8 +703,8 @@ export function AiPanel(props: Props) {
               placeholder="Ask about the current references..."
               rows={4}
               value={aiComposerValue}
-              onChange={(event) => handleComposerChange(event.target.value, event.target.selectionStart)}
-              onSelect={(event) => updateMentionQuery(event.currentTarget.value, event.currentTarget.selectionStart)}
+              onChange={(event) => handleComposerChange(event.currentTarget)}
+              onSelect={(event) => updateMentionQuery(event.currentTarget)}
               onKeyDown={(event) => {
                 const isComposing = event.nativeEvent.isComposing;
                 if (event.key === "Enter" && !event.shiftKey && !isComposing) {

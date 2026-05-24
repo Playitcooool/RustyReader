@@ -1357,6 +1357,8 @@ describe("App reading workspace", () => {
     await user.type(prompt, "@Graph");
 
     const popover = screen.getByRole("dialog", { name: "Add AI reference" });
+    expect(within(popover).getByText("DOCX", { selector: ".ai-mention-result-type" })).toBeInTheDocument();
+    expect(within(popover).getByText("Graph Neural Survey", { selector: ".ai-mention-result-name" })).toBeInTheDocument();
     await user.click(await within(popover).findByRole("button", { name: /Graph Neural Survey/i }));
 
     await waitFor(() => {
