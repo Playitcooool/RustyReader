@@ -208,7 +208,7 @@ const initialState = (): MockState => ({
       session_id: null,
       title: "Machine Learning Review",
       markdown:
-        "# Machine Learning Review\n\n## Evidence Map\n- Transformer Scaling Laws\n- Graph Neural Survey",
+        "# Machine Learning Review\n\n## Review Notes\n- Transformer Scaling Laws\n- Graph Neural Survey",
     },
   ],
   sessions: [
@@ -535,7 +535,7 @@ const collectionTaskOutput = (collectionId: number, kind: string, scopeItemIds: 
       return `# Collection Q&A: ${collectionName(collectionId)}\n\n## Answer\n${items[0]?.plainText.split(".").shift()?.trim() ?? "No readable evidence was available."}\n\n## Scope\n${items.length} papers in the current collection view.`;
     case "collection.review_draft":
     default:
-      return `# Review Draft: ${collectionName(collectionId)}\n\n## Evidence Map\n${evidenceMap}\n\n## Narrative\nThis draft groups the imported papers into a concise literature review scaffold ready for editing.`;
+      return `# Review Draft: ${collectionName(collectionId)}\n\n## Narrative\n${evidenceMap}\n\nThis draft groups the imported papers into a concise literature review scaffold ready for editing.`;
   }
 };
 
@@ -550,7 +550,7 @@ const itemTaskOutput = (item: MockItemDetails, kind: string, prompt?: string) =>
     case "item.explain_term":
       return `# Terminology Notes: ${item.title}\n\n## Key Terms\n- Scaling law: ${firstLine}\n\n## Reading Tip\nUse this note to clarify repeated technical vocabulary.`;
     case "item.ask":
-      return `# Reading Q&A: ${item.title}\n\n## Question\n${prompt?.trim() || "No question provided."}\n\n## Answer\n${firstLine}\n\n## Evidence\nCollection: ${collectionName(item.collection_id)}`;
+      return `# Reading Q&A: ${item.title}\n\n## Question\n${prompt?.trim() || "No question provided."}\n\n## Answer\n${firstLine} (Collection: ${collectionName(item.collection_id)})`;
     default:
       return `# Summary: ${item.title}\n\nCollection: ${collectionName(item.collection_id)}\n\n${firstLine}`;
   }
@@ -585,11 +585,11 @@ const sessionTaskOutput = (input: AIRunSessionTaskInput, references: AISessionRe
     case "session.compare":
       return `# Comparison\n\n## Comparison Matrix\n${evidenceMap}\n\n## Method Notes\nComparison across ${items.length} unique papers.`;
     case "session.review_draft":
-      return `# Review Draft\n\n## Evidence Map\n${evidenceMap}\n\n## Narrative\nThis draft groups the session evidence into a concise review scaffold.`;
+      return `# Review Draft\n\n## Narrative\n${evidenceMap}\n\nThis draft groups the session evidence into a concise review scaffold.`;
     case "session.ask":
     default:
       return singleDirectItem && firstItem
-        ? `# Reading Q&A: ${firstItem.title}\n\n## Question\n${input.prompt?.trim() || "No question provided."}\n\n## Answer\n${firstLine}\n\n## Evidence\nCollection: ${collectionName(firstItem.collection_id)}`
+        ? `# Reading Q&A: ${firstItem.title}\n\n## Question\n${input.prompt?.trim() || "No question provided."}\n\n## Answer\n${firstLine} (Collection: ${collectionName(firstItem.collection_id)})`
         : `# Reading Q&A\n\n## Question\n${input.prompt?.trim() || "No question provided."}\n\n## Answer\n${firstLine}\n\n## Scope\n${items.length} papers in the session.`;
   }
 };

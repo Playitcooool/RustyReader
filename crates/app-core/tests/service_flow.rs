@@ -320,9 +320,10 @@ fn review_draft_prompts_use_literature_review_template_and_evidence_rules() {
         assert!(prompt.contains("## Suggested Review Narrative"));
         assert!(prompt.contains("## Open Questions"));
         assert!(prompt.contains(
-            "Every key judgment, comparison, and gap analysis must cite evidence with [E{id}]"
+            "Every key judgment, comparison, and gap analysis must include inline paper-location evidence"
         ));
         assert!(prompt.contains("Use only the evidence chunks below"));
+        assert!(prompt.contains("Do not create a standalone Evidence"));
         assert!(prompt.contains("not established by retrieved evidence"));
     }
 }
@@ -375,8 +376,7 @@ fn session_ask_does_not_expose_internal_prompt_metadata() {
     assert!(task
         .output_markdown
         .starts_with("合并是通过专家重要性评估、相似度识别和部分保留策略完成的。"));
-    assert!(task.output_markdown.contains("## Evidence References"));
-    assert!(task.output_markdown.contains("paragraph block 1"));
+    assert!(!task.output_markdown.contains("## Evidence References"));
     assert!(!task.output_markdown.contains("[E"));
     let requests = transport.requests.lock().unwrap();
     assert_eq!(requests.len(), 1);
@@ -384,7 +384,10 @@ fn session_ask_does_not_expose_internal_prompt_metadata() {
     assert!(!requests[0].prompt.contains("Task kind: session.ask"));
     assert!(requests[0]
         .prompt
-        .contains("section/chapter, page, or paragraph block"));
+        .contains("Do not create a standalone Evidence"));
+    assert!(requests[0]
+        .prompt
+        .contains("paper title, section/chapter, page, or paragraph block"));
     assert!(requests[0]
         .prompt
         .contains("User question:\n合并是怎么做到的呢？"));
@@ -494,7 +497,7 @@ fn grouped_evidence_retrieval_preserves_cross_paper_diversity() {
 }
 
 #[test]
-fn markdown_export_appends_evidence_references() {
+fn markdown_export_replaces_evidence_markers_inline() {
     let root = tempdir().unwrap();
     let service = LibraryService::new(root.path()).unwrap();
     let collection = service.create_collection("Export", None).unwrap();
@@ -527,15 +530,11 @@ fn markdown_export_appends_evidence_references() {
         .unwrap();
 
     let exported = service.export_note_markdown(note.id).unwrap();
-    assert!(exported.contains("## Evidence References"));
+    assert!(!exported.contains("## Evidence References"));
     assert!(!exported.contains(&format!("[E{}]", chunk.id)));
-    assert!(exported.contains("Export Paper:"));
+    assert!(exported.contains("The exported claim cites evidence ("));
     assert!(exported.contains("paragraph block 1"));
-    let references = exported
-        .split("## Evidence References")
-        .nth(1)
-        .unwrap_or_default();
-    assert!(!references.contains("retain evidence references"));
+    assert!(!exported.contains("retain evidence references"));
 }
 
 #[test]

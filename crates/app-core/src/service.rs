@@ -4448,7 +4448,7 @@ fn build_session_prompt(
             format!("Task kind: {kind}\n")
         };
         return Ok(format!(
-            "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nDo not include internal metadata such as target title, collection, or task kind in the answer.\nPreserve the heading and section style shown below.\nCite evidence for key claims, comparisons, and synthesis using the provided bracket ids like [E23]. Use only the evidence chunks below.\nWhen answering a user question, include the cited paper location in natural language when helpful, such as section/chapter, page, or paragraph block. The final answer will display paper locations instead of evidence ids.\n{}\n\n{}{}\n\nEvidence chunks:\n\n{}\n{}",
+            "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nDo not include internal metadata such as target title, collection, or task kind in the answer.\nPreserve the heading and section style shown below.\nUse only the evidence chunks below. Ground key claims, comparisons, and synthesis with inline evidence in the same sentence or bullet.\nDo not create a standalone Evidence, Evidence Map, Sources, or References section. Do not show raw evidence ids such as [E23] in the final answer; cite the paper location in natural language, such as paper title, section/chapter, page, or paragraph block.\n{}\n\n{}{}\n\nEvidence chunks:\n\n{}\n{}",
             review_draft_rules(kind),
             task_kind_context,
             task_instructions,
@@ -4592,7 +4592,7 @@ fn build_single_session_prompt(
     prompt: Option<&str>,
 ) -> Result<String> {
     let task_instructions = match kind {
-        "session.summarize" => "# Summary: {title}\n\nCollection: {collection}\n\n## Key Points\n- ...\n\n## Evidence\n- ...",
+        "session.summarize" => "# Summary: {title}\n\nCollection: {collection}\n\n## Key Points\n- ... (cite location inline)",
         "session.explain_terms" => "# Terminology Notes: {title}\n\n## Key Terms\n- term: explanation\n\n## Reading Tip\n...",
         "session.ask" => "...",
         "session.compare" => return Err(anyhow!("compare requires at least 2 unique papers")),
@@ -4630,7 +4630,7 @@ fn build_item_prompt(
     prompt: Option<&str>,
 ) -> Result<String> {
     let task_instructions = match kind {
-        "item.summarize" => "# Summary: {title}\n\nCollection: {collection}\n\n## Key Points\n- ...\n\n## Evidence\n- ...",
+        "item.summarize" => "# Summary: {title}\n\nCollection: {collection}\n\n## Key Points\n- ... (cite location inline)",
         "item.translate" => "# Translation: {title}\n\n## Translated Passage\n...\n\n## Notes\n...",
         "item.explain_term" => "# Terminology Notes: {title}\n\n## Key Terms\n- term: explanation\n\n## Reading Tip\n...",
         "item.ask" => "...",
@@ -4638,7 +4638,7 @@ fn build_item_prompt(
     };
     let prompt_text = prompt.unwrap_or("");
     Ok(format!(
-        "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nPreserve the heading and section style shown below.\nCite evidence for key claims using the provided bracket ids like [E23]. Use only the evidence chunks below.\nWhen answering a user question, include the cited paper location in natural language when helpful, such as section/chapter, page, or paragraph block. The final answer will display paper locations instead of evidence ids.\n\nTarget title: {title}\nCollection: {collection_name}\nTask kind: {kind}\n{}\n\nEvidence chunks:\n\n{}\n{}",
+        "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nPreserve the heading and section style shown below.\nUse only the evidence chunks below. Ground key claims with inline evidence in the same sentence or bullet.\nDo not create a standalone Evidence, Evidence Map, Sources, or References section. Do not show raw evidence ids such as [E23] in the final answer; cite the paper location in natural language, such as paper title, section/chapter, page, or paragraph block.\n\nTarget title: {title}\nCollection: {collection_name}\nTask kind: {kind}\n{}\n\nEvidence chunks:\n\n{}\n{}",
         task_instructions
             .replace("{title}", title)
             .replace("{collection}", collection_name),
@@ -4714,18 +4714,6 @@ fn evidence_location_label(chunk: &EvidenceChunk) -> String {
     )
 }
 
-fn evidence_reference_line(chunk: &EvidenceChunk) -> String {
-    format!("- {}: {}", chunk.item_title, evidence_location_label(chunk))
-}
-
-fn cited_evidence_ids(markdown: &str) -> HashSet<i64> {
-    let citation_re = Regex::new(r"\[E(\d+)\]").unwrap();
-    citation_re
-        .captures_iter(markdown)
-        .filter_map(|capture| capture.get(1)?.as_str().parse::<i64>().ok())
-        .collect::<HashSet<_>>()
-}
-
 fn replace_evidence_markers_with_locations(markdown: &str, chunks: &[EvidenceChunk]) -> String {
     if chunks.is_empty() {
         return markdown.to_string();
@@ -4748,24 +4736,7 @@ fn replace_evidence_markers_with_locations(markdown: &str, chunks: &[EvidenceChu
 }
 
 fn append_evidence_references_for_chunks(markdown: &str, chunks: &[EvidenceChunk]) -> String {
-    if chunks.is_empty() || markdown.contains("## Evidence References") {
-        return replace_evidence_markers_with_locations(markdown, chunks);
-    }
-    let cited_ids = cited_evidence_ids(markdown);
-    let visible_markdown = replace_evidence_markers_with_locations(markdown, chunks);
-    let references = chunks
-        .iter()
-        .filter(|chunk| cited_ids.is_empty() || cited_ids.contains(&chunk.id))
-        .map(evidence_reference_line)
-        .collect::<Vec<_>>();
-    if references.is_empty() {
-        return visible_markdown;
-    }
-    format!(
-        "{}\n\n## Evidence References\n\n{}",
-        visible_markdown.trim_end(),
-        references.join("\n")
-    )
+    replace_evidence_markers_with_locations(markdown, chunks)
 }
 
 fn append_evidence_references(conn: &Connection, markdown: &str) -> Result<String> {
@@ -4806,22 +4777,7 @@ fn append_evidence_references(conn: &Connection, markdown: &str) -> Result<Strin
             chunks.push(chunk);
         }
     }
-    let visible_markdown = replace_evidence_markers_with_locations(markdown, &chunks);
-    if markdown.contains("## Evidence References") {
-        return Ok(visible_markdown);
-    }
-    let references = chunks
-        .iter()
-        .map(evidence_reference_line)
-        .collect::<Vec<_>>();
-    if references.is_empty() {
-        return Ok(visible_markdown);
-    }
-    Ok(format!(
-        "{}\n\n## Evidence References\n\n{}",
-        visible_markdown.trim_end(),
-        references.join("\n")
-    ))
+    Ok(replace_evidence_markers_with_locations(markdown, &chunks))
 }
 
 fn literature_review_template(target: &str) -> &'static str {
@@ -4834,7 +4790,7 @@ fn literature_review_template(target: &str) -> &'static str {
 
 fn review_draft_rules(kind: &str) -> &'static str {
     if kind.ends_with("review_draft") {
-        "For review drafts: write an academic literature review, not a generic summary. Use only the retrieved evidence. Every key judgment, comparison, and gap analysis must cite evidence with [E{id}] when evidence ids are available. Do not invent papers, methods, datasets, results, or conclusions. If the evidence does not establish a point, write \"not established by retrieved evidence\"."
+        "For review drafts: write an academic literature review, not a generic summary. Use only the retrieved evidence. Every key judgment, comparison, and gap analysis must include inline paper-location evidence in the same sentence or bullet. Do not invent papers, methods, datasets, results, or conclusions. If the evidence does not establish a point, write \"not established by retrieved evidence\"."
     } else {
         ""
     }
@@ -4859,7 +4815,7 @@ fn build_collection_prompt(
             _ => return Err(anyhow!("unsupported collection task kind")),
         };
         return Ok(format!(
-            "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nPreserve the heading and section style shown below.\nCite evidence for key claims, comparisons, and synthesis using the provided bracket ids like [E23]. Use only the evidence chunks below.\nWhen answering a user question, include the cited paper location in natural language when helpful, such as section/chapter, page, or paragraph block. The final answer will display paper locations instead of evidence ids.\n{}\n\nCollection: {collection_name}\nTask kind: {kind}\n{}\n\nEvidence chunks:\n\n{}\n{}",
+            "You are assisting with a research reading workflow.\nReturn markdown only. Do not wrap the answer in code fences.\nPreserve the heading and section style shown below.\nUse only the evidence chunks below. Ground key claims, comparisons, and synthesis with inline evidence in the same sentence or bullet.\nDo not create a standalone Evidence, Evidence Map, Sources, or References section. Do not show raw evidence ids such as [E23] in the final answer; cite the paper location in natural language, such as paper title, section/chapter, page, or paragraph block.\n{}\n\nCollection: {collection_name}\nTask kind: {kind}\n{}\n\nEvidence chunks:\n\n{}\n{}",
             review_draft_rules(kind),
             task_instructions.replace("{collection}", collection_name),
             evidence_context(&chunks),
@@ -5359,10 +5315,7 @@ fn markdown_to_safe_html(title: &str, markdown: &str) -> String {
         if !trimmed.contains('|') {
             return None;
         }
-        let mut cells: Vec<String> = trimmed
-            .split('|')
-            .map(|c| c.trim().to_string())
-            .collect();
+        let mut cells: Vec<String> = trimmed.split('|').map(|c| c.trim().to_string()).collect();
         // Strip leading/trailing empty cells from outer pipe syntax (e.g. |a|b|).
         if cells.first().map_or(false, |c| c.is_empty()) {
             cells.remove(0);
@@ -5488,7 +5441,11 @@ fn render_inline_markdown(value: &str) -> String {
         .replace_all(&rendered, |caps: &regex::Captures| {
             let content = &caps[1];
             // Only treat as math if it contains LaTeX-like patterns.
-            if content.contains('\\') || content.contains('^') || content.contains('_') || content.contains('{') {
+            if content.contains('\\')
+                || content.contains('^')
+                || content.contains('_')
+                || content.contains('{')
+            {
                 format!("<code class=\"math-inline\">{}</code>", content)
             } else {
                 caps[0].to_string()
@@ -5721,11 +5678,7 @@ fn extract_markdown(path: &Path, bytes: &[u8]) -> Result<ExtractedDocument> {
         .map(|l| l.trim().starts_with("# "))
         .unwrap_or(false)
     {
-        markdown
-            .lines()
-            .skip(1)
-            .collect::<Vec<_>>()
-            .join("\n")
+        markdown.lines().skip(1).collect::<Vec<_>>().join("\n")
     } else {
         markdown
     };
