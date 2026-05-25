@@ -12,7 +12,7 @@
 [![SQLite](https://img.shields.io/badge/SQLite-local--first-003B57?style=flat&logo=sqlite&logoColor=white)](https://www.sqlite.org/)
 ![License](https://img.shields.io/badge/License-MIT-2E8B57?style=flat)
 
-[Download](#download) · [Features](#features) · [Quick Start](#quick-start) · [Browser Extensions](#browser-extensions) · [Architecture](#architecture) · [Development](#development)
+[Download](#download) · [Screenshots](#screenshots) · [Features](#features) · [Quick Start](#quick-start) · [Browser Extensions](#browser-extensions) · [Architecture](#architecture) · [Development](#development)
 
 </div>
 
@@ -23,6 +23,12 @@
 RustyReader is a native-feeling research workspace built around a local library, a focused document reader, and an AI copilot. It imports papers and citation records, keeps metadata and notes in a local SQLite-backed library, and helps turn reading into reusable research output.
 
 RustyReader 是一个面向论文阅读和研究整理的桌面应用。它把资料库、阅读器、标注、AI 问答、研究笔记和浏览器采集整合到同一个本地优先工作流里。
+
+## Screenshots
+
+![RustyReader library and collections view](screenshots/Snipaste_2026-05-25_12-46-03.png)
+
+![RustyReader PDF reader with AI chat](screenshots/Snipaste_2026-05-25_12-47-08.png)
 
 ## Features
 
