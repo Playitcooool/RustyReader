@@ -245,6 +245,7 @@ export function ReaderWorkspace(props: Props) {
   const [markdownViewMode, setMarkdownViewMode] = useState<MarkdownViewMode>("preview");
   const [markdownSaving, setMarkdownSaving] = useState(false);
   const markdownEditorRef = useRef<HTMLTextAreaElement | null>(null);
+  const markdownDraftRef = useRef("");
   const [viewportSize, setViewportSize] = useState(() => ({
     width: window.innerWidth,
     height: window.innerHeight,
@@ -278,6 +279,7 @@ export function ReaderWorkspace(props: Props) {
 
   useEffect(() => {
     setMarkdownDraft("");
+    markdownDraftRef.current = "";
     setMarkdownViewMode("preview");
     setMarkdownSaving(false);
   }, [activePaper?.id]);
@@ -296,6 +298,7 @@ export function ReaderWorkspace(props: Props) {
       }
       if (cancelled) return;
       setMarkdownDraft(nextDraft);
+      markdownDraftRef.current = nextDraft;
     })();
     return () => {
       cancelled = true;
@@ -303,13 +306,15 @@ export function ReaderWorkspace(props: Props) {
   }, [canEditMarkdown, readPrimaryAttachmentBytes, readerView?.item_id, readerView?.plain_text, readerView?.primary_attachment_id]);
 
   const saveMarkdownEdit = useCallback(async () => {
+    const markdown = markdownDraftRef.current;
+    setMarkdownDraft(markdown);
     setMarkdownSaving(true);
     try {
-      await onUpdateActiveMarkdown(markdownDraft);
+      await onUpdateActiveMarkdown(markdown);
     } finally {
       setMarkdownSaving(false);
     }
-  }, [markdownDraft, onUpdateActiveMarkdown]);
+  }, [onUpdateActiveMarkdown]);
 
   const applyMarkdownEdit = useCallback((kind: "bold" | "italic" | "heading" | "list" | "ordered" | "quote" | "code" | "link") => {
     const editor = markdownEditorRef.current;
@@ -321,7 +326,9 @@ export function ReaderWorkspace(props: Props) {
     const lineEndIndex = markdownDraft.indexOf("\n", end);
     const lineEnd = lineEndIndex === -1 ? markdownDraft.length : lineEndIndex;
     const replaceSelection = (value: string, selectStart = start, selectEnd = start + value.length) => {
-      setMarkdownDraft(`${markdownDraft.slice(0, start)}${value}${markdownDraft.slice(end)}`);
+      const next = `${markdownDraft.slice(0, start)}${value}${markdownDraft.slice(end)}`;
+      markdownDraftRef.current = next;
+      setMarkdownDraft(next);
       window.setTimeout(() => {
         editor.focus();
         editor.setSelectionRange(selectStart, selectEnd);
@@ -331,7 +338,9 @@ export function ReaderWorkspace(props: Props) {
       const block = markdownDraft.slice(lineStart, lineEnd);
       const lines = block.split("\n");
       const next = lines.map((line, index) => `${numbered ? `${index + 1}. ` : prefix}${line.replace(/^(\s*)([-*>]|\d+\.)\s+/, "$1")}`).join("\n");
-      setMarkdownDraft(`${markdownDraft.slice(0, lineStart)}${next}${markdownDraft.slice(lineEnd)}`);
+      const nextDraft = `${markdownDraft.slice(0, lineStart)}${next}${markdownDraft.slice(lineEnd)}`;
+      markdownDraftRef.current = nextDraft;
+      setMarkdownDraft(nextDraft);
       window.setTimeout(() => {
         editor.focus();
         editor.setSelectionRange(lineStart, lineStart + next.length);
@@ -352,6 +361,7 @@ export function ReaderWorkspace(props: Props) {
   }, [markdownDraft]);
 
   const switchMarkdownMode = useCallback((mode: MarkdownViewMode) => {
+    setMarkdownDraft(markdownDraftRef.current);
     setMarkdownViewMode(mode);
     if (mode === "raw") {
       window.setTimeout(() => markdownEditorRef.current?.focus(), 0);
@@ -724,7 +734,10 @@ export function ReaderWorkspace(props: Props) {
                   className="markdown-focus-editor"
                   spellCheck={false}
                   value={markdownDraft}
-                  onChange={(event) => setMarkdownDraft(event.target.value)}
+                  onChange={(event) => {
+                    markdownDraftRef.current = event.target.value;
+                    setMarkdownDraft(event.target.value);
+                  }}
                   onKeyDown={(event) => {
                     const key = event.key.toLowerCase();
                     const command = event.metaKey || event.ctrlKey;
@@ -763,7 +776,9 @@ export function ReaderWorkspace(props: Props) {
                   aria-label="Markdown preview editor"
                   spellCheck
                   suppressContentEditableWarning
-                  onInput={(event) => setMarkdownDraft(event.currentTarget.innerText)}
+                  onInput={(event) => {
+                    markdownDraftRef.current = event.currentTarget.innerText;
+                  }}
                   onPaste={(event) => {
                     event.preventDefault();
                     const text = event.clipboardData.getData("text/plain");
