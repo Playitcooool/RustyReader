@@ -1,4 +1,6 @@
 import { FindHud } from "./FindHud";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -55,6 +57,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type RefObject } from "react";
 
 const pdfHighlightColors = ["yellow", "red", "green", "blue", "purple"] as const satisfies readonly PdfHighlightColor[];
+type MarkdownViewMode = "preview" | "raw";
 
 type ReaderWorkspaceData = {
   activeCollection: Collection | null;
@@ -239,6 +242,7 @@ export function ReaderWorkspace(props: Props) {
   const [pdfTextBoxColor, setPdfTextBoxColor] = useState<PdfTextBoxColor>(DEFAULT_PDF_TEXT_BOX_COLOR);
   const [pdfTextBoxFontSize, setPdfTextBoxFontSize] = useState(DEFAULT_PDF_TEXT_BOX_FONT_SIZE);
   const [markdownDraft, setMarkdownDraft] = useState("");
+  const [markdownViewMode, setMarkdownViewMode] = useState<MarkdownViewMode>("preview");
   const [markdownSaving, setMarkdownSaving] = useState(false);
   const markdownEditorRef = useRef<HTMLTextAreaElement | null>(null);
   const [viewportSize, setViewportSize] = useState(() => ({
@@ -274,6 +278,7 @@ export function ReaderWorkspace(props: Props) {
 
   useEffect(() => {
     setMarkdownDraft("");
+    setMarkdownViewMode("preview");
     setMarkdownSaving(false);
   }, [activePaper?.id]);
 
@@ -291,7 +296,6 @@ export function ReaderWorkspace(props: Props) {
       }
       if (cancelled) return;
       setMarkdownDraft(nextDraft);
-      window.setTimeout(() => markdownEditorRef.current?.focus(), 0);
     })();
     return () => {
       cancelled = true;
@@ -346,6 +350,13 @@ export function ReaderWorkspace(props: Props) {
     }
     if (kind === "link") replaceSelection(`[${selected || "link text"}](https://)`, start + 1, start + 1 + (selected || "link text").length);
   }, [markdownDraft]);
+
+  const switchMarkdownMode = useCallback((mode: MarkdownViewMode) => {
+    setMarkdownViewMode(mode);
+    if (mode === "raw") {
+      window.setTimeout(() => markdownEditorRef.current?.focus(), 0);
+    }
+  }, []);
 
   useEffect(() => {
     if (!selectionForActions?.quote.trim()) setReaderContextMenu(null);
@@ -669,55 +680,118 @@ export function ReaderWorkspace(props: Props) {
           {canEditMarkdown ? (
             <div className="markdown-focus-editor-shell">
               <div className="markdown-edit-toolbar" role="toolbar" aria-label="Markdown edit toolbar">
-                <button aria-label="Bold" className="icon-button" title="Bold" type="button" onClick={() => applyMarkdownEdit("bold")}><BoldIcon /></button>
-                <button aria-label="Italic" className="icon-button" title="Italic" type="button" onClick={() => applyMarkdownEdit("italic")}><ItalicIcon /></button>
-                <button aria-label="Heading" className="icon-button" title="Heading" type="button" onClick={() => applyMarkdownEdit("heading")}><HeadingIcon /></button>
-                <button aria-label="Bulleted list" className="icon-button" title="Bulleted list" type="button" onClick={() => applyMarkdownEdit("list")}><ListIcon /></button>
-                <button aria-label="Numbered list" className="icon-button" title="Numbered list" type="button" onClick={() => applyMarkdownEdit("ordered")}><OrderedListIcon /></button>
-                <button aria-label="Quote" className="icon-button" title="Quote" type="button" onClick={() => applyMarkdownEdit("quote")}><QuoteIcon /></button>
-                <button aria-label="Code" className="icon-button" title="Code" type="button" onClick={() => applyMarkdownEdit("code")}><CodeIcon /></button>
-                <button aria-label="Link" className="icon-button" title="Link" type="button" onClick={() => applyMarkdownEdit("link")}><LinkIcon /></button>
+                <div className="markdown-mode-switch" role="group" aria-label="Markdown view mode">
+                  <button
+                    aria-label="Preview Markdown"
+                    aria-pressed={markdownViewMode === "preview"}
+                    className="markdown-mode-button"
+                    type="button"
+                    onClick={() => switchMarkdownMode("preview")}
+                  >
+                    Preview
+                  </button>
+                  <button
+                    aria-label="Edit Raw Markdown"
+                    aria-pressed={markdownViewMode === "raw"}
+                    className="markdown-mode-button"
+                    type="button"
+                    onClick={() => switchMarkdownMode("raw")}
+                  >
+                    Raw
+                  </button>
+                </div>
+                {markdownViewMode === "raw" ? (
+                  <>
+                    <button aria-label="Bold" className="icon-button" title="Bold" type="button" onClick={() => applyMarkdownEdit("bold")}><BoldIcon /></button>
+                    <button aria-label="Italic" className="icon-button" title="Italic" type="button" onClick={() => applyMarkdownEdit("italic")}><ItalicIcon /></button>
+                    <button aria-label="Heading" className="icon-button" title="Heading" type="button" onClick={() => applyMarkdownEdit("heading")}><HeadingIcon /></button>
+                    <button aria-label="Bulleted list" className="icon-button" title="Bulleted list" type="button" onClick={() => applyMarkdownEdit("list")}><ListIcon /></button>
+                    <button aria-label="Numbered list" className="icon-button" title="Numbered list" type="button" onClick={() => applyMarkdownEdit("ordered")}><OrderedListIcon /></button>
+                    <button aria-label="Quote" className="icon-button" title="Quote" type="button" onClick={() => applyMarkdownEdit("quote")}><QuoteIcon /></button>
+                    <button aria-label="Code" className="icon-button" title="Code" type="button" onClick={() => applyMarkdownEdit("code")}><CodeIcon /></button>
+                    <button aria-label="Link" className="icon-button" title="Link" type="button" onClick={() => applyMarkdownEdit("link")}><LinkIcon /></button>
+                  </>
+                ) : null}
                 <span className="markdown-edit-toolbar-spacer" />
                 <button aria-label="Save Markdown" className="icon-button" disabled={markdownSaving || markdownDraft.trim().length === 0} title="Save Markdown" type="button" onClick={() => void saveMarkdownEdit()}>
                   <SaveIcon />
                 </button>
               </div>
-              <textarea
-                ref={markdownEditorRef}
-                aria-label="Markdown editor"
-                className="markdown-focus-editor"
-                spellCheck={false}
-                value={markdownDraft}
-                onChange={(event) => setMarkdownDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  const key = event.key.toLowerCase();
-                  const command = event.metaKey || event.ctrlKey;
-                  if (command && key === "s") {
+              {markdownViewMode === "raw" ? (
+                <textarea
+                  ref={markdownEditorRef}
+                  aria-label="Markdown editor"
+                  className="markdown-focus-editor"
+                  spellCheck={false}
+                  value={markdownDraft}
+                  onChange={(event) => setMarkdownDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    const key = event.key.toLowerCase();
+                    const command = event.metaKey || event.ctrlKey;
+                    if (command && key === "s") {
+                      event.preventDefault();
+                      void saveMarkdownEdit();
+                    }
+                    if (command && key === "b") {
+                      event.preventDefault();
+                      applyMarkdownEdit("bold");
+                    }
+                    if (command && key === "i") {
+                      event.preventDefault();
+                      applyMarkdownEdit("italic");
+                    }
+                    if (command && key === "k") {
+                      event.preventDefault();
+                      applyMarkdownEdit("link");
+                    }
+                    if (command && event.shiftKey && key === "7") {
+                      event.preventDefault();
+                      applyMarkdownEdit("ordered");
+                    }
+                    if (command && event.shiftKey && key === "8") {
+                      event.preventDefault();
+                      applyMarkdownEdit("list");
+                    }
+                  }}
+                />
+              ) : (
+                <div
+                  className="reader-html markdown-live-preview"
+                  contentEditable
+                  data-testid="markdown-live-preview"
+                  role="textbox"
+                  aria-label="Markdown preview editor"
+                  spellCheck
+                  suppressContentEditableWarning
+                  onInput={(event) => setMarkdownDraft(event.currentTarget.innerText)}
+                  onPaste={(event) => {
                     event.preventDefault();
-                    void saveMarkdownEdit();
-                  }
-                  if (command && key === "b") {
-                    event.preventDefault();
-                    applyMarkdownEdit("bold");
-                  }
-                  if (command && key === "i") {
-                    event.preventDefault();
-                    applyMarkdownEdit("italic");
-                  }
-                  if (command && key === "k") {
-                    event.preventDefault();
-                    applyMarkdownEdit("link");
-                  }
-                  if (command && event.shiftKey && key === "7") {
-                    event.preventDefault();
-                    applyMarkdownEdit("ordered");
-                  }
-                  if (command && event.shiftKey && key === "8") {
-                    event.preventDefault();
-                    applyMarkdownEdit("list");
-                  }
-                }}
-              />
+                    const text = event.clipboardData.getData("text/plain");
+                    document.execCommand("insertText", false, text);
+                  }}
+                  onKeyDown={(event) => {
+                    const key = event.key.toLowerCase();
+                    const command = event.metaKey || event.ctrlKey;
+                    if (command && key === "s") {
+                      event.preventDefault();
+                      void saveMarkdownEdit();
+                    }
+                    if (command && ["b", "i", "k"].includes(key)) {
+                      event.preventDefault();
+                      switchMarkdownMode("raw");
+                      window.setTimeout(() => {
+                        if (key === "b") applyMarkdownEdit("bold");
+                        if (key === "i") applyMarkdownEdit("italic");
+                        if (key === "k") applyMarkdownEdit("link");
+                      }, 0);
+                    }
+                  }}
+                >
+                  <article>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdownDraft}</ReactMarkdown>
+                  </article>
+                </div>
+              )}
             </div>
           ) : (
             <NormalizedReader
