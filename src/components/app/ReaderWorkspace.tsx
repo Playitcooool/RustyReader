@@ -1,25 +1,47 @@
 import { FindHud } from "./FindHud";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import {
+  BlockTypeSelect,
+  BoldItalicUnderlineToggles,
+  ChangeCodeMirrorLanguage,
+  CodeToggle,
+  ConditionalContents,
+  CreateLink,
+  DiffSourceToggleWrapper,
+  InsertCodeBlock,
+  InsertTable,
+  InsertThematicBreak,
+  ListsToggle,
+  MDXEditor,
+  Separator,
+  StrikeThroughSupSubToggles,
+  UndoRedo,
+  codeBlockPlugin,
+  codeMirrorPlugin,
+  diffSourcePlugin,
+  frontmatterPlugin,
+  headingsPlugin,
+  linkDialogPlugin,
+  linkPlugin,
+  listsPlugin,
+  markdownShortcutPlugin,
+  quotePlugin,
+  tablePlugin,
+  thematicBreakPlugin,
+  toolbarPlugin,
+  type MDXEditorMethods,
+} from "@mdxeditor/editor";
+import "@mdxeditor/editor/style.css";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
   CloseIcon,
-  BoldIcon,
-  CodeIcon,
   CopyIcon,
   EditIcon,
   EraserIcon,
   FitWidthIcon,
-  HeadingIcon,
   HighlightIcon,
-  ItalicIcon,
-  LinkIcon,
-  ListIcon,
   MessageIcon,
   NoteIcon,
-  OrderedListIcon,
-  QuoteIcon,
   SaveIcon,
   SearchIcon,
   SidebarIcon,
@@ -54,102 +76,9 @@ import {
   normalizePdfEraserSize,
   normalizePdfInkWidth,
 } from "../readers/pdfInkAnchor";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type RefObject } from "react";
 
 const pdfHighlightColors = ["yellow", "red", "green", "blue", "purple"] as const satisfies readonly PdfHighlightColor[];
-type MarkdownViewMode = "preview" | "raw";
-
-const getEditableTextOffset = (container: HTMLElement) => {
-  const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0) return null;
-  const range = selection.getRangeAt(0);
-  if (!container.contains(range.startContainer)) return null;
-  const before = range.cloneRange();
-  before.selectNodeContents(container);
-  before.setEnd(range.startContainer, range.startOffset);
-  return before.toString().length;
-};
-
-const markdownVisibleLength = (value: string) =>
-  value
-    .replace(/(^|\n)(\s{0,3})#{1,6}\s/g, "$1$2")
-    .replace(/(^|\n)(\s{0,3})([-*]|\d+\.)\s/g, "$1$2")
-    .replace(/(^|\n)(\s{0,3})>\s?/g, "$1$2")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
-    .replace(/[*_`]/g, "")
-    .length;
-
-const getMarkdownPreviewTextOffset = (container: HTMLElement) => {
-  const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0) return null;
-  const range = selection.getRangeAt(0);
-  if (!container.contains(range.startContainer)) return null;
-  const before = range.cloneRange();
-  before.selectNodeContents(container);
-  before.setEnd(range.startContainer, range.startOffset);
-  return markdownVisibleLength(before.toString());
-};
-
-const editablePreviewToMarkdown = (container: HTMLElement) => {
-  const article = container.querySelector("article") ?? container;
-  const blocks: string[] = [];
-  article.childNodes.forEach((node) => {
-    if (node.nodeType === Node.TEXT_NODE) {
-      const text = node.textContent?.trim();
-      if (text) blocks.push(text);
-      return;
-    }
-    if (!(node instanceof HTMLElement)) return;
-    const text = node.innerText.trim();
-    if (!text) return;
-    if (/^H[1-6]$/.test(node.tagName)) {
-      const level = Number(node.tagName.slice(1));
-      blocks.push(`${"#".repeat(level)} ${text}`);
-      return;
-    }
-    if (node.tagName === "UL") {
-      blocks.push([...node.querySelectorAll("li")].map((item) => `- ${item.innerText.trim()}`).join("\n"));
-      return;
-    }
-    if (node.tagName === "OL") {
-      blocks.push([...node.querySelectorAll("li")].map((item, index) => `${index + 1}. ${item.innerText.trim()}`).join("\n"));
-      return;
-    }
-    if (node.tagName === "BLOCKQUOTE") {
-      blocks.push(text.split("\n").map((line) => `> ${line}`).join("\n"));
-      return;
-    }
-    blocks.push(text);
-  });
-  return blocks.join("\n\n");
-};
-
-const restoreEditableTextOffset = (container: HTMLElement, offset: number) => {
-  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
-  let remaining = Math.max(0, offset);
-  let node = walker.nextNode();
-  while (node) {
-    const text = node.textContent ?? "";
-    if (remaining <= text.length) {
-      const range = document.createRange();
-      range.setStart(node, remaining);
-      range.collapse(true);
-      const selection = window.getSelection();
-      selection?.removeAllRanges();
-      selection?.addRange(range);
-      return;
-    }
-    remaining -= text.length;
-    node = walker.nextNode();
-  }
-  const range = document.createRange();
-  range.selectNodeContents(container);
-  range.collapse(false);
-  const selection = window.getSelection();
-  selection?.removeAllRanges();
-  selection?.addRange(range);
-};
 
 type ReaderWorkspaceData = {
   activeCollection: Collection | null;
@@ -334,13 +263,9 @@ export function ReaderWorkspace(props: Props) {
   const [pdfTextBoxColor, setPdfTextBoxColor] = useState<PdfTextBoxColor>(DEFAULT_PDF_TEXT_BOX_COLOR);
   const [pdfTextBoxFontSize, setPdfTextBoxFontSize] = useState(DEFAULT_PDF_TEXT_BOX_FONT_SIZE);
   const [markdownDraft, setMarkdownDraft] = useState("");
-  const [markdownViewMode, setMarkdownViewMode] = useState<MarkdownViewMode>("preview");
   const [markdownSaving, setMarkdownSaving] = useState(false);
-  const markdownEditorRef = useRef<HTMLTextAreaElement | null>(null);
-  const markdownPreviewRef = useRef<HTMLDivElement | null>(null);
+  const mdxEditorRef = useRef<MDXEditorMethods | null>(null);
   const markdownDraftRef = useRef("");
-  const markdownPreviewCaretRef = useRef<number | null>(null);
-  const markdownPreviewRefreshRef = useRef<number | null>(null);
   const [viewportSize, setViewportSize] = useState(() => ({
     width: window.innerWidth,
     height: window.innerHeight,
@@ -375,22 +300,8 @@ export function ReaderWorkspace(props: Props) {
   useEffect(() => {
     setMarkdownDraft("");
     markdownDraftRef.current = "";
-    markdownPreviewCaretRef.current = null;
-    if (markdownPreviewRefreshRef.current !== null) {
-      window.clearTimeout(markdownPreviewRefreshRef.current);
-      markdownPreviewRefreshRef.current = null;
-    }
-    setMarkdownViewMode("preview");
     setMarkdownSaving(false);
   }, [activePaper?.id]);
-
-  useEffect(() => {
-    return () => {
-      if (markdownPreviewRefreshRef.current !== null) {
-        window.clearTimeout(markdownPreviewRefreshRef.current);
-      }
-    };
-  }, []);
 
   useEffect(() => {
     if (!canEditMarkdown || !readerView?.primary_attachment_id) return;
@@ -407,6 +318,7 @@ export function ReaderWorkspace(props: Props) {
       if (cancelled) return;
       setMarkdownDraft(nextDraft);
       markdownDraftRef.current = nextDraft;
+      mdxEditorRef.current?.setMarkdown(nextDraft);
     })();
     return () => {
       cancelled = true;
@@ -423,84 +335,6 @@ export function ReaderWorkspace(props: Props) {
       setMarkdownSaving(false);
     }
   }, [onUpdateActiveMarkdown]);
-
-  useLayoutEffect(() => {
-    if (markdownViewMode !== "preview") return;
-    const container = markdownPreviewRef.current;
-    const offset = markdownPreviewCaretRef.current;
-    if (!container || offset === null) return;
-    restoreEditableTextOffset(container, offset);
-    markdownPreviewCaretRef.current = null;
-  }, [markdownDraft, markdownViewMode]);
-
-  const refreshMarkdownPreview = useCallback((container: HTMLElement, immediate = false) => {
-    markdownPreviewCaretRef.current = getMarkdownPreviewTextOffset(container) ?? getEditableTextOffset(container);
-    const refresh = () => {
-      markdownPreviewRefreshRef.current = null;
-      setMarkdownDraft(markdownDraftRef.current);
-    };
-    if (markdownPreviewRefreshRef.current !== null) {
-      window.clearTimeout(markdownPreviewRefreshRef.current);
-      markdownPreviewRefreshRef.current = null;
-    }
-    if (immediate) {
-      refresh();
-      return;
-    }
-    markdownPreviewRefreshRef.current = window.setTimeout(refresh, 250);
-  }, []);
-
-  const applyMarkdownEdit = useCallback((kind: "bold" | "italic" | "heading" | "list" | "ordered" | "quote" | "code" | "link") => {
-    const editor = markdownEditorRef.current;
-    if (!editor) return;
-    const start = editor.selectionStart;
-    const end = editor.selectionEnd;
-    const selected = markdownDraft.slice(start, end);
-    const lineStart = markdownDraft.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
-    const lineEndIndex = markdownDraft.indexOf("\n", end);
-    const lineEnd = lineEndIndex === -1 ? markdownDraft.length : lineEndIndex;
-    const replaceSelection = (value: string, selectStart = start, selectEnd = start + value.length) => {
-      const next = `${markdownDraft.slice(0, start)}${value}${markdownDraft.slice(end)}`;
-      markdownDraftRef.current = next;
-      setMarkdownDraft(next);
-      window.setTimeout(() => {
-        editor.focus();
-        editor.setSelectionRange(selectStart, selectEnd);
-      }, 0);
-    };
-    const replaceLines = (prefix: string, numbered = false) => {
-      const block = markdownDraft.slice(lineStart, lineEnd);
-      const lines = block.split("\n");
-      const next = lines.map((line, index) => `${numbered ? `${index + 1}. ` : prefix}${line.replace(/^(\s*)([-*>]|\d+\.)\s+/, "$1")}`).join("\n");
-      const nextDraft = `${markdownDraft.slice(0, lineStart)}${next}${markdownDraft.slice(lineEnd)}`;
-      markdownDraftRef.current = nextDraft;
-      setMarkdownDraft(nextDraft);
-      window.setTimeout(() => {
-        editor.focus();
-        editor.setSelectionRange(lineStart, lineStart + next.length);
-      }, 0);
-    };
-
-    if (kind === "bold") replaceSelection(`**${selected || "bold text"}**`, start + 2, start + 2 + (selected || "bold text").length);
-    if (kind === "italic") replaceSelection(`*${selected || "italic text"}*`, start + 1, start + 1 + (selected || "italic text").length);
-    if (kind === "heading") replaceLines("## ");
-    if (kind === "list") replaceLines("- ");
-    if (kind === "ordered") replaceLines("", true);
-    if (kind === "quote") replaceLines("> ");
-    if (kind === "code") {
-      const value = selected.includes("\n") ? `\`\`\`\n${selected || "code"}\n\`\`\`` : `\`${selected || "code"}\``;
-      replaceSelection(value, start + (selected.includes("\n") ? 4 : 1), start + value.length - (selected.includes("\n") ? 4 : 1));
-    }
-    if (kind === "link") replaceSelection(`[${selected || "link text"}](https://)`, start + 1, start + 1 + (selected || "link text").length);
-  }, [markdownDraft]);
-
-  const switchMarkdownMode = useCallback((mode: MarkdownViewMode) => {
-    setMarkdownDraft(markdownDraftRef.current);
-    setMarkdownViewMode(mode);
-    if (mode === "raw") {
-      window.setTimeout(() => markdownEditorRef.current?.focus(), 0);
-    }
-  }, []);
 
   useEffect(() => {
     if (!selectionForActions?.quote.trim()) setReaderContextMenu(null);
@@ -823,128 +657,91 @@ export function ReaderWorkspace(props: Props) {
           </div>
           {canEditMarkdown ? (
             <div className="markdown-focus-editor-shell">
-              <div className="markdown-edit-toolbar" role="toolbar" aria-label="Markdown edit toolbar">
-                <div className="markdown-mode-switch" role="group" aria-label="Markdown view mode">
-                  <button
-                    aria-label="Preview Markdown"
-                    aria-pressed={markdownViewMode === "preview"}
-                    className="markdown-mode-button"
-                    type="button"
-                    onClick={() => switchMarkdownMode("preview")}
-                  >
-                    Preview
-                  </button>
-                  <button
-                    aria-label="Edit Raw Markdown"
-                    aria-pressed={markdownViewMode === "raw"}
-                    className="markdown-mode-button"
-                    type="button"
-                    onClick={() => switchMarkdownMode("raw")}
-                  >
-                    Raw
-                  </button>
-                </div>
-                {markdownViewMode === "raw" ? (
-                  <>
-                    <button aria-label="Bold" className="icon-button" title="Bold" type="button" onClick={() => applyMarkdownEdit("bold")}><BoldIcon /></button>
-                    <button aria-label="Italic" className="icon-button" title="Italic" type="button" onClick={() => applyMarkdownEdit("italic")}><ItalicIcon /></button>
-                    <button aria-label="Heading" className="icon-button" title="Heading" type="button" onClick={() => applyMarkdownEdit("heading")}><HeadingIcon /></button>
-                    <button aria-label="Bulleted list" className="icon-button" title="Bulleted list" type="button" onClick={() => applyMarkdownEdit("list")}><ListIcon /></button>
-                    <button aria-label="Numbered list" className="icon-button" title="Numbered list" type="button" onClick={() => applyMarkdownEdit("ordered")}><OrderedListIcon /></button>
-                    <button aria-label="Quote" className="icon-button" title="Quote" type="button" onClick={() => applyMarkdownEdit("quote")}><QuoteIcon /></button>
-                    <button aria-label="Code" className="icon-button" title="Code" type="button" onClick={() => applyMarkdownEdit("code")}><CodeIcon /></button>
-                    <button aria-label="Link" className="icon-button" title="Link" type="button" onClick={() => applyMarkdownEdit("link")}><LinkIcon /></button>
-                  </>
-                ) : null}
-                <span className="markdown-edit-toolbar-spacer" />
-                <button aria-label="Save Markdown" className="icon-button" disabled={markdownSaving || markdownDraft.trim().length === 0} title="Save Markdown" type="button" onClick={() => void saveMarkdownEdit()}>
+              <div className="markdown-save-row">
+                <button
+                  aria-label="Save Markdown"
+                  className="icon-button"
+                  disabled={markdownSaving || markdownDraft.trim().length === 0}
+                  title="Save Markdown"
+                  type="button"
+                  onClick={() => void saveMarkdownEdit()}
+                >
                   <SaveIcon />
                 </button>
               </div>
-              {markdownViewMode === "raw" ? (
-                <textarea
-                  ref={markdownEditorRef}
-                  aria-label="Markdown editor"
-                  className="markdown-focus-editor"
-                  spellCheck={false}
-                  value={markdownDraft}
-                  onChange={(event) => {
-                    markdownDraftRef.current = event.target.value;
-                    setMarkdownDraft(event.target.value);
-                  }}
-                  onKeyDown={(event) => {
-                    const key = event.key.toLowerCase();
-                    const command = event.metaKey || event.ctrlKey;
-                    if (command && key === "s") {
-                      event.preventDefault();
-                      void saveMarkdownEdit();
-                    }
-                    if (command && key === "b") {
-                      event.preventDefault();
-                      applyMarkdownEdit("bold");
-                    }
-                    if (command && key === "i") {
-                      event.preventDefault();
-                      applyMarkdownEdit("italic");
-                    }
-                    if (command && key === "k") {
-                      event.preventDefault();
-                      applyMarkdownEdit("link");
-                    }
-                    if (command && event.shiftKey && key === "7") {
-                      event.preventDefault();
-                      applyMarkdownEdit("ordered");
-                    }
-                    if (command && event.shiftKey && key === "8") {
-                      event.preventDefault();
-                      applyMarkdownEdit("list");
-                    }
-                  }}
-                />
-              ) : (
-                <div
-                  ref={markdownPreviewRef}
-                  className="reader-html markdown-live-preview"
-                  contentEditable
-                  data-testid="markdown-live-preview"
-                  role="textbox"
-                  aria-label="Markdown preview editor"
-                  spellCheck
-                  suppressContentEditableWarning
-                  onInput={(event) => {
-                    const next = editablePreviewToMarkdown(event.currentTarget);
-                    markdownDraftRef.current = next;
-                    const shouldRenderNow = /(^|\n)\s{0,3}#{1,6}\s[^\n]*$/.test(next);
-                    refreshMarkdownPreview(event.currentTarget, shouldRenderNow);
-                  }}
-                  onPaste={(event) => {
-                    event.preventDefault();
-                    const text = event.clipboardData.getData("text/plain");
-                    document.execCommand("insertText", false, text);
-                  }}
-                  onKeyDown={(event) => {
-                    const key = event.key.toLowerCase();
-                    const command = event.metaKey || event.ctrlKey;
-                    if (command && key === "s") {
-                      event.preventDefault();
-                      void saveMarkdownEdit();
-                    }
-                    if (command && ["b", "i", "k"].includes(key)) {
-                      event.preventDefault();
-                      switchMarkdownMode("raw");
-                      window.setTimeout(() => {
-                        if (key === "b") applyMarkdownEdit("bold");
-                        if (key === "i") applyMarkdownEdit("italic");
-                        if (key === "k") applyMarkdownEdit("link");
-                      }, 0);
-                    }
-                  }}
-                >
-                  <article>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdownDraft}</ReactMarkdown>
-                  </article>
-                </div>
-              )}
+              <MDXEditor
+                key={readerView.item_id}
+                ref={mdxEditorRef}
+                className="markdown-mdx-editor"
+                contentEditableClassName="markdown-mdx-content"
+                markdown={markdownDraft}
+                onChange={(value) => {
+                  markdownDraftRef.current = value;
+                  setMarkdownDraft(value);
+                }}
+                onError={({ error }) => {
+                  console.error("Markdown editor parse error", error);
+                }}
+                plugins={[
+                  headingsPlugin({ allowedHeadingLevels: [1, 2, 3, 4, 5, 6] }),
+                  listsPlugin(),
+                  quotePlugin(),
+                  thematicBreakPlugin(),
+                  linkPlugin(),
+                  linkDialogPlugin(),
+                  tablePlugin(),
+                  frontmatterPlugin(),
+                  codeBlockPlugin({ defaultCodeBlockLanguage: "text" }),
+                  codeMirrorPlugin({
+                    autoLoadLanguageSupport: false,
+                    codeBlockLanguages: {
+                      text: "Text",
+                      js: "JavaScript",
+                      jsx: "JSX",
+                      ts: "TypeScript",
+                      tsx: "TSX",
+                      rust: "Rust",
+                      python: "Python",
+                      bash: "Bash",
+                      json: "JSON",
+                      css: "CSS",
+                      html: "HTML",
+                    },
+                  }),
+                  diffSourcePlugin({ viewMode: "rich-text" }),
+                  markdownShortcutPlugin(),
+                  toolbarPlugin({
+                    toolbarClassName: "markdown-mdx-toolbar",
+                    toolbarContents: () => (
+                      <DiffSourceToggleWrapper options={["rich-text", "source"]}>
+                        <ConditionalContents
+                          options={[
+                            { when: (editor) => editor?.editorType === "codeblock", contents: () => <ChangeCodeMirrorLanguage /> },
+                            {
+                              fallback: () => (
+                                <>
+                                  <UndoRedo />
+                                  <Separator />
+                                  <BlockTypeSelect />
+                                  <BoldItalicUnderlineToggles options={["Bold", "Italic"]} />
+                                  <StrikeThroughSupSubToggles options={["Strikethrough"]} />
+                                  <CodeToggle />
+                                  <Separator />
+                                  <ListsToggle options={["bullet", "number", "check"]} />
+                                  <CreateLink />
+                                  <InsertTable />
+                                  <InsertThematicBreak />
+                                  <InsertCodeBlock />
+                                </>
+                              ),
+                            },
+                          ]}
+                        />
+                      </DiffSourceToggleWrapper>
+                    ),
+                  }),
+                ]}
+              />
             </div>
           ) : (
             <NormalizedReader
