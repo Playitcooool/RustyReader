@@ -3,13 +3,22 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   CloseIcon,
+  BoldIcon,
+  CodeIcon,
   CopyIcon,
   EditIcon,
   EraserIcon,
   FitWidthIcon,
+  HeadingIcon,
   HighlightIcon,
+  ItalicIcon,
+  LinkIcon,
+  ListIcon,
   MessageIcon,
   NoteIcon,
+  OrderedListIcon,
+  QuoteIcon,
+  SaveIcon,
   SearchIcon,
   SidebarIcon,
   TranslateIcon,
@@ -108,6 +117,7 @@ type ReaderWorkspaceActions = {
   onAskWithSelection: () => void | Promise<void>;
   onAddHighlightToSession: () => void | Promise<void>;
   onSaveSelectionAsNote: () => void | Promise<void>;
+  onUpdateActiveMarkdown: (markdown: string) => Promise<ReaderView | null>;
   onCreatePdfFocusTextBoxAnnotation: (draft: PdfTextBoxAnnotationDraft) => void | Promise<void>;
   onRemovePdfInkAnnotation: (annotationId: number) => void | Promise<void>;
   onUpdatePdfTextBoxAnnotation: (annotationId: number, anchor: string, body?: string) => void | Promise<void>;
@@ -196,6 +206,7 @@ export function ReaderWorkspace(props: Props) {
     onAskWithSelection,
     onAddHighlightToSession,
     onSaveSelectionAsNote,
+    onUpdateActiveMarkdown,
     onCreatePdfFocusTextBoxAnnotation,
     onRemovePdfInkAnnotation,
     onUpdatePdfTextBoxAnnotation,
@@ -227,6 +238,10 @@ export function ReaderWorkspace(props: Props) {
   const [pdfEraserSize, setPdfEraserSize] = useState(DEFAULT_PDF_ERASER_SIZE);
   const [pdfTextBoxColor, setPdfTextBoxColor] = useState<PdfTextBoxColor>(DEFAULT_PDF_TEXT_BOX_COLOR);
   const [pdfTextBoxFontSize, setPdfTextBoxFontSize] = useState(DEFAULT_PDF_TEXT_BOX_FONT_SIZE);
+  const [isMarkdownEditing, setIsMarkdownEditing] = useState(false);
+  const [markdownDraft, setMarkdownDraft] = useState("");
+  const [markdownSaving, setMarkdownSaving] = useState(false);
+  const markdownEditorRef = useRef<HTMLTextAreaElement | null>(null);
   const [viewportSize, setViewportSize] = useState(() => ({
     width: window.innerWidth,
     height: window.innerHeight,
@@ -256,6 +271,77 @@ export function ReaderWorkspace(props: Props) {
   }, [pdfSelection, showPdfFocusHighlightBar, viewportSize.height, viewportSize.width]);
   const selectionForActions = translationSelection ?? (pdfSelection ? { quote: pdfSelection.quote, rect: pdfSelection.rect } : null);
   const showPdfHighlightActions = workspaceMode === "pdf_focus" && Boolean(pdfSelection);
+  const canEditMarkdown = Boolean(activePaper?.attachment_format === "md" && readerView?.primary_attachment_id);
+
+  useEffect(() => {
+    setIsMarkdownEditing(false);
+    setMarkdownDraft("");
+    setMarkdownSaving(false);
+  }, [activePaper?.id]);
+
+  const startMarkdownEdit = useCallback(async () => {
+    if (!readerView?.primary_attachment_id) return;
+    try {
+      const bytes = await readPrimaryAttachmentBytes(readerView.primary_attachment_id);
+      setMarkdownDraft(new TextDecoder().decode(bytes));
+      setIsMarkdownEditing(true);
+      window.setTimeout(() => markdownEditorRef.current?.focus(), 0);
+    } catch {
+      setMarkdownDraft(readerView.plain_text);
+      setIsMarkdownEditing(true);
+      window.setTimeout(() => markdownEditorRef.current?.focus(), 0);
+    }
+  }, [readPrimaryAttachmentBytes, readerView]);
+
+  const applyMarkdownEdit = useCallback((kind: "bold" | "italic" | "heading" | "list" | "ordered" | "quote" | "code" | "link") => {
+    const editor = markdownEditorRef.current;
+    if (!editor) return;
+    const start = editor.selectionStart;
+    const end = editor.selectionEnd;
+    const selected = markdownDraft.slice(start, end);
+    const lineStart = markdownDraft.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
+    const lineEndIndex = markdownDraft.indexOf("\n", end);
+    const lineEnd = lineEndIndex === -1 ? markdownDraft.length : lineEndIndex;
+    const replaceSelection = (value: string, selectStart = start, selectEnd = start + value.length) => {
+      setMarkdownDraft(`${markdownDraft.slice(0, start)}${value}${markdownDraft.slice(end)}`);
+      window.setTimeout(() => {
+        editor.focus();
+        editor.setSelectionRange(selectStart, selectEnd);
+      }, 0);
+    };
+    const replaceLines = (prefix: string, numbered = false) => {
+      const block = markdownDraft.slice(lineStart, lineEnd);
+      const lines = block.split("\n");
+      const next = lines.map((line, index) => `${numbered ? `${index + 1}. ` : prefix}${line.replace(/^(\s*)([-*>]|\d+\.)\s+/, "$1")}`).join("\n");
+      setMarkdownDraft(`${markdownDraft.slice(0, lineStart)}${next}${markdownDraft.slice(lineEnd)}`);
+      window.setTimeout(() => {
+        editor.focus();
+        editor.setSelectionRange(lineStart, lineStart + next.length);
+      }, 0);
+    };
+
+    if (kind === "bold") replaceSelection(`**${selected || "bold text"}**`, start + 2, start + 2 + (selected || "bold text").length);
+    if (kind === "italic") replaceSelection(`*${selected || "italic text"}*`, start + 1, start + 1 + (selected || "italic text").length);
+    if (kind === "heading") replaceLines("## ");
+    if (kind === "list") replaceLines("- ");
+    if (kind === "ordered") replaceLines("", true);
+    if (kind === "quote") replaceLines("> ");
+    if (kind === "code") {
+      const value = selected.includes("\n") ? `\`\`\`\n${selected || "code"}\n\`\`\`` : `\`${selected || "code"}\``;
+      replaceSelection(value, start + (selected.includes("\n") ? 4 : 1), start + value.length - (selected.includes("\n") ? 4 : 1));
+    }
+    if (kind === "link") replaceSelection(`[${selected || "link text"}](https://)`, start + 1, start + 1 + (selected || "link text").length);
+  }, [markdownDraft]);
+
+  const saveMarkdownEdit = useCallback(async () => {
+    setMarkdownSaving(true);
+    try {
+      await onUpdateActiveMarkdown(markdownDraft);
+      setIsMarkdownEditing(false);
+    } finally {
+      setMarkdownSaving(false);
+    }
+  }, [markdownDraft, onUpdateActiveMarkdown]);
 
   useEffect(() => {
     if (!selectionForActions?.quote.trim()) setReaderContextMenu(null);
@@ -571,17 +657,69 @@ export function ReaderWorkspace(props: Props) {
               <button aria-label="Find in document" className="icon-button" title="Find in document" type="button" onClick={openFindHud}>
                 <SearchIcon />
               </button>
+              {canEditMarkdown ? (
+                <button
+                  aria-label={isMarkdownEditing ? "Cancel Markdown editing" : "Edit Markdown"}
+                  aria-pressed={isMarkdownEditing}
+                  className="icon-button"
+                  title={isMarkdownEditing ? "Cancel Markdown editing" : "Edit Markdown"}
+                  type="button"
+                  onClick={() => {
+                    if (isMarkdownEditing) {
+                      setIsMarkdownEditing(false);
+                      setMarkdownDraft("");
+                    } else {
+                      void startMarkdownEdit();
+                    }
+                  }}
+                >
+                  {isMarkdownEditing ? <CloseIcon /> : <EditIcon />}
+                </button>
+              ) : null}
             </div>
             {aiPanelToggle}
           </div>
-          <NormalizedReader
-            pageHtml={readerView.normalized_html}
-            zoom={readerZoom}
-            searchQuery={readerSearchQuery}
-            activeSearchMatchIndex={readerSearchMatchIndex}
-            onSearchMatchesChange={onReaderSearchMatchesChange}
-            onSelectionChange={onSelectionChange}
-          />
+          {isMarkdownEditing ? (
+            <div className="markdown-focus-editor-shell">
+              <div className="markdown-edit-toolbar" role="toolbar" aria-label="Markdown edit toolbar">
+                <button aria-label="Bold" className="icon-button" title="Bold" type="button" onClick={() => applyMarkdownEdit("bold")}><BoldIcon /></button>
+                <button aria-label="Italic" className="icon-button" title="Italic" type="button" onClick={() => applyMarkdownEdit("italic")}><ItalicIcon /></button>
+                <button aria-label="Heading" className="icon-button" title="Heading" type="button" onClick={() => applyMarkdownEdit("heading")}><HeadingIcon /></button>
+                <button aria-label="Bulleted list" className="icon-button" title="Bulleted list" type="button" onClick={() => applyMarkdownEdit("list")}><ListIcon /></button>
+                <button aria-label="Numbered list" className="icon-button" title="Numbered list" type="button" onClick={() => applyMarkdownEdit("ordered")}><OrderedListIcon /></button>
+                <button aria-label="Quote" className="icon-button" title="Quote" type="button" onClick={() => applyMarkdownEdit("quote")}><QuoteIcon /></button>
+                <button aria-label="Code" className="icon-button" title="Code" type="button" onClick={() => applyMarkdownEdit("code")}><CodeIcon /></button>
+                <button aria-label="Link" className="icon-button" title="Link" type="button" onClick={() => applyMarkdownEdit("link")}><LinkIcon /></button>
+                <span className="markdown-edit-toolbar-spacer" />
+                <button aria-label="Save Markdown" className="icon-button" disabled={markdownSaving || markdownDraft.trim().length === 0} title="Save Markdown" type="button" onClick={() => void saveMarkdownEdit()}>
+                  <SaveIcon />
+                </button>
+              </div>
+              <textarea
+                ref={markdownEditorRef}
+                aria-label="Markdown editor"
+                className="markdown-focus-editor"
+                spellCheck={false}
+                value={markdownDraft}
+                onChange={(event) => setMarkdownDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+                    event.preventDefault();
+                    void saveMarkdownEdit();
+                  }
+                }}
+              />
+            </div>
+          ) : (
+            <NormalizedReader
+              pageHtml={readerView.normalized_html}
+              zoom={readerZoom}
+              searchQuery={readerSearchQuery}
+              activeSearchMatchIndex={readerSearchMatchIndex}
+              onSearchMatchesChange={onReaderSearchMatchesChange}
+              onSelectionChange={onSelectionChange}
+            />
+          )}
         </section>
       ) : (
         <section className="reader-panel reader-panel-workspace">

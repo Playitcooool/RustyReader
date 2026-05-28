@@ -471,6 +471,40 @@
   box-shadow: 0 0 0 2px rgba(102, 164, 212, 0.35);
 }
 
+.markdown-focus-editor-shell {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.markdown-edit-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(18, 18, 20, 0.72);
+}
+
+.markdown-edit-toolbar-spacer {
+  flex: 1;
+}
+
+.markdown-focus-editor {
+  width: 100%;
+  min-height: 0;
+  padding: 24px clamp(18px, 4vw, 56px);
+  border: 0;
+  outline: 0;
+  resize: none;
+  overflow: auto;
+  background: rgba(255, 255, 255, 0.035);
+  color: rgba(244, 239, 230, 0.9);
+  font: 0.98rem/1.65 "SF Mono", "Fira Code", "Cascadia Code", monospace;
+}
+
 .reader-selection-menu {
   min-width: 0;
   display: flex;

@@ -45,6 +45,7 @@ type MockItemDetails = LibraryItem & {
   pageCount?: number | null;
   contentStatus?: ReaderView["content_status"];
   contentNotice?: string | null;
+  markdownSource?: string;
 };
 
 type MockState = {
@@ -1038,6 +1039,24 @@ export const fakeApi: AppApi = {
     } satisfies ReaderView;
   },
 
+  async updateMarkdownItem(input) {
+    const item = state.items.find((entry) => entry.id === input.item_id);
+    if (!item) throw new Error(`No reader view for item ${input.item_id}`);
+    if ((item.attachmentFormat ?? item.attachment_format) !== "md") {
+      throw new Error("only Markdown attachments can be edited");
+    }
+    item.markdownSource = input.markdown;
+    item.plainText = input.markdown
+      .replace(/^#{1,6}\s+/gm, "")
+      .replace(/[*_`>#-]/g, "")
+      .trim();
+    item.normalizedHtml = `<article><h1>${item.title}</h1>${input.markdown
+      .split(/\n{2,}/)
+      .map((block) => `<p>${block.replace(/^#{1,6}\s+/, "")}</p>`)
+      .join("")}</article>`;
+    return this.getReaderView(input.item_id);
+  },
+
   async readPrimaryAttachmentBytes(primaryAttachmentId) {
     const item = state.items.find((entry) => entry.primary_attachment_id === primaryAttachmentId);
     if (!item) {
@@ -1047,11 +1066,14 @@ export const fakeApi: AppApi = {
     if (!item.primaryAttachmentPath) {
       throw new Error("Primary attachment file is missing.");
     }
-    if (attachmentFormat !== "pdf") {
-      throw new Error("Primary attachment is not a PDF.");
-    }
     if (item.attachment_status === "missing") {
       throw new Error("Primary attachment file is missing.");
+    }
+    if (attachmentFormat === "md") {
+      return new TextEncoder().encode(item.markdownSource ?? item.plainText);
+    }
+    if (attachmentFormat !== "pdf") {
+      throw new Error("Primary attachment is not a PDF.");
     }
     return new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d]);
   },

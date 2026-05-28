@@ -1908,6 +1908,78 @@ impl LibraryService {
         .map_err(Into::into)
     }
 
+    pub fn update_markdown_item(&self, item_id: i64, markdown: &str) -> Result<ReaderView> {
+        if markdown.trim().is_empty() {
+            return Err(anyhow!("markdown must not be empty"));
+        }
+
+        let mut conn = self.connect()?;
+        let (title, attachment_id, attachment_path): (String, i64, String) = conn.query_row(
+            "
+                SELECT i.title, a.id, a.path
+                FROM items i
+                JOIN attachments a ON a.item_id = i.id AND a.is_primary = 1
+                WHERE i.id = ?1
+                ",
+            [item_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+        let attachment_format = infer_attachment_format(&attachment_path);
+        if attachment_format != "md" && attachment_format != "markdown" {
+            return Err(anyhow!("only Markdown attachments can be edited"));
+        }
+
+        let fingerprint = digest_bytes(markdown.as_bytes());
+        let duplicate_attachment_id = conn
+            .query_row(
+                "SELECT id FROM attachments WHERE fingerprint = ?1 AND id != ?2 LIMIT 1",
+                params![fingerprint, attachment_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()?;
+        if duplicate_attachment_id.is_some() {
+            return Err(anyhow!("duplicate Markdown content already exists"));
+        }
+
+        let path = Path::new(&attachment_path);
+        fs::write(path, markdown.as_bytes())?;
+        let plain_text = markdown_to_plain_text(markdown);
+        let normalized_html = markdown_to_safe_html(&title, markdown);
+        let chunks = build_structured_chunks(&markdown_content_blocks(markdown), "markdown");
+
+        let tx = conn.transaction()?;
+        tx.execute(
+            "UPDATE attachments SET fingerprint = ?1, status = 'ready' WHERE id = ?2",
+            params![fingerprint, attachment_id],
+        )?;
+        tx.execute(
+            "UPDATE items SET attachment_status = 'ready' WHERE id = ?1",
+            [item_id],
+        )?;
+        tx.execute(
+            "
+            UPDATE extracted_content
+            SET plain_text = ?2,
+                normalized_html = ?3,
+                page_count = NULL,
+                content_status = 'ready',
+                content_notice = NULL,
+                extractor_version = ?4
+            WHERE item_id = ?1
+            ",
+            params![item_id, plain_text, normalized_html, EXTRACTOR_VERSION],
+        )?;
+        tx.execute("DELETE FROM search_index WHERE item_id = ?1", [item_id])?;
+        tx.execute(
+            "INSERT INTO search_index(item_id, title, plain_text) VALUES (?1, ?2, ?3)",
+            params![item_id, title, plain_text],
+        )?;
+        rebuild_evidence_chunks_conn(&tx, item_id, &title, &chunks, EXTRACTOR_VERSION)?;
+        tx.commit()?;
+
+        self.get_reader_view(item_id)
+    }
+
     pub fn repair_item_content_if_needed(&self, item_id: i64) -> Result<bool> {
         let mut conn = self.connect()?;
         let row = conn
@@ -2071,8 +2143,9 @@ impl LibraryService {
             ));
         }
 
-        if infer_attachment_format(&path) != "pdf" {
-            return Err(anyhow!("primary attachment is not a PDF"));
+        let attachment_format = infer_attachment_format(&path);
+        if attachment_format != "pdf" && attachment_format != "md" {
+            return Err(anyhow!("primary attachment is not a PDF or Markdown file"));
         }
 
         let attachment_path = PathBuf::from(&path);

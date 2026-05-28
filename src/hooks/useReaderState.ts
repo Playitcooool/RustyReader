@@ -230,6 +230,17 @@ export function useReaderState({
   const pdfEngineSearch = useCallback(async (input: { primary_attachment_id: number; query: string; max_matches?: number }) => (await getApi()).pdfEngineSearch(input), [getApi]);
   const ocrPdfPage = useCallback(async (input: { primary_attachment_id: number; page_index0: number; png_bytes: Uint8Array; lang?: string; config_version: string; source_resolution?: number }) => (await getApi()).ocrPdfPage(input), [getApi]);
   const readPrimaryAttachmentBytes = useCallback(async (primaryAttachmentId: number) => (await getApi()).readPrimaryAttachmentBytes(primaryAttachmentId), [getApi]);
+  const updateActiveMarkdown = useCallback(async (markdown: string) => {
+    if (!activePaper || activePaper.attachment_format !== "md") return null;
+    const view = await (await getApi()).updateMarkdownItem({ item_id: activePaper.id, markdown });
+    setReaderView(view);
+    setReaderSearchQuery("");
+    setReaderSearchMatchIndex(0);
+    setReaderSearchMatchCount(0);
+    setReportedActiveSearchMatchIndex(-1);
+    setStatusMessage("Saved Markdown.");
+    return view;
+  }, [activePaper, getApi, setStatusMessage]);
 
   const dismissPdfSelection = useCallback(() => {
     setPdfSelection(null);
@@ -473,6 +484,7 @@ export function useReaderState({
     getPdfPageText,
     getPdfPageTextsBatch,
     readPrimaryAttachmentBytes,
+    updateActiveMarkdown,
     handleActivatePdfHighlight,
     handleCreatePdfFocusHighlight,
     handleCreatePdfFocusInkAnnotation,

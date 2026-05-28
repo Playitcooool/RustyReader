@@ -601,6 +601,7 @@ fn main() {
             commands::list_annotations,
             commands::remove_annotation,
             commands::update_annotation,
+            commands::update_markdown_item,
             commands::get_ai_settings,
             commands::get_system_ai_env,
             commands::update_ai_settings,

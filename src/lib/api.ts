@@ -180,6 +180,7 @@ export async function createTauriApi(): Promise<AppApi> {
     listItems: (collectionId) => invoke("list_items", { collectionId }),
     searchItems: (query) => invoke("search_items", { input: { query } }),
     getReaderView: (itemId) => invoke("get_reader_view", { itemId }),
+    updateMarkdownItem: (input) => invoke("update_markdown_item", { input }),
     readPrimaryAttachmentBytes: async (primaryAttachmentId) =>
       toUint8Array(
         await invoke("read_primary_attachment_bytes", {

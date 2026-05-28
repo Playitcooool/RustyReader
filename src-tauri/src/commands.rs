@@ -38,6 +38,12 @@ pub(crate) struct UpdateNoteInput {
 }
 
 #[derive(Deserialize)]
+pub(crate) struct UpdateMarkdownItemInput {
+    item_id: i64,
+    markdown: String,
+}
+
+#[derive(Deserialize)]
 pub(crate) struct CreateResearchNoteInput {
     collection_id: Option<i64>,
     session_id: Option<i64>,
@@ -188,6 +194,16 @@ pub(crate) fn update_annotation(
 ) -> Result<Annotation, String> {
     service(&state)
         .update_annotation(input.annotation_id, input.anchor, input.body)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) fn update_markdown_item(
+    state: State<'_, AppState>,
+    input: UpdateMarkdownItemInput,
+) -> Result<app_core::service::ReaderView, String> {
+    service(&state)
+        .update_markdown_item(input.item_id, &input.markdown)
         .map_err(|error| error.to_string())
 }
 
@@ -400,10 +416,8 @@ pub(crate) fn update_ai_settings(
             clear_deepl_api_key: input.clear_deepl_api_key,
         })
         .and_then(|_| {
-            service(&state).update_ai_environment_settings(
-                provider_env_openai,
-                provider_env_anthropic,
-            )
+            service(&state)
+                .update_ai_environment_settings(provider_env_openai, provider_env_anthropic)
         })
         .map_err(|error| error.to_string())
 }

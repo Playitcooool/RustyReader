@@ -922,6 +922,43 @@ fn duplicate_markdown_imports_report_duplicate_without_creating_new_items() {
 }
 
 #[test]
+fn updates_markdown_item_content_and_rebuilds_reader_state() {
+    let root = tempdir().unwrap();
+    let service = LibraryService::new(root.path()).unwrap();
+    let collection = service.create_collection("Web", None).unwrap();
+    let imported = service
+        .import_markdown_item(collection.id, "Editable", "# Editable\n\nOld body", None)
+        .unwrap()
+        .imported[0]
+        .clone();
+
+    let updated = service
+        .update_markdown_item(
+            imported.id,
+            "# Editable\n\nNew **body** with [link](https://example.com).\n\n- one",
+        )
+        .unwrap();
+
+    assert_eq!(updated.attachment_format, "md");
+    assert!(updated.plain_text.contains("New body"));
+    assert!(updated.normalized_html.contains("New"));
+    assert!(updated.normalized_html.contains("<li>one</li>"));
+    let bytes = service
+        .read_primary_attachment_bytes(imported.primary_attachment_id)
+        .unwrap();
+    assert!(String::from_utf8(bytes).unwrap().contains("New **body**"));
+    let chunks = service
+        .query_evidence_chunks(
+            &[imported.id],
+            Some("New body"),
+            Some(8),
+            EvidenceQueryOptions::default(),
+        )
+        .unwrap();
+    assert!(!chunks.is_empty());
+}
+
+#[test]
 fn markdown_import_rejects_missing_collection_and_empty_fields() {
     let root = tempdir().unwrap();
     let service = LibraryService::new(root.path()).unwrap();

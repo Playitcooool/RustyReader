@@ -731,6 +731,7 @@ export default function App({ api }: { api: AppApi }) {
           onAskWithSelection: handleAskWithSelection,
           onAddHighlightToSession: handleAddHighlightToSession,
           onSaveSelectionAsNote: handleSaveSelectionAsNote,
+          onUpdateActiveMarkdown: readerState.updateActiveMarkdown,
           onCreatePdfFocusTextBoxAnnotation: readerState.handleCreatePdfFocusTextBoxAnnotation,
           onRemovePdfInkAnnotation: readerState.handleRemovePdfInkAnnotation,
           onUpdatePdfTextBoxAnnotation: readerState.handleUpdatePdfTextBoxAnnotation,

@@ -50,6 +50,14 @@ export const NoteIcon = () => <AppIcon><path d="M4 4h16v16H4z" /><path d="M8 8h8
 export const SaveIcon = () => <AppIcon><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" /><path d="M17 21v-8H7v8" /><path d="M7 3v5h8" /></AppIcon>;
 export const DownloadIcon = () => <AppIcon><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></AppIcon>;
 export const SendIcon = () => <AppIcon><path d="m22 2-7 20-4-9-9-4Z" /><path d="M22 2 11 13" /></AppIcon>;
+export const BoldIcon = () => <AppIcon><path d="M7 4h6a4 4 0 0 1 0 8H7z" /><path d="M7 12h7a4 4 0 0 1 0 8H7z" /><path d="M7 4v16" /></AppIcon>;
+export const ItalicIcon = () => <AppIcon><path d="M19 4h-9M14 20H5M15 4 9 20" /></AppIcon>;
+export const HeadingIcon = () => <AppIcon><path d="M4 12h8M4 4v16M12 4v16M17 8l3-2v14" /></AppIcon>;
+export const ListIcon = () => <AppIcon><path d="M8 6h13M8 12h13M8 18h13" /><path d="M3 6h.01M3 12h.01M3 18h.01" /></AppIcon>;
+export const OrderedListIcon = () => <AppIcon><path d="M10 6h11M10 12h11M10 18h11" /><path d="M4 6h1v4M4 10h2M4 14h2l-2 4h2" /></AppIcon>;
+export const QuoteIcon = () => <AppIcon><path d="M8 10H4V6h4v6l-2 4" /><path d="M18 10h-4V6h4v6l-2 4" /></AppIcon>;
+export const CodeIcon = () => <AppIcon><path d="m16 18 6-6-6-6M8 6l-6 6 6 6" /></AppIcon>;
+export const LinkIcon = () => <AppIcon><path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1" /><path d="M14 11a5 5 0 0 0-7.1 0l-2 2A5 5 0 0 0 12 20.1l1.1-1.1" /></AppIcon>;
 export const ZoomInIcon = () => <AppIcon><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3M11 8v6M8 11h6" /></AppIcon>;
 export const ZoomOutIcon = () => <AppIcon><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3M8 11h6" /></AppIcon>;
 export const FitWidthIcon = () => <AppIcon><path d="M4 7V5h16v2" /><path d="M4 17v2h16v-2" /><path d="M8 12h8" /><path d="m10 10-2 2 2 2M14 10l2 2-2 2" /></AppIcon>;
