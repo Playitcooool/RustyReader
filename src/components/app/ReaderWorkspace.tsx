@@ -238,7 +238,6 @@ export function ReaderWorkspace(props: Props) {
   const [pdfEraserSize, setPdfEraserSize] = useState(DEFAULT_PDF_ERASER_SIZE);
   const [pdfTextBoxColor, setPdfTextBoxColor] = useState<PdfTextBoxColor>(DEFAULT_PDF_TEXT_BOX_COLOR);
   const [pdfTextBoxFontSize, setPdfTextBoxFontSize] = useState(DEFAULT_PDF_TEXT_BOX_FONT_SIZE);
-  const [isMarkdownEditing, setIsMarkdownEditing] = useState(false);
   const [markdownDraft, setMarkdownDraft] = useState("");
   const [markdownSaving, setMarkdownSaving] = useState(false);
   const markdownEditorRef = useRef<HTMLTextAreaElement | null>(null);
@@ -274,24 +273,39 @@ export function ReaderWorkspace(props: Props) {
   const canEditMarkdown = Boolean(activePaper?.attachment_format === "md" && readerView?.primary_attachment_id);
 
   useEffect(() => {
-    setIsMarkdownEditing(false);
     setMarkdownDraft("");
     setMarkdownSaving(false);
   }, [activePaper?.id]);
 
-  const startMarkdownEdit = useCallback(async () => {
-    if (!readerView?.primary_attachment_id) return;
+  useEffect(() => {
+    if (!canEditMarkdown || !readerView?.primary_attachment_id) return;
+    let cancelled = false;
+    const fallback = readerView.plain_text;
+    void (async () => {
+      let nextDraft = fallback;
+      try {
+        const bytes = await readPrimaryAttachmentBytes(readerView.primary_attachment_id!);
+        nextDraft = new TextDecoder().decode(bytes);
+      } catch {
+        nextDraft = fallback;
+      }
+      if (cancelled) return;
+      setMarkdownDraft(nextDraft);
+      window.setTimeout(() => markdownEditorRef.current?.focus(), 0);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [canEditMarkdown, readPrimaryAttachmentBytes, readerView?.item_id, readerView?.plain_text, readerView?.primary_attachment_id]);
+
+  const saveMarkdownEdit = useCallback(async () => {
+    setMarkdownSaving(true);
     try {
-      const bytes = await readPrimaryAttachmentBytes(readerView.primary_attachment_id);
-      setMarkdownDraft(new TextDecoder().decode(bytes));
-      setIsMarkdownEditing(true);
-      window.setTimeout(() => markdownEditorRef.current?.focus(), 0);
-    } catch {
-      setMarkdownDraft(readerView.plain_text);
-      setIsMarkdownEditing(true);
-      window.setTimeout(() => markdownEditorRef.current?.focus(), 0);
+      await onUpdateActiveMarkdown(markdownDraft);
+    } finally {
+      setMarkdownSaving(false);
     }
-  }, [readPrimaryAttachmentBytes, readerView]);
+  }, [markdownDraft, onUpdateActiveMarkdown]);
 
   const applyMarkdownEdit = useCallback((kind: "bold" | "italic" | "heading" | "list" | "ordered" | "quote" | "code" | "link") => {
     const editor = markdownEditorRef.current;
@@ -332,16 +346,6 @@ export function ReaderWorkspace(props: Props) {
     }
     if (kind === "link") replaceSelection(`[${selected || "link text"}](https://)`, start + 1, start + 1 + (selected || "link text").length);
   }, [markdownDraft]);
-
-  const saveMarkdownEdit = useCallback(async () => {
-    setMarkdownSaving(true);
-    try {
-      await onUpdateActiveMarkdown(markdownDraft);
-      setIsMarkdownEditing(false);
-    } finally {
-      setMarkdownSaving(false);
-    }
-  }, [markdownDraft, onUpdateActiveMarkdown]);
 
   useEffect(() => {
     if (!selectionForActions?.quote.trim()) setReaderContextMenu(null);
@@ -654,32 +658,15 @@ export function ReaderWorkspace(props: Props) {
               </button>
             </div>
             <div className="reader-control-group">
-              <button aria-label="Find in document" className="icon-button" title="Find in document" type="button" onClick={openFindHud}>
-                <SearchIcon />
-              </button>
-              {canEditMarkdown ? (
-                <button
-                  aria-label={isMarkdownEditing ? "Cancel Markdown editing" : "Edit Markdown"}
-                  aria-pressed={isMarkdownEditing}
-                  className="icon-button"
-                  title={isMarkdownEditing ? "Cancel Markdown editing" : "Edit Markdown"}
-                  type="button"
-                  onClick={() => {
-                    if (isMarkdownEditing) {
-                      setIsMarkdownEditing(false);
-                      setMarkdownDraft("");
-                    } else {
-                      void startMarkdownEdit();
-                    }
-                  }}
-                >
-                  {isMarkdownEditing ? <CloseIcon /> : <EditIcon />}
+              {!canEditMarkdown ? (
+                <button aria-label="Find in document" className="icon-button" title="Find in document" type="button" onClick={openFindHud}>
+                  <SearchIcon />
                 </button>
               ) : null}
             </div>
             {aiPanelToggle}
           </div>
-          {isMarkdownEditing ? (
+          {canEditMarkdown ? (
             <div className="markdown-focus-editor-shell">
               <div className="markdown-edit-toolbar" role="toolbar" aria-label="Markdown edit toolbar">
                 <button aria-label="Bold" className="icon-button" title="Bold" type="button" onClick={() => applyMarkdownEdit("bold")}><BoldIcon /></button>
@@ -703,9 +690,31 @@ export function ReaderWorkspace(props: Props) {
                 value={markdownDraft}
                 onChange={(event) => setMarkdownDraft(event.target.value)}
                 onKeyDown={(event) => {
-                  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+                  const key = event.key.toLowerCase();
+                  const command = event.metaKey || event.ctrlKey;
+                  if (command && key === "s") {
                     event.preventDefault();
                     void saveMarkdownEdit();
+                  }
+                  if (command && key === "b") {
+                    event.preventDefault();
+                    applyMarkdownEdit("bold");
+                  }
+                  if (command && key === "i") {
+                    event.preventDefault();
+                    applyMarkdownEdit("italic");
+                  }
+                  if (command && key === "k") {
+                    event.preventDefault();
+                    applyMarkdownEdit("link");
+                  }
+                  if (command && event.shiftKey && key === "7") {
+                    event.preventDefault();
+                    applyMarkdownEdit("ordered");
+                  }
+                  if (command && event.shiftKey && key === "8") {
+                    event.preventDefault();
+                    applyMarkdownEdit("list");
                   }
                 }}
               />
