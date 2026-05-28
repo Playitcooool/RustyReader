@@ -54,10 +54,102 @@ import {
   normalizePdfEraserSize,
   normalizePdfInkWidth,
 } from "../readers/pdfInkAnchor";
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type RefObject } from "react";
 
 const pdfHighlightColors = ["yellow", "red", "green", "blue", "purple"] as const satisfies readonly PdfHighlightColor[];
 type MarkdownViewMode = "preview" | "raw";
+
+const getEditableTextOffset = (container: HTMLElement) => {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return null;
+  const range = selection.getRangeAt(0);
+  if (!container.contains(range.startContainer)) return null;
+  const before = range.cloneRange();
+  before.selectNodeContents(container);
+  before.setEnd(range.startContainer, range.startOffset);
+  return before.toString().length;
+};
+
+const markdownVisibleLength = (value: string) =>
+  value
+    .replace(/(^|\n)(\s{0,3})#{1,6}\s/g, "$1$2")
+    .replace(/(^|\n)(\s{0,3})([-*]|\d+\.)\s/g, "$1$2")
+    .replace(/(^|\n)(\s{0,3})>\s?/g, "$1$2")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
+    .replace(/[*_`]/g, "")
+    .length;
+
+const getMarkdownPreviewTextOffset = (container: HTMLElement) => {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return null;
+  const range = selection.getRangeAt(0);
+  if (!container.contains(range.startContainer)) return null;
+  const before = range.cloneRange();
+  before.selectNodeContents(container);
+  before.setEnd(range.startContainer, range.startOffset);
+  return markdownVisibleLength(before.toString());
+};
+
+const editablePreviewToMarkdown = (container: HTMLElement) => {
+  const article = container.querySelector("article") ?? container;
+  const blocks: string[] = [];
+  article.childNodes.forEach((node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent?.trim();
+      if (text) blocks.push(text);
+      return;
+    }
+    if (!(node instanceof HTMLElement)) return;
+    const text = node.innerText.trim();
+    if (!text) return;
+    if (/^H[1-6]$/.test(node.tagName)) {
+      const level = Number(node.tagName.slice(1));
+      blocks.push(`${"#".repeat(level)} ${text}`);
+      return;
+    }
+    if (node.tagName === "UL") {
+      blocks.push([...node.querySelectorAll("li")].map((item) => `- ${item.innerText.trim()}`).join("\n"));
+      return;
+    }
+    if (node.tagName === "OL") {
+      blocks.push([...node.querySelectorAll("li")].map((item, index) => `${index + 1}. ${item.innerText.trim()}`).join("\n"));
+      return;
+    }
+    if (node.tagName === "BLOCKQUOTE") {
+      blocks.push(text.split("\n").map((line) => `> ${line}`).join("\n"));
+      return;
+    }
+    blocks.push(text);
+  });
+  return blocks.join("\n\n");
+};
+
+const restoreEditableTextOffset = (container: HTMLElement, offset: number) => {
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  let remaining = Math.max(0, offset);
+  let node = walker.nextNode();
+  while (node) {
+    const text = node.textContent ?? "";
+    if (remaining <= text.length) {
+      const range = document.createRange();
+      range.setStart(node, remaining);
+      range.collapse(true);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      return;
+    }
+    remaining -= text.length;
+    node = walker.nextNode();
+  }
+  const range = document.createRange();
+  range.selectNodeContents(container);
+  range.collapse(false);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+};
 
 type ReaderWorkspaceData = {
   activeCollection: Collection | null;
@@ -245,7 +337,10 @@ export function ReaderWorkspace(props: Props) {
   const [markdownViewMode, setMarkdownViewMode] = useState<MarkdownViewMode>("preview");
   const [markdownSaving, setMarkdownSaving] = useState(false);
   const markdownEditorRef = useRef<HTMLTextAreaElement | null>(null);
+  const markdownPreviewRef = useRef<HTMLDivElement | null>(null);
   const markdownDraftRef = useRef("");
+  const markdownPreviewCaretRef = useRef<number | null>(null);
+  const markdownPreviewRefreshRef = useRef<number | null>(null);
   const [viewportSize, setViewportSize] = useState(() => ({
     width: window.innerWidth,
     height: window.innerHeight,
@@ -280,9 +375,22 @@ export function ReaderWorkspace(props: Props) {
   useEffect(() => {
     setMarkdownDraft("");
     markdownDraftRef.current = "";
+    markdownPreviewCaretRef.current = null;
+    if (markdownPreviewRefreshRef.current !== null) {
+      window.clearTimeout(markdownPreviewRefreshRef.current);
+      markdownPreviewRefreshRef.current = null;
+    }
     setMarkdownViewMode("preview");
     setMarkdownSaving(false);
   }, [activePaper?.id]);
+
+  useEffect(() => {
+    return () => {
+      if (markdownPreviewRefreshRef.current !== null) {
+        window.clearTimeout(markdownPreviewRefreshRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!canEditMarkdown || !readerView?.primary_attachment_id) return;
@@ -315,6 +423,32 @@ export function ReaderWorkspace(props: Props) {
       setMarkdownSaving(false);
     }
   }, [onUpdateActiveMarkdown]);
+
+  useLayoutEffect(() => {
+    if (markdownViewMode !== "preview") return;
+    const container = markdownPreviewRef.current;
+    const offset = markdownPreviewCaretRef.current;
+    if (!container || offset === null) return;
+    restoreEditableTextOffset(container, offset);
+    markdownPreviewCaretRef.current = null;
+  }, [markdownDraft, markdownViewMode]);
+
+  const refreshMarkdownPreview = useCallback((container: HTMLElement, immediate = false) => {
+    markdownPreviewCaretRef.current = getMarkdownPreviewTextOffset(container) ?? getEditableTextOffset(container);
+    const refresh = () => {
+      markdownPreviewRefreshRef.current = null;
+      setMarkdownDraft(markdownDraftRef.current);
+    };
+    if (markdownPreviewRefreshRef.current !== null) {
+      window.clearTimeout(markdownPreviewRefreshRef.current);
+      markdownPreviewRefreshRef.current = null;
+    }
+    if (immediate) {
+      refresh();
+      return;
+    }
+    markdownPreviewRefreshRef.current = window.setTimeout(refresh, 250);
+  }, []);
 
   const applyMarkdownEdit = useCallback((kind: "bold" | "italic" | "heading" | "list" | "ordered" | "quote" | "code" | "link") => {
     const editor = markdownEditorRef.current;
@@ -769,6 +903,7 @@ export function ReaderWorkspace(props: Props) {
                 />
               ) : (
                 <div
+                  ref={markdownPreviewRef}
                   className="reader-html markdown-live-preview"
                   contentEditable
                   data-testid="markdown-live-preview"
@@ -777,7 +912,10 @@ export function ReaderWorkspace(props: Props) {
                   spellCheck
                   suppressContentEditableWarning
                   onInput={(event) => {
-                    markdownDraftRef.current = event.currentTarget.innerText;
+                    const next = editablePreviewToMarkdown(event.currentTarget);
+                    markdownDraftRef.current = next;
+                    const shouldRenderNow = /(^|\n)\s{0,3}#{1,6}\s[^\n]*$/.test(next);
+                    refreshMarkdownPreview(event.currentTarget, shouldRenderNow);
                   }}
                   onPaste={(event) => {
                     event.preventDefault();
