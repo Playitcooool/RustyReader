@@ -4,7 +4,6 @@ import type { AISessionReference, Collection, LibraryItem, ResearchNote, Tag } f
 import {
   applyTagFilter,
   childCollectionsFor,
-  collectionDeleteSummary,
   descendantIdsForCollection,
   expandSessionReferenceItemIds,
   filenameStem,
@@ -101,16 +100,6 @@ describe("appView collection helpers", () => {
     expect(expandSessionReferenceItemIds(references, collections, items)).toEqual([12, 10, 11, 13]);
   });
 
-  it("summarizes collection deletion impact", () => {
-    const summary = collectionDeleteSummary(collections, [item({ id: 10, collection_id: 1 }), item({ id: 11, collection_id: 4 })], 1);
-
-    expect(summary).toEqual({
-      deletedCollectionIds: [1, 3, 4],
-      deletedItemIds: [10, 11],
-      nestedCollectionCount: 2,
-      paperCount: 2,
-    });
-  });
 });
 
 describe("appView local storage readers", () => {

@@ -667,6 +667,25 @@ export const fakeApi: AppApi = {
     collection.name = input.name;
   },
 
+  async collectionDeleteSummary(input) {
+    const collection = state.collections.find((entry) => entry.id === input.collection_id);
+    if (!collection) {
+      throw new Error(`Unknown collection ${input.collection_id}`);
+    }
+    const deleted_collection_ids = [input.collection_id, ...childCollectionIds(input.collection_id)];
+    const deletedCollectionIdSet = new Set(deleted_collection_ids);
+    const deleted_item_ids = state.items
+      .filter((item) => deletedCollectionIdSet.has(item.collection_id))
+      .map((item) => item.id)
+      .sort((left, right) => left - right);
+    return {
+      deleted_collection_ids,
+      deleted_item_ids,
+      nested_collection_count: deleted_collection_ids.length - 1,
+      paper_count: deleted_item_ids.length,
+    };
+  },
+
   async removeCollection(input) {
     const collection = state.collections.find((entry) => entry.id === input.collection_id);
     if (!collection) {

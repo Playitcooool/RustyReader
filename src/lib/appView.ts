@@ -194,22 +194,6 @@ export const expandSessionReferenceItemIds = (
 export const itemCountForCollection = (libraryItems: LibraryItem[], collectionId: number) =>
   libraryItems.filter((item) => item.collection_id === collectionId).length;
 
-export const collectionDeleteSummary = (collections: Collection[], libraryItems: LibraryItem[], collectionId: number) => {
-  const descendantIds = Array.from(descendantIdsForCollection(collections, collectionId));
-  const deletedCollectionIds = [collectionId, ...descendantIds];
-  const deletedCollectionIdSet = new Set(deletedCollectionIds);
-  const deletedItemIds = libraryItems
-    .filter((item) => deletedCollectionIdSet.has(item.collection_id))
-    .map((item) => item.id);
-
-  return {
-    deletedCollectionIds,
-    deletedItemIds,
-    nestedCollectionCount: descendantIds.length,
-    paperCount: deletedItemIds.length,
-  };
-};
-
 export const sessionReferenceLabel = (
   reference: AISessionReference,
   libraryItems: LibraryItem[],

@@ -56,6 +56,13 @@ export type LibraryQueryInput = {
   item_sort: "recent" | "title" | "year_desc";
 };
 
+export type CollectionDeleteSummary = {
+  deleted_collection_ids: number[];
+  deleted_item_ids: number[];
+  nested_collection_count: number;
+  paper_count: number;
+};
+
 export type ReaderView = {
   item_id: number;
   title: string;
@@ -393,6 +400,7 @@ export type AppApi = {
   moveCollection: (input: { collection_id: number; parent_id?: number | null }) => Promise<void>;
   renameCollection: (input: { collection_id: number; name: string }) => Promise<void>;
   removeCollection: (input: { collection_id: number }) => Promise<void>;
+  collectionDeleteSummary: (input: { collection_id: number }) => Promise<CollectionDeleteSummary>;
   listTags: (collectionId?: number) => Promise<Tag[]>;
   createTag: (input: { name: string }) => Promise<Tag>;
   assignTag: (input: { item_id: number; tag_id: number }) => Promise<void>;

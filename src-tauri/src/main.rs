@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use app_core::service::{Collection, LibraryService, ReaderView};
+use app_core::service::{Collection, CollectionDeleteSummary, LibraryService, ReaderView};
 mod ai_stream;
 mod commands;
 mod connector;
@@ -136,6 +136,16 @@ fn remove_collection(
 ) -> Result<(), String> {
     service(&state)
         .remove_collection(input.collection_id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn collection_delete_summary(
+    state: State<'_, AppState>,
+    input: RemoveCollectionInput,
+) -> Result<CollectionDeleteSummary, String> {
+    service(&state)
+        .collection_delete_summary(input.collection_id)
         .map_err(|error| error.to_string())
 }
 
@@ -581,6 +591,7 @@ fn main() {
             move_collection,
             rename_collection,
             remove_collection,
+            collection_delete_summary,
             commands::list_tags,
             commands::create_tag,
             commands::assign_tag,

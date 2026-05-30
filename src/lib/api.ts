@@ -134,6 +134,7 @@ export async function createTauriApi(): Promise<AppApi> {
     moveCollection: (input) => invoke("move_collection", { input }),
     renameCollection: (input) => invoke("rename_collection", { input }),
     removeCollection: (input) => invoke("remove_collection", { input }),
+    collectionDeleteSummary: (input) => invoke("collection_delete_summary", { input }),
     listTags: (collectionId) => invoke("list_tags", { collectionId }),
     createTag: (input) => invoke("create_tag", { input }),
     assignTag: (input) => invoke("assign_tag", { input }),

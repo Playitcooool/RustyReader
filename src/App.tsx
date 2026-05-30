@@ -9,7 +9,7 @@ import { ActivePdfHighlightBar } from "./components/app/PdfHighlightBars";
 import { ReaderWorkspace } from "./components/app/ReaderWorkspace";
 import { ResourceSidebar } from "./components/app/ResourceSidebar";
 import { SettingsDialog, type GeneralSettingsDraft } from "./components/app/SettingsDialog";
-import { clamp, collectionDeleteSummary, readStoredBoolean, readStoredNumber, readStoredString, type AttachmentFilter, type ItemSort, type ReaderFitMode } from "./lib/appView";
+import { clamp, readStoredBoolean, readStoredNumber, readStoredString, type AttachmentFilter, type ItemSort, type ReaderFitMode } from "./lib/appView";
 import { isTauriRuntime } from "./lib/api";
 import { getRuntimePolyfillDiagnostics } from "./lib/runtimePolyfills";
 import type { AIProvider, AISettings, AppApi, Collection, TranslationProvider, UpdateAISettingsInput } from "./lib/contracts";
@@ -534,10 +534,25 @@ export default function App({ api }: { api: AppApi }) {
   }, [aiPanelWidth, sidebarWidth]);
 
   const handleRequestDeleteCollection = useCallback((collection: Collection) => {
-    const summary = collectionDeleteSummary(library.collections, library.libraryItems, collection.id);
-    setDeleteTarget({ kind: "collection", targetId: collection.id, label: collection.name, parentCollectionId: collection.parent_id, ...summary });
+    void (async () => {
+      try {
+        const summary = await (await getApi()).collectionDeleteSummary({ collection_id: collection.id });
+        setDeleteTarget({
+          kind: "collection",
+          targetId: collection.id,
+          label: collection.name,
+          parentCollectionId: collection.parent_id,
+          deletedCollectionIds: summary.deleted_collection_ids,
+          deletedItemIds: summary.deleted_item_ids,
+          nestedCollectionCount: summary.nested_collection_count,
+          paperCount: summary.paper_count,
+        });
+      } catch (error) {
+        setStatusMessage(error instanceof Error ? error.message : `Failed to prepare deletion for ${collection.name}.`);
+      }
+    })();
     library.setResourceContextMenu(null);
-  }, [library.collections, library.libraryItems, library]);
+  }, [getApi, library, setStatusMessage]);
 
   const handleRequestDeleteItem = useCallback((item: { id: number; title: string; collection_id: number }) => {
     setDeleteTarget({ kind: "item", targetId: item.id, label: item.title, parentCollectionId: item.collection_id });

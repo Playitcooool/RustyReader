@@ -2,7 +2,6 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  collectionDeleteSummary,
   descendantIdsForCollection,
   droppedPathsFromFileList,
   isSupportedPath,

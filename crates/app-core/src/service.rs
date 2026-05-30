@@ -87,6 +87,14 @@ pub struct LibraryQueryInput {
     pub item_sort: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CollectionDeleteSummary {
+    pub deleted_collection_ids: Vec<i64>,
+    pub deleted_item_ids: Vec<i64>,
+    pub nested_collection_count: usize,
+    pub paper_count: usize,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Annotation {
     pub id: i64,
@@ -819,6 +827,11 @@ impl LibraryService {
             }
         }
         Ok(())
+    }
+
+    pub fn collection_delete_summary(&self, collection_id: i64) -> Result<CollectionDeleteSummary> {
+        let conn = self.connect()?;
+        collection_delete_summary_conn(&conn, collection_id)
     }
 
     pub fn move_collection(&self, collection_id: i64, parent_id: Option<i64>) -> Result<()> {
@@ -4187,6 +4200,23 @@ fn item_ids_for_collection_ids_conn(conn: &Connection, collection_ids: &[i64]) -
     })?;
     rows.collect::<rusqlite::Result<Vec<_>>>()
         .map_err(Into::into)
+}
+
+fn collection_delete_summary_conn(
+    conn: &Connection,
+    collection_id: i64,
+) -> Result<CollectionDeleteSummary> {
+    let deleted_collection_ids = collection_subtree_ids_conn(conn, collection_id)?;
+    if deleted_collection_ids.is_empty() {
+        return Err(anyhow!("collection does not exist"));
+    }
+    let deleted_item_ids = item_ids_for_collection_ids_conn(conn, &deleted_collection_ids)?;
+    Ok(CollectionDeleteSummary {
+        nested_collection_count: deleted_collection_ids.len().saturating_sub(1),
+        paper_count: deleted_item_ids.len(),
+        deleted_collection_ids,
+        deleted_item_ids,
+    })
 }
 
 fn managed_attachment_paths_for_item_ids_conn(

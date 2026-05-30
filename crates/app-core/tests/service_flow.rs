@@ -1264,6 +1264,15 @@ fn removing_collection_recursively_clears_descendant_items_and_related_records()
         )
         .unwrap();
 
+    let summary = service.collection_delete_summary(parent.id).unwrap();
+    assert_eq!(summary.deleted_collection_ids, vec![parent.id, child.id]);
+    assert_eq!(
+        summary.deleted_item_ids,
+        vec![parent_item_id, child_item_id]
+    );
+    assert_eq!(summary.nested_collection_count, 1);
+    assert_eq!(summary.paper_count, 2);
+
     service.remove_collection(parent.id).unwrap();
 
     let collections = service.list_collections().unwrap();
