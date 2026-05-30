@@ -1,8 +1,8 @@
 use app_core::service::{
-    AIArtifact, AISession, AISessionReference, AISessionReferenceKind, AISettings, AITask,
-    Annotation, EvidenceChunk, EvidenceCitationTarget, EvidenceQueryOptions, ImportBatchResult,
-    ImportMode, LibraryItem, ResearchNote, Tag, TranslateSelectionResult, TranslationProvider,
-    UpdateAISettingsInput,
+    AIArtifact, AISession, AISessionReference, AISessionReferenceKind, AISessionScope, AISettings,
+    AITask, Annotation, EvidenceChunk, EvidenceCitationTarget, EvidenceQueryOptions,
+    ImportBatchResult, ImportMode, LibraryItem, ResearchNote, Tag, TranslateSelectionResult,
+    TranslationProvider, UpdateAISettingsInput,
 };
 use serde::{Deserialize, Serialize};
 use std::env;
@@ -460,6 +460,16 @@ pub(crate) fn list_ai_session_references(
 ) -> Result<Vec<AISessionReference>, String> {
     service(&state)
         .list_ai_session_references(session_id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) fn get_ai_session_scope(
+    state: State<'_, AppState>,
+    session_id: i64,
+) -> Result<AISessionScope, String> {
+    service(&state)
+        .get_ai_session_scope(session_id)
         .map_err(|error| error.to_string())
 }
 

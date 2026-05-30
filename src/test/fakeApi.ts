@@ -1205,6 +1205,18 @@ export const fakeApi: AppApi = {
       .sort((left, right) => left.sort_index - right.sort_index);
   },
 
+  async getAiSessionScope(sessionId) {
+    const references = await fakeApi.listAiSessionReferences(sessionId);
+    const item_ids = expandSessionReferenceItemIds(references);
+    const primaryItem = state.items.find((item) => item.id === item_ids[0]);
+    return {
+      session_id: sessionId,
+      item_ids,
+      has_collection_reference: references.some((reference) => reference.kind === "collection"),
+      primary_collection_id: primaryItem?.collection_id ?? null,
+    };
+  },
+
   async addAiSessionReference(input) {
     const existing = state.sessionReferences.find(
       (reference) =>

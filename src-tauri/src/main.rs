@@ -610,6 +610,7 @@ fn main() {
             commands::create_ai_session,
             commands::delete_ai_session,
             commands::list_ai_session_references,
+            commands::get_ai_session_scope,
             commands::add_ai_session_reference,
             commands::remove_ai_session_reference,
             run_ai_session_task,

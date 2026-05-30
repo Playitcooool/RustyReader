@@ -196,6 +196,14 @@ pub struct AISessionReference {
     pub sort_index: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AISessionScope {
+    pub session_id: i64,
+    pub item_ids: Vec<i64>,
+    pub has_collection_reference: bool,
+    pub primary_collection_id: Option<i64>,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum AIProvider {
@@ -2648,6 +2656,18 @@ impl LibraryService {
         )?;
         touch_ai_session(&conn, session_id, None)?;
         Ok(())
+    }
+
+    pub fn get_ai_session_scope(&self, session_id: i64) -> Result<AISessionScope> {
+        let conn = self.connect()?;
+        let references = list_session_references_conn(&conn, session_id)?;
+        let expanded = expand_session_references(&conn, &references)?;
+        Ok(AISessionScope {
+            session_id,
+            item_ids: expanded.item_ids,
+            has_collection_reference: expanded.has_collection_reference,
+            primary_collection_id: expanded.primary_collection_id,
+        })
     }
 
     pub fn run_ai_session_task_with_stream(

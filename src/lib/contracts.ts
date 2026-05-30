@@ -161,6 +161,13 @@ export type AISessionReference = {
   sort_index: number;
 };
 
+export type AISessionScope = {
+  session_id: number;
+  item_ids: number[];
+  has_collection_reference: boolean;
+  primary_collection_id: number | null;
+};
+
 export type AIProvider = "openai" | "anthropic";
 export type TranslationProvider = "openai" | "anthropic" | "deepl";
 
@@ -429,6 +436,7 @@ export type AppApi = {
   createAiSession: () => Promise<AISession>;
   deleteAiSession: (sessionId: number) => Promise<void>;
   listAiSessionReferences: (sessionId: number) => Promise<AISessionReference[]>;
+  getAiSessionScope: (sessionId: number) => Promise<AISessionScope>;
   addAiSessionReference: (input: {
     session_id: number;
     kind: AISessionReferenceKind;

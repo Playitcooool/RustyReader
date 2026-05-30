@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  expandSessionReferenceItemIds,
   filenameStem,
   formatItemMetadata,
   itemCountForCollection,
@@ -72,6 +71,7 @@ export function useAiSessionState({
   const [aiSessions, setAiSessions] = useState<AISession[]>([]);
   const [activeAiSessionId, setActiveAiSessionId] = useState<number | null>(null);
   const [aiSessionReferences, setAiSessionReferences] = useState<AISessionReference[]>([]);
+  const [expandedAiReferenceItemIds, setExpandedAiReferenceItemIds] = useState<number[]>([]);
   const [aiSessionTaskRuns, setAiSessionTaskRuns] = useState<AITask[]>([]);
   const [aiSessionArtifact, setAiSessionArtifact] = useState<AIArtifact | null>(null);
   const [notes, setNotes] = useState<ResearchNote[]>([]);
@@ -115,21 +115,23 @@ export function useAiSessionState({
   const refreshActiveAiSession = useCallback(
     async (sessionId: number) => {
       const runtimeApi = await getApi();
-      const [references, taskRuns, artifact, sessionNotes, sessions] = await Promise.all([
+      const [references, scope, taskRuns, artifact, sessionNotes, sessions] = await Promise.all([
         runtimeApi.listAiSessionReferences(sessionId),
+        runtimeApi.getAiSessionScope(sessionId),
         runtimeApi.listAiSessionTaskRuns(sessionId),
         runtimeApi.getAiSessionArtifact(sessionId),
         runtimeApi.listAiSessionNotes(sessionId),
         runtimeApi.listAiSessions(),
       ]);
       setAiSessionReferences(references);
+      setExpandedAiReferenceItemIds(scope.item_ids);
       setAiSessionTaskRuns(taskRuns);
       setAiSessionArtifact(artifact);
       setNotes(sessionNotes);
       setActiveNoteId(sessionNotes[0]?.id ?? null);
       setNoteDraft(sessionNotes[0]?.markdown ?? "");
       setAiSessions(sessions);
-      return { references, taskRuns, artifact, sessionNotes, sessions };
+      return { references, scope, taskRuns, artifact, sessionNotes, sessions };
     },
     [getApi],
   );
@@ -152,6 +154,7 @@ export function useAiSessionState({
   useEffect(() => {
     if (activeAiSessionId === null) {
       setAiSessionReferences([]);
+      setExpandedAiReferenceItemIds([]);
       setAiSessionTaskRuns([]);
       setAiSessionArtifact(null);
       setNotes([]);
@@ -411,10 +414,6 @@ export function useAiSessionState({
   );
   const sortedReferenceItems = useMemo(() => [...libraryItems].sort((a, b) => a.title.localeCompare(b.title)), [libraryItems]);
   const sortedReferenceCollections = useMemo(() => [...collections].sort((a, b) => a.name.localeCompare(b.name)), [collections]);
-  const expandedAiReferenceItemIds = useMemo(
-    () => expandSessionReferenceItemIds(aiSessionReferences, collections, libraryItems),
-    [aiSessionReferences, collections, libraryItems],
-  );
   const aiReferenceItemIds = useMemo(
     () => new Set(aiSessionReferences.filter((reference) => reference.kind === "item").map((reference) => reference.target_id)),
     [aiSessionReferences],
