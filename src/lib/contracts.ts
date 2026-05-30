@@ -119,6 +119,7 @@ export type EvidenceCitationTarget = {
 };
 
 export type AnnotationFilter = "all" | "current_page" | "search_matches";
+export type PdfHighlightColor = "yellow" | "red" | "green" | "blue" | "purple";
 
 export type AITask = {
   id: number;
@@ -442,6 +443,7 @@ export type AppApi = {
     anchor: string;
     body?: string;
   }) => Promise<Annotation>;
+  colorPdfTextAnchor: (input: { anchor: string; color: PdfHighlightColor }) => Promise<string>;
   removeAnnotation: (input: { annotation_id: number }) => Promise<void>;
   getAiSettings: () => Promise<AISettings>;
   getSystemAiEnv: () => Promise<AIEnvSettings>;

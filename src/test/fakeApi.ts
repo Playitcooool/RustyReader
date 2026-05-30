@@ -1159,6 +1159,35 @@ export const fakeApi: AppApi = {
     return annotation;
   },
 
+  async colorPdfTextAnchor(input) {
+    const parsed = JSON.parse(input.anchor) as {
+      type?: string;
+      page?: number;
+      startDivIndex?: number;
+      startOffset?: number;
+      endDivIndex?: number;
+      endOffset?: number;
+      quote?: string;
+    };
+    if (
+      parsed.type !== "pdf_text" ||
+      typeof parsed.page !== "number" ||
+      parsed.page < 1 ||
+      typeof parsed.startDivIndex !== "number" ||
+      parsed.startDivIndex < 0 ||
+      typeof parsed.startOffset !== "number" ||
+      parsed.startOffset < 0 ||
+      typeof parsed.endDivIndex !== "number" ||
+      parsed.endDivIndex < 0 ||
+      typeof parsed.endOffset !== "number" ||
+      parsed.endOffset < 0 ||
+      typeof parsed.quote !== "string"
+    ) {
+      throw new Error("invalid PDF text anchor");
+    }
+    return JSON.stringify({ ...parsed, color: input.color });
+  },
+
   async removeAnnotation(input) {
     state.annotations = state.annotations.filter((annotation) => annotation.id !== input.annotation_id);
   },

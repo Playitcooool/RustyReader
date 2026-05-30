@@ -104,6 +104,34 @@ pub struct Annotation {
     pub body: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum PdfHighlightColor {
+    Yellow,
+    Red,
+    Green,
+    Blue,
+    Purple,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PdfTextAnchor {
+    #[serde(rename = "type")]
+    pub anchor_type: String,
+    pub page: i64,
+    #[serde(rename = "startDivIndex")]
+    pub start_div_index: i64,
+    #[serde(rename = "startOffset")]
+    pub start_offset: i64,
+    #[serde(rename = "endDivIndex")]
+    pub end_div_index: i64,
+    #[serde(rename = "endOffset")]
+    pub end_offset: i64,
+    pub quote: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<PdfHighlightColor>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvidenceChunk {
     pub id: i64,
@@ -1795,6 +1823,10 @@ impl LibraryService {
             body: next_body,
             ..existing
         })
+    }
+
+    pub fn color_pdf_text_anchor(&self, anchor: &str, color: PdfHighlightColor) -> Result<String> {
+        color_pdf_text_anchor(anchor, color)
     }
 
     pub fn get_ai_settings(&self) -> Result<AISettings> {
@@ -4486,6 +4518,24 @@ fn query_library_items(
     output
 }
 
+fn color_pdf_text_anchor(anchor: &str, color: PdfHighlightColor) -> Result<String> {
+    let mut parsed =
+        serde_json::from_str::<PdfTextAnchor>(anchor).context("invalid PDF text anchor")?;
+    if parsed.anchor_type != "pdf_text" {
+        return Err(anyhow!("anchor is not a PDF text anchor"));
+    }
+    if parsed.page < 1
+        || parsed.start_div_index < 0
+        || parsed.start_offset < 0
+        || parsed.end_div_index < 0
+        || parsed.end_offset < 0
+    {
+        return Err(anyhow!("invalid PDF text anchor coordinates"));
+    }
+    parsed.color = Some(color);
+    serde_json::to_string(&parsed).map_err(Into::into)
+}
+
 fn expand_session_reference_item_ids(
     references: &[AISessionReference],
     collections: &[Collection],
@@ -6496,5 +6546,41 @@ mod tests {
     #[test]
     fn queries_library_items_return_empty_without_selected_collection() {
         assert!(query_library_items(&[], &[item(10, 1)], &[], &library_query(None)).is_empty());
+    }
+
+    #[test]
+    fn colors_valid_pdf_text_anchor() {
+        let anchor = serde_json::json!({
+            "type": "pdf_text",
+            "page": 2,
+            "startDivIndex": 1,
+            "startOffset": 3,
+            "endDivIndex": 1,
+            "endOffset": 9,
+            "quote": "scaling"
+        })
+        .to_string();
+
+        let colored = color_pdf_text_anchor(&anchor, PdfHighlightColor::Purple).unwrap();
+        let parsed = serde_json::from_str::<PdfTextAnchor>(&colored).unwrap();
+
+        assert_eq!(parsed.anchor_type, "pdf_text");
+        assert_eq!(parsed.page, 2);
+        assert_eq!(parsed.color, Some(PdfHighlightColor::Purple));
+    }
+
+    #[test]
+    fn rejects_invalid_pdf_text_anchor_color_targets() {
+        assert!(color_pdf_text_anchor("not-json", PdfHighlightColor::Blue).is_err());
+        assert!(
+            color_pdf_text_anchor(r#"{"type":"pdf_text_box"}"#, PdfHighlightColor::Blue).is_err()
+        );
+        assert!(
+            color_pdf_text_anchor(
+                r#"{"type":"pdf_text","page":0,"startDivIndex":0,"startOffset":0,"endDivIndex":0,"endOffset":1,"quote":"x"}"#,
+                PdfHighlightColor::Blue,
+            )
+            .is_err()
+        );
     }
 }

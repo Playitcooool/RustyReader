@@ -1,8 +1,8 @@
 use app_core::service::{
     AIArtifact, AISession, AISessionReference, AISessionReferenceKind, AISessionScope, AISettings,
     AITask, Annotation, EvidenceChunk, EvidenceCitationTarget, EvidenceQueryOptions,
-    ImportBatchResult, ImportMode, LibraryItem, LibraryQueryInput, ResearchNote, Tag,
-    TranslateSelectionResult, TranslationProvider, UpdateAISettingsInput,
+    ImportBatchResult, ImportMode, LibraryItem, LibraryQueryInput, PdfHighlightColor, ResearchNote,
+    Tag, TranslateSelectionResult, TranslationProvider, UpdateAISettingsInput,
 };
 use serde::{Deserialize, Serialize};
 use std::env;
@@ -29,6 +29,12 @@ pub(crate) struct UpdateAnnotationInput {
     annotation_id: i64,
     anchor: String,
     body: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct ColorPdfTextAnchorInput {
+    anchor: String,
+    color: PdfHighlightColor,
 }
 
 #[derive(Deserialize)]
@@ -194,6 +200,16 @@ pub(crate) fn update_annotation(
 ) -> Result<Annotation, String> {
     service(&state)
         .update_annotation(input.annotation_id, input.anchor, input.body)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) fn color_pdf_text_anchor(
+    state: State<'_, AppState>,
+    input: ColorPdfTextAnchorInput,
+) -> Result<String, String> {
+    service(&state)
+        .color_pdf_text_anchor(&input.anchor, input.color)
         .map_err(|error| error.to_string())
 }
 

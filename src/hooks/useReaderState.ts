@@ -341,28 +341,20 @@ export function useReaderState({
     setActivePdfHighlight(null);
   }, []);
 
-  const addColorToPdfAnchor = useCallback((anchor: string, color: PdfHighlightColor) => {
-    try {
-      const parsed = JSON.parse(anchor) as { type?: string };
-      if (!parsed || parsed.type !== "pdf_text") return anchor;
-      return JSON.stringify({ ...parsed, color });
-    } catch {
-      return anchor;
-    }
-  }, []);
-
   const handleCreatePdfFocusHighlight = useCallback(async (color: PdfHighlightColor) => {
     if (!activePaper || !pdfTextToolsEnabled || !pdfSelection || workspaceMode !== "pdf_focus") return;
-    const annotation = await (await getApi()).createAnnotation({
+    const runtimeApi = await getApi();
+    const anchor = await runtimeApi.colorPdfTextAnchor({ anchor: pdfSelection.anchor, color });
+    const annotation = await runtimeApi.createAnnotation({
       item_id: activePaper.id,
-      anchor: addColorToPdfAnchor(pdfSelection.anchor, color),
+      anchor,
       kind: "highlight",
       body: pdfSelection.quote,
     });
     setAnnotations((current) => [...current, annotation]);
     setStatusMessage("Created highlight.");
     dismissPdfSelection();
-  }, [activePaper, addColorToPdfAnchor, dismissPdfSelection, getApi, pdfSelection, pdfTextToolsEnabled, setStatusMessage, workspaceMode]);
+  }, [activePaper, dismissPdfSelection, getApi, pdfSelection, pdfTextToolsEnabled, setStatusMessage, workspaceMode]);
 
   const handleCreatePdfFocusTextBoxAnnotation = useCallback(async (draft: PdfTextBoxAnnotationDraft) => {
     if (!activePaper || !pdfTextToolsEnabled || workspaceMode !== "pdf_focus") return;
