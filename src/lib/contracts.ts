@@ -444,6 +444,7 @@ export type AppApi = {
     body?: string;
   }) => Promise<Annotation>;
   colorPdfTextAnchor: (input: { anchor: string; color: PdfHighlightColor }) => Promise<string>;
+  normalizePdfTextBoxAnchor: (input: { anchor: string }) => Promise<string>;
   removeAnnotation: (input: { annotation_id: number }) => Promise<void>;
   getAiSettings: () => Promise<AISettings>;
   getSystemAiEnv: () => Promise<AIEnvSettings>;

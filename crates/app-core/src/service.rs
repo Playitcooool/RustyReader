@@ -132,6 +132,31 @@ pub struct PdfTextAnchor {
     pub color: Option<PdfHighlightColor>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum PdfTextBoxColor {
+    Black,
+    Red,
+    Green,
+    Blue,
+    Purple,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PdfTextBoxAnchor {
+    #[serde(rename = "type")]
+    pub anchor_type: String,
+    pub page: i64,
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<PdfTextBoxColor>,
+    #[serde(rename = "fontSize", skip_serializing_if = "Option::is_none")]
+    pub font_size: Option<i64>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvidenceChunk {
     pub id: i64,
@@ -1827,6 +1852,10 @@ impl LibraryService {
 
     pub fn color_pdf_text_anchor(&self, anchor: &str, color: PdfHighlightColor) -> Result<String> {
         color_pdf_text_anchor(anchor, color)
+    }
+
+    pub fn normalize_pdf_text_box_anchor(&self, anchor: &str) -> Result<String> {
+        normalize_pdf_text_box_anchor(anchor)
     }
 
     pub fn get_ai_settings(&self) -> Result<AISettings> {
@@ -4536,6 +4565,39 @@ fn color_pdf_text_anchor(anchor: &str, color: PdfHighlightColor) -> Result<Strin
     serde_json::to_string(&parsed).map_err(Into::into)
 }
 
+fn clamp_unit(value: f64) -> f64 {
+    value.clamp(0.0, 1.0)
+}
+
+fn normalize_pdf_text_box_anchor(anchor: &str) -> Result<String> {
+    let parsed =
+        serde_json::from_str::<PdfTextBoxAnchor>(anchor).context("invalid PDF text box anchor")?;
+    if parsed.anchor_type != "pdf_text_box" {
+        return Err(anyhow!("anchor is not a PDF text box anchor"));
+    }
+    if parsed.page < 1
+        || !parsed.x.is_finite()
+        || !parsed.y.is_finite()
+        || !parsed.width.is_finite()
+        || !parsed.height.is_finite()
+        || parsed.width <= 0.0
+        || parsed.height <= 0.0
+    {
+        return Err(anyhow!("invalid PDF text box anchor coordinates"));
+    }
+    let normalized = PdfTextBoxAnchor {
+        anchor_type: "pdf_text_box".to_string(),
+        page: parsed.page,
+        x: clamp_unit(parsed.x),
+        y: clamp_unit(parsed.y),
+        width: clamp_unit(parsed.width),
+        height: clamp_unit(parsed.height),
+        color: Some(parsed.color.unwrap_or(PdfTextBoxColor::Black)),
+        font_size: Some(parsed.font_size.unwrap_or(13).clamp(10, 24)),
+    };
+    serde_json::to_string(&normalized).map_err(Into::into)
+}
+
 fn expand_session_reference_item_ids(
     references: &[AISessionReference],
     collections: &[Collection],
@@ -6582,5 +6644,47 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn normalizes_valid_pdf_text_box_anchor() {
+        let anchor = serde_json::json!({
+            "type": "pdf_text_box",
+            "page": 1,
+            "x": -0.2,
+            "y": 1.2,
+            "width": 0.25,
+            "height": 0.1,
+            "color": "purple",
+            "fontSize": 30
+        })
+        .to_string();
+
+        let normalized = normalize_pdf_text_box_anchor(&anchor).unwrap();
+        let parsed = serde_json::from_str::<PdfTextBoxAnchor>(&normalized).unwrap();
+
+        assert_eq!(parsed.anchor_type, "pdf_text_box");
+        assert_eq!(parsed.x, 0.0);
+        assert_eq!(parsed.y, 1.0);
+        assert_eq!(parsed.color, Some(PdfTextBoxColor::Purple));
+        assert_eq!(parsed.font_size, Some(24));
+    }
+
+    #[test]
+    fn defaults_pdf_text_box_style_and_rejects_invalid_coordinates() {
+        let normalized = normalize_pdf_text_box_anchor(
+            r#"{"type":"pdf_text_box","page":1,"x":0.2,"y":0.3,"width":0.4,"height":0.2}"#,
+        )
+        .unwrap();
+        let parsed = serde_json::from_str::<PdfTextBoxAnchor>(&normalized).unwrap();
+        assert_eq!(parsed.color, Some(PdfTextBoxColor::Black));
+        assert_eq!(parsed.font_size, Some(13));
+
+        assert!(normalize_pdf_text_box_anchor("not-json").is_err());
+        assert!(normalize_pdf_text_box_anchor(r#"{"type":"pdf_text"}"#).is_err());
+        assert!(normalize_pdf_text_box_anchor(
+            r#"{"type":"pdf_text_box","page":1,"x":0,"y":0,"width":0,"height":0.2}"#,
+        )
+        .is_err());
     }
 }

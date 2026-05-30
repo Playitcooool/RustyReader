@@ -614,6 +614,7 @@ fn main() {
             commands::remove_annotation,
             commands::update_annotation,
             commands::color_pdf_text_anchor,
+            commands::normalize_pdf_text_box_anchor,
             commands::update_markdown_item,
             commands::get_ai_settings,
             commands::get_system_ai_env,

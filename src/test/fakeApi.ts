@@ -1188,6 +1188,50 @@ export const fakeApi: AppApi = {
     return JSON.stringify({ ...parsed, color: input.color });
   },
 
+  async normalizePdfTextBoxAnchor(input) {
+    const parsed = JSON.parse(input.anchor) as {
+      type?: string;
+      page?: number;
+      x?: number;
+      y?: number;
+      width?: number;
+      height?: number;
+      color?: string;
+      fontSize?: number;
+    };
+    const clampUnit = (value: number) => Math.max(0, Math.min(1, value));
+    const colors = new Set(["black", "red", "green", "blue", "purple"]);
+    if (
+      parsed.type !== "pdf_text_box" ||
+      typeof parsed.page !== "number" ||
+      parsed.page < 1 ||
+      typeof parsed.x !== "number" ||
+      typeof parsed.y !== "number" ||
+      typeof parsed.width !== "number" ||
+      typeof parsed.height !== "number" ||
+      !Number.isFinite(parsed.x) ||
+      !Number.isFinite(parsed.y) ||
+      !Number.isFinite(parsed.width) ||
+      !Number.isFinite(parsed.height) ||
+      parsed.width <= 0 ||
+      parsed.height <= 0
+    ) {
+      throw new Error("invalid PDF text box anchor");
+    }
+    return JSON.stringify({
+      type: "pdf_text_box",
+      page: parsed.page,
+      x: clampUnit(parsed.x),
+      y: clampUnit(parsed.y),
+      width: clampUnit(parsed.width),
+      height: clampUnit(parsed.height),
+      color: typeof parsed.color === "string" && colors.has(parsed.color) ? parsed.color : "black",
+      fontSize: typeof parsed.fontSize === "number" && Number.isFinite(parsed.fontSize)
+        ? Math.max(10, Math.min(24, Math.round(parsed.fontSize)))
+        : 13,
+    });
+  },
+
   async removeAnnotation(input) {
     state.annotations = state.annotations.filter((annotation) => annotation.id !== input.annotation_id);
   },

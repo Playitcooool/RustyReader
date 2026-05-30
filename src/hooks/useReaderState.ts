@@ -360,9 +360,11 @@ export function useReaderState({
     if (!activePaper || !pdfTextToolsEnabled || workspaceMode !== "pdf_focus") return;
     const body = draft.body.trim();
     if (!body) return;
-    const annotation = await (await getApi()).createAnnotation({
+    const runtimeApi = await getApi();
+    const anchor = await runtimeApi.normalizePdfTextBoxAnchor({ anchor: draft.anchor });
+    const annotation = await runtimeApi.createAnnotation({
       item_id: activePaper.id,
-      anchor: draft.anchor,
+      anchor,
       kind: "text_box",
       body,
     });
