@@ -1004,6 +1004,39 @@ export const fakeApi: AppApi = {
       .map(buildLibraryItem);
   },
 
+  async queryLibraryItems(input) {
+    if (input.collection_id === null) return [];
+    const collectionIds = new Set([input.collection_id, ...childCollectionIds(input.collection_id)]);
+    const selectedTagName =
+      input.selected_tag_id === null ? null : state.tags.find((tag) => tag.id === input.selected_tag_id)?.name ?? null;
+    const lowered = input.search.trim().toLowerCase();
+    const matchesSearch = (item: LibraryItem) =>
+      lowered.length === 0 ||
+      [
+        item.title,
+        item.authors,
+        item.source,
+        item.doi ?? "",
+        String(item.publication_year ?? ""),
+        item.tags.join(" "),
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(lowered);
+    const items = state.items
+      .map(buildLibraryItem)
+      .filter((item) => collectionIds.has(item.collection_id))
+      .filter(matchesSearch)
+      .filter((item) => input.attachment_filter === "all" || item.attachment_status === input.attachment_filter)
+      .filter((item) => selectedTagName === null || item.tags.includes(selectedTagName));
+    items.sort((left, right) => {
+      if (input.item_sort === "title") return left.title.localeCompare(right.title);
+      if (input.item_sort === "year_desc") return (right.publication_year ?? 0) - (left.publication_year ?? 0);
+      return right.id - left.id;
+    });
+    return items;
+  },
+
   async searchItems(query) {
     const lowered = query.trim().toLowerCase();
     return state.items

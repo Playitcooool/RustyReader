@@ -79,6 +79,15 @@ pub struct LibraryItem {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LibraryQueryInput {
+    pub collection_id: Option<i64>,
+    pub search: String,
+    pub selected_tag_id: Option<i64>,
+    pub attachment_filter: String,
+    pub item_sort: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Annotation {
     pub id: i64,
     pub item_id: i64,
@@ -1468,6 +1477,28 @@ impl LibraryService {
         };
         let base_items = rows.collect::<rusqlite::Result<Vec<_>>>()?;
         hydrate_item_tags(&conn, base_items)
+    }
+
+    pub fn query_library_items(&self, input: LibraryQueryInput) -> Result<Vec<LibraryItem>> {
+        let conn = self.connect()?;
+        let mut collection_statement =
+            conn.prepare("SELECT id, name, parent_id FROM collections ORDER BY name ASC")?;
+        let collection_rows = collection_statement.query_map([], map_collection)?;
+        let collections = collection_rows.collect::<rusqlite::Result<Vec<_>>>()?;
+
+        let mut item_statement = conn.prepare(
+            "
+            SELECT i.id, i.title, i.collection_id, a.id, a.path, a.status, i.authors, i.publication_year, i.source, i.doi
+            FROM items i
+            JOIN attachments a ON a.item_id = i.id AND a.is_primary = 1
+            ORDER BY i.id DESC
+            ",
+        )?;
+        let rows = item_statement.query_map([], map_library_item)?;
+        let items = hydrate_item_tags(&conn, rows.collect::<rusqlite::Result<Vec<_>>>()?)?;
+
+        let tags = self.list_tags(None)?;
+        Ok(query_library_items(&collections, &items, &tags, &input))
     }
 
     pub fn update_item_metadata(
@@ -4337,6 +4368,94 @@ fn scope_item_ids_may_contain_removed_id(raw_scope: &str, removed_item_ids: &Has
     })
 }
 
+fn descendant_ids_for_collection(collections: &[Collection], collection_id: i64) -> HashSet<i64> {
+    let mut children_by_parent_id = HashMap::<i64, Vec<i64>>::new();
+    for collection in collections {
+        let Some(parent_id) = collection.parent_id else {
+            continue;
+        };
+        children_by_parent_id
+            .entry(parent_id)
+            .or_default()
+            .push(collection.id);
+    }
+
+    let mut descendants = HashSet::new();
+    let mut stack = vec![collection_id];
+    while let Some(current_id) = stack.pop() {
+        for child_id in children_by_parent_id.get(&current_id).into_iter().flatten() {
+            if descendants.insert(*child_id) {
+                stack.push(*child_id);
+            }
+        }
+    }
+    descendants
+}
+
+fn library_item_matches_search(item: &LibraryItem, query: &str) -> bool {
+    let normalized = query.trim().to_lowercase();
+    if normalized.is_empty() {
+        return true;
+    }
+    let search_text = format!(
+        "{} {} {} {} {} {}",
+        item.title,
+        item.authors,
+        item.source,
+        item.doi.as_deref().unwrap_or(""),
+        item.publication_year
+            .map(|year| year.to_string())
+            .unwrap_or_default(),
+        item.tags.join(" ")
+    );
+    search_text.to_lowercase().contains(&normalized)
+}
+
+fn query_library_items(
+    collections: &[Collection],
+    items: &[LibraryItem],
+    tags: &[Tag],
+    input: &LibraryQueryInput,
+) -> Vec<LibraryItem> {
+    let Some(collection_id) = input.collection_id else {
+        return Vec::new();
+    };
+
+    let mut collection_scope = descendant_ids_for_collection(collections, collection_id);
+    collection_scope.insert(collection_id);
+    let selected_tag_name = input
+        .selected_tag_id
+        .and_then(|tag_id| tags.iter().find(|tag| tag.id == tag_id))
+        .map(|tag| tag.name.as_str());
+
+    let mut output = items
+        .iter()
+        .filter(|item| collection_scope.contains(&item.collection_id))
+        .filter(|item| library_item_matches_search(item, &input.search))
+        .filter(|item| {
+            input.attachment_filter == "all" || item.attachment_status == input.attachment_filter
+        })
+        .filter(|item| {
+            selected_tag_name
+                .map(|tag_name| item.tags.iter().any(|tag| tag == tag_name))
+                .unwrap_or(true)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+
+    match input.item_sort.as_str() {
+        "title" => output.sort_by(|left, right| left.title.cmp(&right.title)),
+        "year_desc" => output.sort_by(|left, right| {
+            right
+                .publication_year
+                .unwrap_or(0)
+                .cmp(&left.publication_year.unwrap_or(0))
+        }),
+        _ => output.sort_by(|left, right| right.id.cmp(&left.id)),
+    }
+    output
+}
+
 fn expand_session_reference_item_ids(
     references: &[AISessionReference],
     collections: &[Collection],
@@ -6154,6 +6273,16 @@ mod tests {
         }
     }
 
+    fn library_query(collection_id: Option<i64>) -> LibraryQueryInput {
+        LibraryQueryInput {
+            collection_id,
+            search: String::new(),
+            selected_tag_id: None,
+            attachment_filter: "all".to_string(),
+            item_sort: "recent".to_string(),
+        }
+    }
+
     fn reference(
         kind: AISessionReferenceKind,
         target_id: i64,
@@ -6251,5 +6380,91 @@ mod tests {
             expand_session_reference_item_ids(&references, &collections, &items),
             vec![10]
         );
+    }
+
+    #[test]
+    fn queries_library_items_with_collection_scope_search_and_sort() {
+        let collections = vec![
+            Collection {
+                id: 1,
+                name: "Root".to_string(),
+                parent_id: None,
+            },
+            Collection {
+                id: 2,
+                name: "Child".to_string(),
+                parent_id: Some(1),
+            },
+            Collection {
+                id: 3,
+                name: "Other".to_string(),
+                parent_id: None,
+            },
+        ];
+        let mut first = item(10, 1);
+        first.title = "Transformer Scaling Laws".to_string();
+        first.authors = "Kaplan et al.".to_string();
+        first.publication_year = Some(2020);
+        first.tags = vec!["llm".to_string()];
+        let mut second = item(11, 2);
+        second.title = "Graph Neural Survey".to_string();
+        second.publication_year = Some(2021);
+        second.tags = vec!["vision".to_string()];
+        let mut third = item(12, 3);
+        third.title = "Distributed Consensus".to_string();
+
+        let mut input = library_query(Some(1));
+        input.search = "survey".to_string();
+        input.item_sort = "title".to_string();
+
+        let result = query_library_items(&collections, &[first, second, third], &[], &input);
+
+        assert_eq!(
+            result.iter().map(|item| item.id).collect::<Vec<_>>(),
+            vec![11]
+        );
+    }
+
+    #[test]
+    fn queries_library_items_with_tag_and_attachment_filters() {
+        let collections = vec![Collection {
+            id: 1,
+            name: "Root".to_string(),
+            parent_id: None,
+        }];
+        let tags = vec![
+            Tag {
+                id: 1,
+                name: "llm".to_string(),
+                item_count: 1,
+            },
+            Tag {
+                id: 2,
+                name: "vision".to_string(),
+                item_count: 1,
+            },
+        ];
+        let mut first = item(10, 1);
+        first.tags = vec!["llm".to_string()];
+        first.attachment_status = "ready".to_string();
+        let mut second = item(11, 1);
+        second.tags = vec!["vision".to_string()];
+        second.attachment_status = "missing".to_string();
+
+        let mut input = library_query(Some(1));
+        input.selected_tag_id = Some(2);
+        input.attachment_filter = "missing".to_string();
+
+        let result = query_library_items(&collections, &[first, second], &tags, &input);
+
+        assert_eq!(
+            result.iter().map(|item| item.id).collect::<Vec<_>>(),
+            vec![11]
+        );
+    }
+
+    #[test]
+    fn queries_library_items_return_empty_without_selected_collection() {
+        assert!(query_library_items(&[], &[item(10, 1)], &[], &library_query(None)).is_empty());
     }
 }

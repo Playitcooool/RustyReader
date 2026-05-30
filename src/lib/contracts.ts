@@ -48,6 +48,14 @@ export type LibraryItem = {
   tags: string[];
 };
 
+export type LibraryQueryInput = {
+  collection_id: number | null;
+  search: string;
+  selected_tag_id: number | null;
+  attachment_filter: "all" | "ready" | "missing" | "citation_only";
+  item_sort: "recent" | "title" | "year_desc";
+};
+
 export type ReaderView = {
   item_id: number;
   title: string;
@@ -409,6 +417,7 @@ export type AppApi = {
   removeItem: (input: { item_id: number }) => Promise<void>;
   moveItem: (input: { item_id: number; collection_id: number }) => Promise<void>;
   listItems: (collectionId?: number) => Promise<LibraryItem[]>;
+  queryLibraryItems: (input: LibraryQueryInput) => Promise<LibraryItem[]>;
   searchItems: (query: string) => Promise<LibraryItem[]>;
   getReaderView: (itemId: number) => Promise<ReaderView>;
   updateMarkdownItem: (input: { item_id: number; markdown: string }) => Promise<ReaderView>;

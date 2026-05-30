@@ -2,15 +2,12 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  applyTagFilter,
   collectionDeleteSummary,
   descendantIdsForCollection,
   droppedPathsFromFileList,
-  filterItemsByAttachment,
   isSupportedPath,
   matchesSearch,
   readStoredString,
-  sortItems,
   type AttachmentFilter,
   type ItemSort,
 } from "../lib/appView";
@@ -40,12 +37,14 @@ export function useLibraryState({
   const importPathsRef = useRef<(paths: string[], sourceLabel: string) => void>(() => {});
   const resourceContextMenuRef = useRef<HTMLDivElement | null>(null);
   const selectedCollectionIdRef = useRef<number | null>(null);
+  const libraryQueryRequestIdRef = useRef(0);
 
   const [collections, setCollections] = useState<Collection[]>([]);
   const [libraryItems, setLibraryItems] = useState<LibraryItem[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [selectedCollectionId, setSelectedCollectionId] = useState<number | null>(null);
   const [selectedTagId, setSelectedTagId] = useState<number | null>(null);
+  const [visibleItems, setVisibleItems] = useState<LibraryItem[]>([]);
   const [search, setSearch] = useState("");
   const [itemSort, setItemSort] = useState<ItemSort>(() =>
     readStoredString(ITEM_SORT_KEY, DEFAULT_ITEM_SORT, ["recent", "title", "year_desc"] as const),
@@ -76,15 +75,40 @@ export function useLibraryState({
     if (!selectedCollectionScope) return [];
     return libraryItems.filter((item) => selectedCollectionScope.has(item.collection_id) && matchesSearch(item, search));
   }, [libraryItems, search, selectedCollectionScope]);
-  const visibleItems = useMemo(
-    () => sortItems(filterItemsByAttachment(applyTagFilter(activeCollectionItems, tags, selectedTagId), attachmentFilter), itemSort),
-    [activeCollectionItems, attachmentFilter, itemSort, selectedTagId, tags],
-  );
   const importHasIssues = Boolean(lastImportResult && (lastImportResult.duplicates.length > 0 || lastImportResult.failed.length > 0));
 
   useEffect(() => {
     selectedCollectionIdRef.current = selectedCollectionId;
   }, [selectedCollectionId]);
+
+  useEffect(() => {
+    const requestId = libraryQueryRequestIdRef.current + 1;
+    libraryQueryRequestIdRef.current = requestId;
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const runtimeApi = await getApi();
+        const items = await runtimeApi.queryLibraryItems({
+          collection_id: selectedCollectionId,
+          search,
+          selected_tag_id: selectedTagId,
+          attachment_filter: attachmentFilter,
+          item_sort: itemSort,
+        });
+        if (cancelled || libraryQueryRequestIdRef.current !== requestId) return;
+        setVisibleItems(items);
+      } catch (error) {
+        if (cancelled || libraryQueryRequestIdRef.current !== requestId) return;
+        setVisibleItems([]);
+        setStatusMessage(error instanceof Error ? error.message : "Failed to filter library items.");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [attachmentFilter, getApi, itemSort, libraryItems, search, selectedCollectionId, selectedTagId, setStatusMessage]);
 
   const loadLibrary = useCallback(async (options: { refreshStatuses?: boolean } = {}) => {
     const runtimeApi = await getApi();
