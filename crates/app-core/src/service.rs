@@ -4317,65 +4317,49 @@ fn scope_item_ids_may_contain_removed_id(raw_scope: &str, removed_item_ids: &Has
     })
 }
 
-fn child_collections_for_conn(
-    conn: &Connection,
-    parent_id: Option<i64>,
-) -> Result<Vec<Collection>> {
-    let query = if parent_id.is_some() {
-        "SELECT id, name, parent_id FROM collections WHERE parent_id = ?1 ORDER BY name ASC"
-    } else {
-        "SELECT id, name, parent_id FROM collections WHERE parent_id IS NULL ORDER BY name ASC"
-    };
-    let mut statement = conn.prepare(query)?;
-    let rows = if let Some(parent_id) = parent_id {
-        statement.query_map([parent_id], map_collection)?
-    } else {
-        statement.query_map([], map_collection)?
-    };
-    rows.collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(Into::into)
-}
-
-fn collect_collection_tree_ids(
-    conn: &Connection,
-    collection_id: i64,
-    out: &mut Vec<i64>,
-) -> Result<()> {
-    out.push(collection_id);
-    for child in child_collections_for_conn(conn, Some(collection_id))? {
-        collect_collection_tree_ids(conn, child.id, out)?;
-    }
-    Ok(())
-}
-
-fn expand_session_references(
-    conn: &Connection,
+fn expand_session_reference_item_ids(
     references: &[AISessionReference],
-) -> Result<SessionPromptExpansion> {
+    collections: &[Collection],
+    items: &[LibraryItem],
+) -> Vec<i64> {
+    let mut children_by_parent_id = HashMap::<i64, Vec<&Collection>>::new();
+    for collection in collections {
+        let Some(parent_id) = collection.parent_id else {
+            continue;
+        };
+        children_by_parent_id
+            .entry(parent_id)
+            .or_default()
+            .push(collection);
+    }
+    for children in children_by_parent_id.values_mut() {
+        children.sort_by(|left, right| left.name.cmp(&right.name));
+    }
+
+    let items_by_id = items
+        .iter()
+        .map(|item| (item.id, item))
+        .collect::<HashMap<_, _>>();
+    let mut items_by_collection_id = HashMap::<i64, Vec<&LibraryItem>>::new();
+    for item in items {
+        items_by_collection_id
+            .entry(item.collection_id)
+            .or_default()
+            .push(item);
+    }
+    for collection_items in items_by_collection_id.values_mut() {
+        collection_items.sort_by(|left, right| right.id.cmp(&left.id));
+    }
+
     let mut item_ids = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-    let mut has_collection_reference = false;
-    let mut primary_collection_id = None;
+    let mut seen = HashSet::new();
 
     for reference in references
         .iter()
         .filter(|reference| reference.kind == AISessionReferenceKind::Item)
     {
-        let row = conn
-            .query_row(
-                "SELECT id, collection_id FROM items WHERE id = ?1",
-                [reference.target_id],
-                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
-            )
-            .optional()?;
-        let Some((item_id, collection_id)) = row else {
-            continue;
-        };
-        if seen.insert(item_id) {
-            if primary_collection_id.is_none() {
-                primary_collection_id = Some(collection_id);
-            }
-            item_ids.push(item_id);
+        if items_by_id.contains_key(&reference.target_id) && seen.insert(reference.target_id) {
+            item_ids.push(reference.target_id);
         }
     }
 
@@ -4383,32 +4367,65 @@ fn expand_session_references(
         .iter()
         .filter(|reference| reference.kind == AISessionReferenceKind::Collection)
     {
-        has_collection_reference = true;
-        let mut collection_tree_ids = Vec::new();
-        collect_collection_tree_ids(conn, reference.target_id, &mut collection_tree_ids)?;
-        for collection_id in collection_tree_ids {
-            let mut statement = conn.prepare(
-                "
-                SELECT id, collection_id
-                FROM items
-                WHERE collection_id = ?1
-                ORDER BY id DESC
-                ",
-            )?;
-            let rows = statement.query_map([collection_id], |row| {
-                Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?))
-            })?;
-            for row in rows {
-                let (item_id, row_collection_id) = row?;
-                if seen.insert(item_id) {
-                    if primary_collection_id.is_none() {
-                        primary_collection_id = Some(row_collection_id);
-                    }
-                    item_ids.push(item_id);
+        let mut collection_ids = vec![reference.target_id];
+        let mut stack = children_by_parent_id
+            .get(&reference.target_id)
+            .map(|children| children.iter().rev().copied().collect::<Vec<_>>())
+            .unwrap_or_default();
+        while let Some(collection) = stack.pop() {
+            collection_ids.push(collection.id);
+            if let Some(children) = children_by_parent_id.get(&collection.id) {
+                for child in children.iter().rev() {
+                    stack.push(child);
+                }
+            }
+        }
+
+        for collection_id in collection_ids {
+            for item in items_by_collection_id
+                .get(&collection_id)
+                .into_iter()
+                .flatten()
+            {
+                if seen.insert(item.id) {
+                    item_ids.push(item.id);
                 }
             }
         }
     }
+
+    item_ids
+}
+
+fn expand_session_references(
+    conn: &Connection,
+    references: &[AISessionReference],
+) -> Result<SessionPromptExpansion> {
+    let mut collection_statement =
+        conn.prepare("SELECT id, name, parent_id FROM collections ORDER BY name ASC")?;
+    let collection_rows = collection_statement.query_map([], map_collection)?;
+    let collections = collection_rows.collect::<rusqlite::Result<Vec<_>>>()?;
+    let mut statement = conn.prepare(
+        "
+        SELECT i.id, i.title, i.collection_id, a.id, a.path, a.status, i.authors, i.publication_year, i.source, i.doi
+        FROM items i
+        JOIN attachments a ON a.item_id = i.id AND a.is_primary = 1
+        ORDER BY i.id DESC
+        ",
+    )?;
+    let rows = statement.query_map([], map_library_item)?;
+    let items = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+    let item_ids = expand_session_reference_item_ids(references, &collections, &items);
+    let collection_by_item_id = items
+        .iter()
+        .map(|item| (item.id, item.collection_id))
+        .collect::<HashMap<_, _>>();
+    let primary_collection_id = item_ids
+        .first()
+        .and_then(|item_id| collection_by_item_id.get(item_id).copied());
+    let has_collection_reference = references
+        .iter()
+        .any(|reference| reference.kind == AISessionReferenceKind::Collection);
 
     Ok(SessionPromptExpansion {
         item_ids,
@@ -6095,4 +6112,124 @@ fn resolve_relative_path(base: &str, relative: &str) -> String {
     let base = Path::new(base);
     let parent = base.parent().unwrap_or_else(|| Path::new(""));
     parent.join(relative).to_string_lossy().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn item(id: i64, collection_id: i64) -> LibraryItem {
+        LibraryItem {
+            id,
+            title: format!("Paper {id}"),
+            collection_id,
+            primary_attachment_id: id + 100,
+            attachment_format: "pdf".to_string(),
+            attachment_status: "ready".to_string(),
+            authors: String::new(),
+            publication_year: None,
+            source: String::new(),
+            doi: None,
+            tags: Vec::new(),
+        }
+    }
+
+    fn reference(
+        kind: AISessionReferenceKind,
+        target_id: i64,
+        sort_index: i64,
+    ) -> AISessionReference {
+        AISessionReference {
+            id: sort_index + 1,
+            session_id: 1,
+            kind,
+            target_id,
+            sort_index,
+        }
+    }
+
+    #[test]
+    fn expands_item_references_before_collection_references() {
+        let collections = vec![
+            Collection {
+                id: 1,
+                name: "Root".to_string(),
+                parent_id: None,
+            },
+            Collection {
+                id: 2,
+                name: "Child".to_string(),
+                parent_id: Some(1),
+            },
+        ];
+        let items = vec![item(10, 1), item(11, 1), item(12, 2)];
+        let references = vec![
+            reference(AISessionReferenceKind::Item, 12, 0),
+            reference(AISessionReferenceKind::Collection, 1, 1),
+        ];
+
+        assert_eq!(
+            expand_session_reference_item_ids(&references, &collections, &items),
+            vec![12, 11, 10]
+        );
+    }
+
+    #[test]
+    fn expands_collection_children_by_name_and_items_by_recent_id() {
+        let collections = vec![
+            Collection {
+                id: 1,
+                name: "Root".to_string(),
+                parent_id: None,
+            },
+            Collection {
+                id: 2,
+                name: "Beta".to_string(),
+                parent_id: Some(1),
+            },
+            Collection {
+                id: 3,
+                name: "Alpha".to_string(),
+                parent_id: Some(1),
+            },
+            Collection {
+                id: 4,
+                name: "Grandchild".to_string(),
+                parent_id: Some(3),
+            },
+        ];
+        let items = vec![
+            item(10, 1),
+            item(11, 3),
+            item(12, 3),
+            item(13, 4),
+            item(14, 2),
+        ];
+        let references = vec![reference(AISessionReferenceKind::Collection, 1, 0)];
+
+        assert_eq!(
+            expand_session_reference_item_ids(&references, &collections, &items),
+            vec![10, 12, 11, 13, 14]
+        );
+    }
+
+    #[test]
+    fn skips_missing_and_duplicate_reference_targets() {
+        let collections = vec![Collection {
+            id: 1,
+            name: "Root".to_string(),
+            parent_id: None,
+        }];
+        let items = vec![item(10, 1)];
+        let references = vec![
+            reference(AISessionReferenceKind::Item, 99, 0),
+            reference(AISessionReferenceKind::Item, 10, 1),
+            reference(AISessionReferenceKind::Collection, 1, 2),
+        ];
+
+        assert_eq!(
+            expand_session_reference_item_ids(&references, &collections, &items),
+            vec![10]
+        );
+    }
 }
