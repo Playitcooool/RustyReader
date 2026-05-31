@@ -1,15 +1,11 @@
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import {
-  droppedPathsFromFileList,
-  isSupportedPath,
-  readStoredString,
-  type AttachmentFilter,
-  type ItemSort,
-} from "../lib/appView";
+import type { AttachmentFilter, ItemSort } from "../lib/appView";
 import { isTauriRuntime } from "../lib/api";
 import type { AppApi, Collection, ImportBatchResult, LibraryItem, Tag } from "../lib/contracts";
+import { droppedPathsFromFileList, isSupportedPath } from "../lib/filePaths";
+import { readStoredString } from "../lib/storagePrefs";
 import { useAppApi } from "./useAppApi";
 
 export type ResourceContextMenuState =

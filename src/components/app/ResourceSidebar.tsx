@@ -1,6 +1,7 @@
-import { childCollectionsFor, droppedPathsFromFileList } from "../../lib/appView";
 import { isTauriRuntime } from "../../lib/api";
+import { childCollectionsFor } from "../../lib/collectionView";
 import type { Collection, ImportBatchResult, LibraryItem, PdfOutlineItem } from "../../lib/contracts";
+import { droppedPathsFromFileList } from "../../lib/filePaths";
 import type { ResourceContextMenuState } from "../../hooks/useLibraryState";
 import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { ChevronLeftIcon, PlusIcon } from "./Icons";

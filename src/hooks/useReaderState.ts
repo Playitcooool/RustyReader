@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { readStoredNumber, readStoredString, type ReaderFitMode } from "../lib/appView";
+import type { ReaderFitMode } from "../lib/appView";
 import type { AIArtifact, AITask, Annotation, AppApi, LibraryItem, ReaderView } from "../lib/contracts";
+import { readStoredNumber, readStoredString } from "../lib/storagePrefs";
 import type { PdfHighlightColor, PdfTextSelection } from "../components/readers/pdfSelection";
 import { useAppApi } from "./useAppApi";
 

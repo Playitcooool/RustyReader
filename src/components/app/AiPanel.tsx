@@ -15,7 +15,7 @@ import {
   SendIcon,
   TrashIcon,
 } from "./Icons";
-import { sessionReferenceLabel, taskLabel } from "../../lib/appView";
+import { sessionReferenceLabel, taskLabel } from "../../lib/aiView";
 import type {
   AIArtifact,
   AISession,

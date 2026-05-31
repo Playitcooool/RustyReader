@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import {
-  filenameStem,
-  sessionReferenceLabel,
-  taskLabel,
-} from "../lib/appView";
+import { sessionReferenceLabel, taskLabel } from "../lib/aiView";
+import { filenameStem } from "../lib/filePaths";
 import type {
   AIArtifact,
   AISession,
