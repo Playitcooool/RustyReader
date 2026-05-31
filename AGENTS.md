@@ -46,7 +46,7 @@ Browser extensions (`extensions/*`)
 ## Working Rules
 
 - Use `rtk` before shell commands, per the shared RTK instruction.
-- Prefer `rg`/`rg --files` for repo discovery.
+- Prefer `rg`/`rg --files` for repo discovery.ß
 - Do not scan `node_modules/`, `dist/`, `.git/`, `.worktrees/`, or generated
   Tauri schemas unless the task specifically requires generated output.
 - Keep frontend/backend contracts synchronized:
@@ -70,5 +70,4 @@ Browser extensions (`extensions/*`)
 - Chrome extension tests: `rtk npm run extension:test`
 - Extension smoke checks: `rtk npm run extension:smoke`
 
-Choose the narrowest check that covers the change, then run the required build
-before committing.
+Choose the narrowest check that covers the change. 
