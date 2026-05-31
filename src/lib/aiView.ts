@@ -1,5 +1,16 @@
 import type { AISessionReference, Collection, LibraryItem } from "./contracts";
 
+export type AiDockSection = "artifacts" | "history" | "notes";
+
+export const initialAiDockState = (): Record<AiDockSection, boolean> => ({
+  artifacts: false,
+  history: false,
+  notes: false,
+});
+
+export const createAiStreamId = () =>
+  globalThis.crypto?.randomUUID?.() ?? `stream-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
 export const taskLabel = (kind: string) =>
   ({
     "item.summarize": "Summarize",

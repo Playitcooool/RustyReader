@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { sessionReferenceLabel, taskLabel } from "../lib/aiView";
+import { createAiStreamId, initialAiDockState, sessionReferenceLabel, taskLabel, type AiDockSection } from "../lib/aiView";
 import { filenameStem } from "../lib/filePaths";
 import type {
   AIArtifact,
@@ -15,7 +15,7 @@ import type {
 } from "../lib/contracts";
 import { useAppApi } from "./useAppApi";
 
-export type AiDockSection = "artifacts" | "history" | "notes";
+export type { AiDockSection } from "../lib/aiView";
 
 export type AiPendingMessage = {
   sessionId?: number;
@@ -34,15 +34,6 @@ export type AiPendingMessage = {
 export type AiReferencePickerResult =
   | { key: string; kind: "item"; targetId: number; label: string; meta: string | null; badges: string[] }
   | { key: string; kind: "collection"; targetId: number; label: string; meta: string | null; badges: string[] };
-
-const initialAiDockState = (): Record<AiDockSection, boolean> => ({
-  artifacts: false,
-  history: false,
-  notes: false,
-});
-
-const createStreamId = () =>
-  globalThis.crypto?.randomUUID?.() ?? `stream-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
 export function useAiSessionState({
   api,
@@ -482,7 +473,7 @@ export function useAiSessionState({
     if (!activeAiSessionId) return;
     const runtimeApi = await getApi();
     const sessionId = activeAiSessionId;
-    const streamId = createStreamId();
+    const streamId = createAiStreamId();
     const inputPrompt = prompt?.trim() || null;
     setAiPendingBySession((current) => ({
       ...current,
