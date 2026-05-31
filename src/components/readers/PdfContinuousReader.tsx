@@ -28,6 +28,7 @@ import { installPdfJsTextLayerSelectionSupport } from "./pdfTextLayerSelectionSu
 import { pickPdfPageTextSource, shouldFallbackToPdfOcr, type PdfPageTextSource } from "./pdfTextSource";
 import { buildRustPdfTextLayer, pageWidthAtScale1FromPoints } from "./pdfRustTextLayer";
 import { loadPdfJsDocument, renderPdfJsPageToPng, type PdfJsDocument } from "./pdfJsPageRenderer";
+import { bucketPdfRenderWidth } from "./pdfRenderSizing";
 import {
   DEFAULT_PDF_TEXT_BOX_COLOR,
   DEFAULT_PDF_TEXT_BOX_FONT_SIZE,
@@ -51,7 +52,6 @@ import {
 
 const defaultReadPrimaryAttachmentBytes = async () => new Uint8Array();
 
-const widthBucket = (widthPx: number) => Math.max(1, Math.ceil(widthPx / 64) * 64);
 const PREFETCH_PAGE_RADIUS = 2;
 const SEARCH_TARGET_RENDER_RADIUS = 1;
 const PAGE_TEXT_CACHE_LIMIT = 32;
@@ -343,7 +343,7 @@ export function PdfContinuousReader({
     () => Math.max(1, Math.round(desiredWidthCssPx * rasterScale)),
     [desiredWidthCssPx, rasterScale],
   );
-  const cssWidthBucketPx = useMemo(() => widthBucket(desiredWidthCssPx), [desiredWidthCssPx]);
+  const cssWidthBucketPx = useMemo(() => bucketPdfRenderWidth(desiredWidthCssPx), [desiredWidthCssPx]);
   const estimatedPageHeightCssPx = useMemo(() => {
     const firstPage = pdfDocumentInfo?.pages[0];
     if (firstPage?.width_pt && firstPage?.height_pt) {
@@ -721,7 +721,7 @@ export function PdfContinuousReader({
     const pushRequest = (pageIndex0: number, priority: "immediate" | "idle", scale: number) => {
       const shell = pageShells[pageIndex0];
       if (!shell) return;
-      const bucketWidthPx = widthBucket(Math.max(1, Math.round(shell.widthCssPx * scale)));
+      const bucketWidthPx = bucketPdfRenderWidth(Math.max(1, Math.round(shell.widthCssPx * scale)));
       requests.push({
         pageIndex0,
         cssWidthPx: shell.widthCssPx,
