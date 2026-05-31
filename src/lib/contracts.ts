@@ -454,6 +454,7 @@ export type AppApi = {
   regenerateConnectorToken: () => Promise<ConnectorSettings>;
   translateSelection: (input: TranslateSelectionInput) => Promise<TranslateSelectionResult>;
   listAiSessions: () => Promise<AISession[]>;
+  findItemOnlyAiSession: (itemId: number) => Promise<AISession | null>;
   createAiSession: () => Promise<AISession>;
   deleteAiSession: (sessionId: number) => Promise<void>;
   listAiSessionReferences: (sessionId: number) => Promise<AISessionReference[]>;

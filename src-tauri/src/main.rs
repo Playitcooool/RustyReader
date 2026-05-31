@@ -622,6 +622,7 @@ fn main() {
             commands::update_ai_settings,
             commands::translate_selection,
             commands::list_ai_sessions,
+            commands::find_item_only_ai_session,
             commands::create_ai_session,
             commands::delete_ai_session,
             commands::list_ai_session_references,

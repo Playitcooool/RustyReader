@@ -1350,6 +1350,14 @@ export const fakeApi: AppApi = {
     return [...state.sessions].sort((left, right) => right.id - left.id);
   },
 
+  async findItemOnlyAiSession(itemId) {
+    const sessions = await fakeApi.listAiSessions();
+    return sessions.find((session) => {
+      const references = state.sessionReferences.filter((reference) => reference.session_id === session.id);
+      return references.length === 1 && references[0]?.kind === "item" && references[0]?.target_id === itemId;
+    }) ?? null;
+  },
+
   async createAiSession() {
     const session = {
       id: state.nextId++,

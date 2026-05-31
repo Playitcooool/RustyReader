@@ -1171,6 +1171,66 @@ fn removing_item_clears_matching_ai_session_references() {
 }
 
 #[test]
+fn finds_newest_ai_session_referencing_only_one_item() {
+    let root = tempdir().unwrap();
+    let service = LibraryService::new(root.path()).unwrap();
+    let collection = service.create_collection("Inbox", None).unwrap();
+    let first_pdf = fixture_path(root.path(), "session-only-first.pdf");
+    let second_pdf = fixture_path(root.path(), "session-only-second.pdf");
+    write_pdf_fixture(&first_pdf);
+    write_partial_pdf_fixture(&second_pdf);
+    let imported = service
+        .import_files(
+            collection.id,
+            &[first_pdf, second_pdf],
+            ImportMode::ManagedCopy,
+        )
+        .unwrap();
+    let item_id = imported.imported[0].id;
+    let other_item_id = imported.imported[1].id;
+
+    let empty_session = service.create_ai_session().unwrap();
+    let mixed_session = service.create_ai_session().unwrap();
+    service
+        .add_ai_session_reference(mixed_session.id, AISessionReferenceKind::Item, item_id)
+        .unwrap();
+    service
+        .add_ai_session_reference(
+            mixed_session.id,
+            AISessionReferenceKind::Collection,
+            collection.id,
+        )
+        .unwrap();
+    let other_item_session = service.create_ai_session().unwrap();
+    service
+        .add_ai_session_reference(
+            other_item_session.id,
+            AISessionReferenceKind::Item,
+            other_item_id,
+        )
+        .unwrap();
+    let older_match = service.create_ai_session().unwrap();
+    service
+        .add_ai_session_reference(older_match.id, AISessionReferenceKind::Item, item_id)
+        .unwrap();
+    let newer_match = service.create_ai_session().unwrap();
+    service
+        .add_ai_session_reference(newer_match.id, AISessionReferenceKind::Item, item_id)
+        .unwrap();
+
+    let found = service
+        .find_item_only_ai_session(item_id)
+        .unwrap()
+        .expect("matching item-only session");
+
+    assert_eq!(found.id, newer_match.id);
+    assert_ne!(found.id, older_match.id);
+    assert_ne!(found.id, mixed_session.id);
+    assert_ne!(found.id, empty_session.id);
+    assert!(service.find_item_only_ai_session(-1).unwrap().is_none());
+}
+
+#[test]
 fn removing_collection_clears_matching_ai_session_references() {
     let root = tempdir().unwrap();
     let service = LibraryService::new(root.path()).unwrap();

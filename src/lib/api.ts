@@ -203,6 +203,7 @@ export async function createTauriApi(): Promise<AppApi> {
     regenerateConnectorToken: () => invoke("regenerate_connector_token"),
     translateSelection: (input) => invoke("translate_selection", { input }),
     listAiSessions: () => invoke("list_ai_sessions"),
+    findItemOnlyAiSession: (itemId) => invoke("find_item_only_ai_session", { itemId }),
     createAiSession: () => invoke("create_ai_session"),
     deleteAiSession: (sessionId) =>
       invoke("delete_ai_session", {

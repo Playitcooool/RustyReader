@@ -496,6 +496,16 @@ pub(crate) fn list_ai_sessions(state: State<'_, AppState>) -> Result<Vec<AISessi
 }
 
 #[tauri::command]
+pub(crate) fn find_item_only_ai_session(
+    state: State<'_, AppState>,
+    item_id: i64,
+) -> Result<Option<AISession>, String> {
+    service(&state)
+        .find_item_only_ai_session(item_id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub(crate) fn create_ai_session(state: State<'_, AppState>) -> Result<AISession, String> {
     service(&state)
         .create_ai_session()

@@ -2640,6 +2640,36 @@ impl LibraryService {
             .map_err(Into::into)
     }
 
+    pub fn find_item_only_ai_session(&self, item_id: i64) -> Result<Option<AISession>> {
+        let conn = self.connect()?;
+        conn.query_row(
+            "
+            SELECT s.id, s.title, s.created_at, s.updated_at
+            FROM ai_sessions s
+            JOIN ai_session_references r ON r.session_id = s.id
+            WHERE r.kind = 'item'
+              AND r.target_id = ?1
+              AND NOT EXISTS (
+                SELECT 1
+                FROM ai_session_references other
+                WHERE other.session_id = s.id
+                  AND (other.kind != 'item' OR other.target_id != ?1)
+              )
+              AND (
+                SELECT COUNT(*)
+                FROM ai_session_references only_ref
+                WHERE only_ref.session_id = s.id
+              ) = 1
+            ORDER BY s.updated_at DESC, s.id DESC
+            LIMIT 1
+            ",
+            [item_id],
+            map_ai_session,
+        )
+        .optional()
+        .map_err(Into::into)
+    }
+
     pub fn create_ai_session(&self) -> Result<AISession> {
         let conn = self.connect()?;
         conn.execute(
