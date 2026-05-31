@@ -43,6 +43,11 @@ pub(crate) struct NormalizePdfTextBoxAnchorInput {
 }
 
 #[derive(Deserialize)]
+pub(crate) struct NormalizePdfInkAnchorInput {
+    anchor: String,
+}
+
+#[derive(Deserialize)]
 pub(crate) struct UpdateNoteInput {
     note_id: i64,
     markdown: String,
@@ -225,6 +230,16 @@ pub(crate) fn normalize_pdf_text_box_anchor(
 ) -> Result<String, String> {
     service(&state)
         .normalize_pdf_text_box_anchor(&input.anchor)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) fn normalize_pdf_ink_anchor(
+    state: State<'_, AppState>,
+    input: NormalizePdfInkAnchorInput,
+) -> Result<String, String> {
+    service(&state)
+        .normalize_pdf_ink_anchor(&input.anchor)
         .map_err(|error| error.to_string())
 }
 

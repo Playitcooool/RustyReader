@@ -374,9 +374,11 @@ export function useReaderState({
 
   const handleCreatePdfFocusInkAnnotation = useCallback(async (draft: PdfInkAnnotationDraft) => {
     if (!activePaper || !pdfTextToolsEnabled || workspaceMode !== "pdf_focus") return;
-    const annotation = await (await getApi()).createAnnotation({
+    const runtimeApi = await getApi();
+    const anchor = await runtimeApi.normalizePdfInkAnchor({ anchor: draft.anchor });
+    const annotation = await runtimeApi.createAnnotation({
       item_id: activePaper.id,
-      anchor: draft.anchor,
+      anchor,
       kind: "ink",
       body: draft.body ?? "",
     });

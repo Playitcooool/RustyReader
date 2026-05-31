@@ -1232,6 +1232,51 @@ export const fakeApi: AppApi = {
     });
   },
 
+  async normalizePdfInkAnchor(input) {
+    const parsed = JSON.parse(input.anchor) as {
+      type?: string;
+      page?: number;
+      color?: string;
+      width?: number;
+      points?: Array<{ x?: number; y?: number }>;
+    };
+    const clampUnit = (value: number) => Math.max(0, Math.min(1, value));
+    if (
+      parsed.type !== "pdf_ink" ||
+      typeof parsed.page !== "number" ||
+      !Number.isFinite(parsed.page) ||
+      parsed.page < 1 ||
+      !Array.isArray(parsed.points) ||
+      parsed.points.length < 2
+    ) {
+      throw new Error("invalid PDF ink anchor");
+    }
+    const points = parsed.points
+      .filter((point): point is { x: number; y: number } =>
+        typeof point.x === "number" &&
+        typeof point.y === "number" &&
+        Number.isFinite(point.x) &&
+        Number.isFinite(point.y),
+      )
+      .map((point) => ({ x: clampUnit(point.x), y: clampUnit(point.y) }));
+    if (points.length < 2) {
+      throw new Error("invalid PDF ink anchor");
+    }
+    const color = typeof parsed.color === "string" && /^#[0-9a-f]{6}$/i.test(parsed.color.trim())
+      ? parsed.color.trim()
+      : "#f28b53";
+    const width = typeof parsed.width === "number" && Number.isFinite(parsed.width)
+      ? Math.max(1, Math.min(24, Math.round(parsed.width)))
+      : 4;
+    return JSON.stringify({
+      type: "pdf_ink",
+      page: Math.max(1, Math.floor(parsed.page)),
+      color,
+      width,
+      points,
+    });
+  },
+
   async removeAnnotation(input) {
     state.annotations = state.annotations.filter((annotation) => annotation.id !== input.annotation_id);
   },

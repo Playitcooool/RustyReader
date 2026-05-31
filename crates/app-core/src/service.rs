@@ -158,6 +158,22 @@ pub struct PdfTextBoxAnchor {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PdfInkPoint {
+    pub x: f64,
+    pub y: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PdfInkAnchor {
+    #[serde(rename = "type")]
+    pub anchor_type: String,
+    pub page: f64,
+    pub color: String,
+    pub width: f64,
+    pub points: Vec<PdfInkPoint>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvidenceChunk {
     pub id: i64,
     pub item_id: i64,
@@ -1856,6 +1872,10 @@ impl LibraryService {
 
     pub fn normalize_pdf_text_box_anchor(&self, anchor: &str) -> Result<String> {
         normalize_pdf_text_box_anchor(anchor)
+    }
+
+    pub fn normalize_pdf_ink_anchor(&self, anchor: &str) -> Result<String> {
+        normalize_pdf_ink_anchor(anchor)
     }
 
     pub fn get_ai_settings(&self) -> Result<AISettings> {
@@ -4598,6 +4618,82 @@ fn normalize_pdf_text_box_anchor(anchor: &str) -> Result<String> {
     serde_json::to_string(&normalized).map_err(Into::into)
 }
 
+fn normalize_pdf_ink_color(value: &str) -> String {
+    let trimmed = value.trim();
+    let valid = trimmed.len() == 7
+        && trimmed.starts_with('#')
+        && trimmed.chars().skip(1).all(|ch| ch.is_ascii_hexdigit());
+    if valid {
+        trimmed.to_string()
+    } else {
+        "#f28b53".to_string()
+    }
+}
+
+fn normalize_pdf_ink_anchor(anchor: &str) -> Result<String> {
+    let parsed =
+        serde_json::from_str::<serde_json::Value>(anchor).context("invalid PDF ink anchor")?;
+    let parsed = parsed
+        .as_object()
+        .ok_or_else(|| anyhow!("invalid PDF ink anchor"))?;
+    if parsed.get("type").and_then(|value| value.as_str()) != Some("pdf_ink") {
+        return Err(anyhow!("anchor is not a PDF ink anchor"));
+    }
+    let page = parsed
+        .get("page")
+        .and_then(|value| value.as_f64())
+        .filter(|value| value.is_finite() && *value >= 1.0)
+        .ok_or_else(|| anyhow!("invalid PDF ink anchor coordinates"))?;
+    let raw_points = parsed
+        .get("points")
+        .and_then(|value| value.as_array())
+        .ok_or_else(|| anyhow!("invalid PDF ink anchor coordinates"))?;
+    if raw_points.len() < 2 {
+        return Err(anyhow!("invalid PDF ink anchor coordinates"));
+    }
+    let mut points = Vec::with_capacity(raw_points.len());
+    for point in raw_points {
+        let Some(point) = point.as_object() else {
+            continue;
+        };
+        let Some(x) = point.get("x").and_then(|value| value.as_f64()) else {
+            continue;
+        };
+        let Some(y) = point.get("y").and_then(|value| value.as_f64()) else {
+            continue;
+        };
+        if !x.is_finite() || !y.is_finite() {
+            continue;
+        }
+        points.push(PdfInkPoint {
+            x: clamp_unit(x),
+            y: clamp_unit(y),
+        });
+    }
+    if points.len() < 2 {
+        return Err(anyhow!("invalid PDF ink anchor coordinates"));
+    }
+    let color = parsed
+        .get("color")
+        .and_then(|value| value.as_str())
+        .map(normalize_pdf_ink_color)
+        .unwrap_or_else(|| "#f28b53".to_string());
+    let width = parsed
+        .get("width")
+        .and_then(|value| value.as_f64())
+        .filter(|value| value.is_finite())
+        .map(|value| value.round().clamp(1.0, 24.0))
+        .unwrap_or(4.0);
+    let normalized = PdfInkAnchor {
+        anchor_type: "pdf_ink".to_string(),
+        page: page.floor(),
+        color,
+        width,
+        points,
+    };
+    serde_json::to_string(&normalized).map_err(Into::into)
+}
+
 fn expand_session_reference_item_ids(
     references: &[AISessionReference],
     collections: &[Collection],
@@ -6684,6 +6780,60 @@ mod tests {
         assert!(normalize_pdf_text_box_anchor(r#"{"type":"pdf_text"}"#).is_err());
         assert!(normalize_pdf_text_box_anchor(
             r#"{"type":"pdf_text_box","page":1,"x":0,"y":0,"width":0,"height":0.2}"#,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn normalizes_valid_pdf_ink_anchor() {
+        let anchor = serde_json::json!({
+            "type": "pdf_ink",
+            "page": 2.9,
+            "color": "not-a-color",
+            "width": 99.2,
+            "points": [
+                { "x": -0.2, "y": 0.3 },
+                { "x": "bad", "y": 0.5 },
+                { "x": 0.5 },
+                { "x": 0.4, "y": 1.2 },
+                { "x": 0.8, "y": 0.9 }
+            ]
+        })
+        .to_string();
+
+        let normalized = normalize_pdf_ink_anchor(&anchor).unwrap();
+        let parsed = serde_json::from_str::<PdfInkAnchor>(&normalized).unwrap();
+
+        assert_eq!(parsed.anchor_type, "pdf_ink");
+        assert_eq!(parsed.page, 2.0);
+        assert_eq!(parsed.color, "#f28b53");
+        assert_eq!(parsed.width, 24.0);
+        assert_eq!(parsed.points.len(), 3);
+        assert_eq!(parsed.points[0].x, 0.0);
+        assert_eq!(parsed.points[1].y, 1.0);
+    }
+
+    #[test]
+    fn defaults_pdf_ink_style() {
+        let normalized = normalize_pdf_ink_anchor(
+            r#"{"type":"pdf_ink","page":1,"points":[{"x":0,"y":0},{"x":1,"y":1}]}"#,
+        )
+        .unwrap();
+        let parsed = serde_json::from_str::<PdfInkAnchor>(&normalized).unwrap();
+        assert_eq!(parsed.color, "#f28b53");
+        assert_eq!(parsed.width, 4.0);
+    }
+
+    #[test]
+    fn rejects_invalid_pdf_ink_anchor_coordinates() {
+        assert!(normalize_pdf_ink_anchor("not-json").is_err());
+        assert!(normalize_pdf_ink_anchor(r#"{"type":"pdf_text"}"#).is_err());
+        assert!(normalize_pdf_ink_anchor(
+            r##"{"type":"pdf_ink","page":0,"color":"#123456","width":4,"points":[{"x":0,"y":0},{"x":1,"y":1}]}"##,
+        )
+        .is_err());
+        assert!(normalize_pdf_ink_anchor(
+            r##"{"type":"pdf_ink","page":1,"color":"#123456","width":4,"points":[{"x":0,"y":0}]}"##,
         )
         .is_err());
     }

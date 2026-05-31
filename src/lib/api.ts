@@ -194,6 +194,7 @@ export async function createTauriApi(): Promise<AppApi> {
     updateAnnotation: (input) => invoke("update_annotation", { input }),
     colorPdfTextAnchor: (input) => invoke("color_pdf_text_anchor", { input }),
     normalizePdfTextBoxAnchor: (input) => invoke("normalize_pdf_text_box_anchor", { input }),
+    normalizePdfInkAnchor: (input) => invoke("normalize_pdf_ink_anchor", { input }),
     removeAnnotation: (input) => invoke("remove_annotation", { input }),
     getAiSettings: () => invoke("get_ai_settings"),
     getSystemAiEnv: () => invoke("get_system_ai_env"),
