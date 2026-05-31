@@ -1736,6 +1736,7 @@ impl LibraryService {
         body: String,
     ) -> Result<Annotation> {
         let conn = self.connect()?;
+        let anchor = normalize_annotation_anchor(&kind, &anchor)?;
         conn.execute(
             "INSERT INTO annotations(item_id, anchor, kind, body) VALUES (?1, ?2, ?3, ?4)",
             params![item_id, anchor, kind, body],
@@ -1854,6 +1855,7 @@ impl LibraryService {
             )
             .optional()?
             .ok_or_else(|| anyhow!("annotation does not exist"))?;
+        let anchor = normalize_annotation_anchor(&existing.kind, &anchor)?;
         let next_body = body.unwrap_or(existing.body);
         conn.execute(
             "UPDATE annotations SET anchor = ?1, body = ?2 WHERE id = ?3",
@@ -4692,6 +4694,14 @@ fn normalize_pdf_ink_anchor(anchor: &str) -> Result<String> {
         points,
     };
     serde_json::to_string(&normalized).map_err(Into::into)
+}
+
+fn normalize_annotation_anchor(kind: &str, anchor: &str) -> Result<String> {
+    match kind {
+        "text_box" => normalize_pdf_text_box_anchor(anchor),
+        "ink" => normalize_pdf_ink_anchor(anchor),
+        _ => Ok(anchor.to_string()),
+    }
 }
 
 fn expand_session_reference_item_ids(

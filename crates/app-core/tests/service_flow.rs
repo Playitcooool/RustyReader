@@ -8,7 +8,8 @@ use std::{
 
 use app_core::service::{
     AIProvider, AISessionReferenceKind, AiCompletionRequest, AiTransport, EvidenceQueryOptions,
-    ImportMode, LibraryService, TranslationProvider, UpdateAISettingsInput,
+    ImportMode, LibraryService, PdfInkAnchor, PdfTextBoxAnchor, PdfTextBoxColor,
+    TranslationProvider, UpdateAISettingsInput,
 };
 use flate2::{write::ZlibEncoder, Compression};
 use rusqlite::Connection;
@@ -1411,6 +1412,80 @@ fn removing_item_prunes_cascaded_records_and_session_scope_item_ids() {
         .unwrap()
         .expect("session artifact");
     assert_eq!(artifact.scope_item_ids, Some(vec![item_b]));
+}
+
+#[test]
+fn annotations_normalize_pdf_markup_anchors_at_persistence_boundary() {
+    let root = tempdir().unwrap();
+    let service = service_with_transport(root.path(), Arc::new(StubTransport::default()));
+    let collection = service.create_collection("Inbox", None).unwrap();
+    let pdf = fixture_path(root.path(), "marked-up.pdf");
+    write_pdf_fixture(&pdf);
+    let item = service
+        .import_files(collection.id, &[pdf], ImportMode::ManagedCopy)
+        .unwrap()
+        .imported[0]
+        .id;
+
+    let text_box = service
+        .create_annotation(
+            item,
+            serde_json::json!({
+                "type": "pdf_text_box",
+                "page": 1,
+                "x": -0.2,
+                "y": 0.4,
+                "width": 0.25,
+                "height": 0.1
+            })
+            .to_string(),
+            "text_box".to_string(),
+            "Margin note".to_string(),
+        )
+        .unwrap();
+    let text_box_anchor = serde_json::from_str::<PdfTextBoxAnchor>(&text_box.anchor).unwrap();
+    assert_eq!(text_box_anchor.x, 0.0);
+    assert_eq!(text_box_anchor.color, Some(PdfTextBoxColor::Black));
+    assert_eq!(text_box_anchor.font_size, Some(13));
+
+    let ink = service
+        .create_annotation(
+            item,
+            serde_json::json!({
+                "type": "pdf_ink",
+                "page": 1,
+                "points": [
+                    { "x": 0.1, "y": 0.1 },
+                    { "x": 0.3, "y": 0.3 }
+                ]
+            })
+            .to_string(),
+            "ink".to_string(),
+            "".to_string(),
+        )
+        .unwrap();
+    let updated = service
+        .update_annotation(
+            ink.id,
+            serde_json::json!({
+                "type": "pdf_ink",
+                "page": 1,
+                "color": "not-a-color",
+                "width": 99,
+                "points": [
+                    { "x": -1, "y": 0.2 },
+                    { "x": 0.8, "y": 2 }
+                ]
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap();
+    let ink_anchor = serde_json::from_str::<PdfInkAnchor>(&updated.anchor).unwrap();
+    assert_eq!(ink_anchor.color, "#f28b53");
+    assert_eq!(ink_anchor.width, 24.0);
+    assert_eq!(ink_anchor.points[0].x, 0.0);
+    assert_eq!(ink_anchor.points[1].y, 1.0);
 }
 
 #[test]
