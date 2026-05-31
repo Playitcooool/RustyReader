@@ -395,6 +395,7 @@ pub struct ResearchNote {
     pub session_id: Option<i64>,
     pub title: String,
     pub markdown: String,
+    pub display_title: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2548,6 +2549,7 @@ impl LibraryService {
             id: conn.last_insert_rowid(),
             collection_id,
             session_id,
+            display_title: note_display_title(&title, &markdown),
             title,
             markdown,
         })
@@ -2576,6 +2578,7 @@ impl LibraryService {
             session_id,
             title: title.to_string(),
             markdown: markdown.to_string(),
+            display_title: note_display_title(title, markdown),
         })
     }
 
@@ -5621,13 +5624,21 @@ fn hydrate_item_tags(conn: &Connection, mut items: Vec<LibraryItem>) -> Result<V
 }
 
 fn map_research_note(row: &rusqlite::Row<'_>) -> rusqlite::Result<ResearchNote> {
+    let title: String = row.get(3)?;
+    let markdown: String = row.get(4)?;
+    let display_title = note_display_title(&title, &markdown);
     Ok(ResearchNote {
         id: row.get(0)?,
         collection_id: row.get(1)?,
         session_id: row.get(2)?,
-        title: row.get(3)?,
-        markdown: row.get(4)?,
+        title,
+        markdown,
+        display_title,
     })
+}
+
+fn note_display_title(title: &str, markdown: &str) -> String {
+    extract_markdown_heading(markdown).unwrap_or_else(|| title.to_string())
 }
 
 fn map_ai_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<AITask> {
@@ -6876,6 +6887,15 @@ mod tests {
             format_item_display_metadata("Imported Author", None, "Imported PDF"),
             None
         );
+    }
+
+    #[test]
+    fn derives_note_display_title_from_first_markdown_heading() {
+        assert_eq!(
+            note_display_title("Fallback", "intro\n## Extracted"),
+            "Extracted"
+        );
+        assert_eq!(note_display_title("Fallback", "intro\nbody"), "Fallback");
     }
 
     #[test]

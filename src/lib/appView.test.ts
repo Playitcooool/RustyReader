@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { AISessionReference, Collection, LibraryItem, ResearchNote, Tag } from "./contracts";
+import type { AISessionReference, Collection, LibraryItem, Tag } from "./contracts";
 import {
   applyTagFilter,
   childCollectionsFor,
@@ -109,20 +109,5 @@ describe("appView local storage readers", () => {
     expect(readStoredBoolean("boolean", true)).toBe(false);
     expect(readStoredString("string", "recent", ["recent", "title"] as const)).toBe("title");
     expect(readStoredString("missing", "recent", ["recent", "title"] as const)).toBe("recent");
-  });
-});
-
-describe("appView notes", () => {
-  it("uses the first markdown heading as the note heading", async () => {
-    const { noteHeading } = await import("./appView");
-    const note: ResearchNote = {
-      id: 1,
-      collection_id: null,
-      session_id: null,
-      title: "Fallback",
-      markdown: "intro\n## Extracted",
-    };
-
-    expect(noteHeading(note)).toBe("Extracted");
   });
 });

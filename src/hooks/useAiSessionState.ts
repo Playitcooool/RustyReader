@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   filenameStem,
   itemCountForCollection,
-  noteHeading,
   sessionReferenceLabel,
   taskLabel,
 } from "../lib/appView";
@@ -549,7 +548,7 @@ export function useAiSessionState({
     const runtimeApi = await getApi();
     const markdown = await runtimeApi.exportNoteMarkdown(note.id);
     const exportTarget = await runtimeApi.requestExportPath({
-      defaultPath: `${filenameStem(noteHeading(note), "research-note")}.md`,
+      defaultPath: `${filenameStem(note.display_title, "research-note")}.md`,
       filters: [{ name: "Markdown", extensions: ["md"] }],
     });
     if (!exportTarget) return;

@@ -1,4 +1,4 @@
-import type { AISessionReference, Collection, LibraryItem, ReaderView, ResearchNote, Tag } from "./contracts";
+import type { AISessionReference, Collection, LibraryItem, ReaderView, Tag } from "./contracts";
 
 export type ItemSort = "recent" | "title" | "year_desc";
 export type AttachmentFilter = "all" | "ready" | "missing" | "citation_only";
@@ -101,13 +101,6 @@ export const scopeMatches = (left: number[] | null, right: number[]) =>
   left !== null &&
   left.length === right.length &&
   left.every((itemId, index) => itemId === right[index]);
-
-export const noteHeading = (note: ResearchNote) =>
-  note.markdown
-    .split("\n")
-    .map((line) => line.trim())
-    .find((line) => line.startsWith("#"))
-    ?.replace(/^#+\s*/, "") ?? note.title;
 
 export const descendantIdsForCollection = (collections: Collection[], collectionId: number) => {
   const descendants = new Set<number>();

@@ -264,6 +264,7 @@ export type ResearchNote = {
   session_id: number | null;
   title: string;
   markdown: string;
+  display_title: string;
 };
 
 export type AIRunSessionTaskInput = {

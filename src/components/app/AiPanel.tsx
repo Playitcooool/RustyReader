@@ -15,7 +15,7 @@ import {
   SendIcon,
   TrashIcon,
 } from "./Icons";
-import { noteHeading, sessionReferenceLabel, taskLabel } from "../../lib/appView";
+import { sessionReferenceLabel, taskLabel } from "../../lib/appView";
 import type {
   AIArtifact,
   AISession,
@@ -539,7 +539,7 @@ export function AiPanel(props: Props) {
               {notes.length > 0 ? (
                 notes.map((note) => (
                   <button key={note.id} className={`nav-item ${note.id === activeNoteId ? "nav-item-active" : ""}`} type="button" onClick={() => onSelectNote(note)}>
-                    {noteHeading(note)}
+                    {note.display_title}
                   </button>
                 ))
               ) : (

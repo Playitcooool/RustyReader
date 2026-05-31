@@ -211,6 +211,7 @@ const initialState = (): MockState => ({
       title: "Machine Learning Review",
       markdown:
         "# Machine Learning Review\n\n## Review Notes\n- Transformer Scaling Laws\n- Graph Neural Survey",
+      display_title: "Machine Learning Review",
     },
   ],
   sessions: [
@@ -510,6 +511,8 @@ const extractHeading = (markdown: string) =>
 
 const noteTitleFromArtifact = (collectionId: number, markdown: string) =>
   extractHeading(markdown) || `${collectionName(collectionId)} Note`;
+
+const noteDisplayTitle = (title: string, markdown: string) => extractHeading(markdown) || title;
 
 const publicAiSettings = (): AISettings => ({
   active_provider: state.aiSettings.active_provider,
@@ -1935,6 +1938,7 @@ export const fakeApi: AppApi = {
       session_id: input.session_id ?? null,
       title: input.title,
       markdown: input.markdown,
+      display_title: noteDisplayTitle(input.title, input.markdown),
     };
     state.notes.push(note);
     return note;
@@ -1955,12 +1959,14 @@ export const fakeApi: AppApi = {
     if (!artifact || artifact.collection_id === null) {
       throw new Error(`Unknown artifact ${input.artifact_id}`);
     }
+    const title = noteTitleFromArtifact(artifact.collection_id, artifact.markdown);
     const note = {
       id: state.nextId++,
       collection_id: artifact.collection_id,
       session_id: artifact.session_id,
-      title: noteTitleFromArtifact(artifact.collection_id, artifact.markdown),
+      title,
       markdown: artifact.markdown,
+      display_title: noteDisplayTitle(title, artifact.markdown),
     };
     state.notes.unshift(note);
     return note;
@@ -1976,6 +1982,7 @@ export const fakeApi: AppApi = {
       throw new Error(`Unknown note ${input.note_id}`);
     }
     note.markdown = input.markdown;
+    note.display_title = noteDisplayTitle(note.title, input.markdown);
   },
 
   async exportNoteMarkdown(noteId) {
