@@ -37,7 +37,8 @@ import type {
   UpdateAISettingsInput,
 } from "../lib/contracts";
 
-type MockItemDetails = LibraryItem & {
+type MockItemDetails = Omit<LibraryItem, "display_metadata"> & {
+  display_metadata?: string | null;
   plainText: string;
   normalizedHtml: string;
   attachmentFormat?: AttachmentFormat;
@@ -486,7 +487,18 @@ const buildLibraryItem = (item: MockItemDetails): LibraryItem => ({
   source: item.source,
   doi: item.doi,
   tags: tagsForItem(item.id),
+  display_metadata: item.display_metadata ?? formatItemDisplayMetadata(item.authors, item.publication_year, item.source),
 });
+
+const formatItemDisplayMetadata = (authors: string, publicationYear: number | null, source: string) => {
+  const parts: string[] = [];
+  const trimmedAuthors = authors.trim();
+  if (trimmedAuthors.length > 0 && trimmedAuthors !== "Imported Author") parts.push(trimmedAuthors);
+  if (publicationYear !== null) parts.push(String(publicationYear));
+  const trimmedSource = source.trim();
+  if (trimmedSource.length > 0 && !trimmedSource.startsWith("Imported ")) parts.push(trimmedSource);
+  return parts.length > 0 ? parts.join(" · ") : null;
+};
 
 const extractHeading = (markdown: string) =>
   markdown

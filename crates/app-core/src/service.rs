@@ -76,6 +76,7 @@ pub struct LibraryItem {
     pub source: String,
     pub doi: Option<String>,
     pub tags: Vec<String>,
+    pub display_metadata: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -5541,6 +5542,10 @@ fn extract_openai_content(value: &serde_json::Value) -> Option<String> {
 
 fn map_library_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<LibraryItem> {
     let attachment_path: String = row.get(4)?;
+    let authors: String = row.get(6)?;
+    let publication_year: Option<i64> = row.get(7)?;
+    let source: String = row.get(8)?;
+    let display_metadata = format_item_display_metadata(&authors, publication_year, &source);
     Ok(LibraryItem {
         id: row.get(0)?,
         title: row.get(1)?,
@@ -5548,12 +5553,37 @@ fn map_library_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<LibraryItem> {
         primary_attachment_id: row.get(3)?,
         attachment_format: infer_attachment_format(&attachment_path).to_string(),
         attachment_status: row.get(5)?,
-        authors: row.get(6)?,
-        publication_year: row.get(7)?,
-        source: row.get(8)?,
+        authors,
+        publication_year,
+        source,
         doi: row.get(9)?,
         tags: Vec::new(),
+        display_metadata,
     })
+}
+
+fn format_item_display_metadata(
+    authors: &str,
+    publication_year: Option<i64>,
+    source: &str,
+) -> Option<String> {
+    let mut parts = Vec::new();
+    let authors = authors.trim();
+    if !authors.is_empty() && authors != "Imported Author" {
+        parts.push(authors.to_string());
+    }
+    if let Some(year) = publication_year {
+        parts.push(year.to_string());
+    }
+    let source = source.trim();
+    if !source.is_empty() && !source.starts_with("Imported ") {
+        parts.push(source.to_string());
+    }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join(" · "))
+    }
 }
 
 fn hydrate_item_tags(conn: &Connection, mut items: Vec<LibraryItem>) -> Result<Vec<LibraryItem>> {
@@ -6637,6 +6667,7 @@ mod tests {
             source: String::new(),
             doi: None,
             tags: Vec::new(),
+            display_metadata: None,
         }
     }
 
@@ -6833,6 +6864,18 @@ mod tests {
     #[test]
     fn queries_library_items_return_empty_without_selected_collection() {
         assert!(query_library_items(&[], &[item(10, 1)], &[], &library_query(None)).is_empty());
+    }
+
+    #[test]
+    fn formats_item_display_metadata_without_import_placeholders() {
+        assert_eq!(
+            format_item_display_metadata(" Kaplan et al. ", Some(2020), " arXiv "),
+            Some("Kaplan et al. · 2020 · arXiv".to_string())
+        );
+        assert_eq!(
+            format_item_display_metadata("Imported Author", None, "Imported PDF"),
+            None
+        );
     }
 
     #[test]

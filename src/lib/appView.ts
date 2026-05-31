@@ -35,26 +35,6 @@ export const isQuickActionKind = (kind: string) =>
 export const attachmentFormatLabel = (format: LibraryItem["attachment_format"] | ReaderView["attachment_format"]) =>
   format.toUpperCase();
 
-export const formatItemMetadata = (item: LibraryItem): string | null => {
-  const parts: string[] = [];
-
-  const authors = item.authors.trim();
-  if (authors.length > 0 && authors !== "Imported Author") {
-    parts.push(authors);
-  }
-
-  if (item.publication_year !== null) {
-    parts.push(String(item.publication_year));
-  }
-
-  const source = item.source.trim();
-  if (source.length > 0 && !source.startsWith("Imported ")) {
-    parts.push(source);
-  }
-
-  return parts.length > 0 ? parts.join(" · ") : null;
-};
-
 export const sanitizeFilename = (value: string) =>
   value
     .replace(/[<>:"/\\|?*\u0000-\u001f]/g, " ")

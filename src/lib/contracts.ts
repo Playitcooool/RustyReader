@@ -46,6 +46,7 @@ export type LibraryItem = {
   source: string;
   doi: string | null;
   tags: string[];
+  display_metadata: string | null;
 };
 
 export type LibraryQueryInput = {

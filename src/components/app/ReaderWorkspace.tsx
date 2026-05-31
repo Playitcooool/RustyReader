@@ -52,7 +52,7 @@ import {
 import { PdfFocusHighlightBar } from "./PdfHighlightBars";
 import { NormalizedReader } from "../readers/NormalizedReader";
 import { PdfContinuousReader } from "../readers/PdfContinuousReader";
-import { attachmentFormatLabel, formatItemMetadata, type ReaderFitMode } from "../../lib/appView";
+import { attachmentFormatLabel, type ReaderFitMode } from "../../lib/appView";
 import type { Collection, LibraryItem, ReaderView, Annotation } from "../../lib/contracts";
 import type { ActivePdfHighlight, PdfTextBoxAnnotationDraft, ReaderTextSelection, TranslationPopover, WorkspaceMode } from "../../hooks/useReaderState";
 import type { PdfHighlightColor, PdfTextSelection } from "../readers/pdfSelection";
@@ -785,7 +785,7 @@ export function ReaderWorkspace(props: Props) {
                 >
                   <span className="collection-document-main">
                     <span className="collection-document-title">{item.title}</span>
-                    <span className="collection-document-meta">{formatItemMetadata(item)}</span>
+                    <span className="collection-document-meta">{item.display_metadata}</span>
                   </span>
                   <span className="collection-document-format">{attachmentFormatLabel(item.attachment_format)}</span>
                   {item.attachment_status !== "ready" ? <span className="collection-document-status">{item.attachment_status}</span> : null}

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   filenameStem,
-  formatItemMetadata,
   itemCountForCollection,
   noteHeading,
   sessionReferenceLabel,
@@ -447,7 +446,7 @@ export function useAiSessionState({
         kind: "item",
         targetId: paper.id,
         label: paper.title,
-        meta: formatItemMetadata(paper),
+        meta: paper.display_metadata,
         badges: paper.id === activePaper?.id ? ["Current", "Paper"] : ["Paper"],
       });
     }
@@ -457,7 +456,7 @@ export function useAiSessionState({
         kind: "item",
         targetId: activePaper.id,
         label: activePaper.title,
-        meta: formatItemMetadata(activePaper),
+        meta: activePaper.display_metadata,
         badges: ["Current", "Paper"],
       });
     }
@@ -467,7 +466,7 @@ export function useAiSessionState({
         kind: "item",
         targetId: item.id,
         label: item.title,
-        meta: formatItemMetadata(item),
+        meta: item.display_metadata,
         badges: ["Paper"],
       });
     }

@@ -8,7 +8,6 @@ import {
   expandSessionReferenceItemIds,
   filenameStem,
   filterItemsByAttachment,
-  formatItemMetadata,
   matchesSearch,
   readStoredBoolean,
   readStoredNumber,
@@ -29,15 +28,11 @@ const item = (overrides: Partial<LibraryItem>): LibraryItem => ({
   attachment_format: "pdf",
   attachment_status: "ready",
   tags: ["llm", "scaling"],
+  display_metadata: "Kaplan et al. · 2020 · arXiv",
   ...overrides,
 });
 
 describe("appView item helpers", () => {
-  it("formats metadata while hiding imported placeholders", () => {
-    expect(formatItemMetadata(item({}))).toBe("Kaplan et al. · 2020 · arXiv");
-    expect(formatItemMetadata(item({ authors: "Imported Author", publication_year: null, source: "Imported PDF" }))).toBeNull();
-  });
-
   it("sanitizes filenames and falls back for empty stems", () => {
     expect(sanitizeFilename('a <bad> "name".pdf')).toBe("a bad name .pdf");
     expect(filenameStem(":/\u0000", "research-note")).toBe("research-note");
