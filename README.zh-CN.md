@@ -155,7 +155,17 @@ Chrome 使用说明：
 
 ### Safari 插件
 
-使用已下载的 Safari 临时插件压缩包：
+日常本地使用请安装持久 Safari Web Extension App：
+
+```bash
+npm run extension:safari:install
+```
+
+该命令会构建并安装 `/Applications/RustyReader Safari.app`，然后打开它，让 Safari 注册插件。接着在 Safari 中打开 `Settings` -> `Extensions`，启用 `RustyReader`，再打开插件弹窗，选择集合并导入当前页面或文档。
+
+临时 Safari 插件只适合快速测试。Safari 会在 24 小时后或退出 Safari 时移除临时插件。
+
+如果仍需要使用已下载的 Safari 临时插件压缩包：
 
 1. 下载 [RustyReader Safari Temporary Extension ZIP](https://github.com/Playitcooool/rust-ai-paper-reader/releases/download/v0.1.0/rustyreader-safari-temporary-extension.zip)。
 2. 启动已安装的 RustyReader 桌面应用。
@@ -164,8 +174,6 @@ Chrome 使用说明：
 5. 打开 `Settings` -> `Extensions`。
 6. 启用 `RustyReader`。
 7. 打开插件弹窗，选择集合，并导入当前页面或文档。
-
-Safari 临时插件适合快速本地使用。Safari 会在 24 小时后或退出 Safari 时移除临时插件。如需持久开发，请从 Xcode 构建并运行 Safari Web Extension App。
 
 Safari 打包需要完整 Xcode，而不仅是 Command Line Tools。请确认已选择 Xcode：
 
@@ -191,12 +199,19 @@ npm run extension:safari:zip
 npm run extension:safari:package
 ```
 
+构建并持久安装：
+
+```bash
+npm run extension:safari:install
+```
+
 输出：
 
 ```text
 extensions/safari/build/extension
 extensions/safari/dist/rustyreader-safari-temporary-extension.zip
 extensions/safari/build/RustyReaderSafari
+/Applications/RustyReader Safari.app
 ```
 
 在 Safari 中运行并启用持久开发版本：

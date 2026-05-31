@@ -9,6 +9,7 @@ Safari does not use Chrome's `downloads` API. File imports fetch the selected PD
 - `npm run extension:safari:build` copies the shared Chrome extension runtime into `extensions/safari/build/extension` and applies the Safari manifest.
 - `npm run extension:safari:zip` writes a temporary-extension zip that can be selected from Safari's Developer settings for local testing.
 - `npm run extension:safari:package` runs Apple's `safari-web-extension-packager` and writes the generated Xcode project under `extensions/safari/build/RustyReaderSafari`.
+- `npm run extension:safari:install` packages the Safari Web Extension App, builds it with Xcode, installs it to `/Applications/RustyReader Safari.app`, and opens it so Safari can keep the extension registered.
 - `npm run extension:build` from the repo root builds both Chrome outputs and the Safari project in one command.
 
 Outputs:
@@ -19,9 +20,21 @@ Outputs:
 
 Packaging requires full Xcode to be installed and selected with `xcode-select`. Command Line Tools alone do not include `xcrun safari-web-extension-packager`.
 
-## Local temporary install
+## Persistent local install
 
-For the quickest local Safari test:
+Use the persistent app install for normal Safari use:
+
+```bash
+npm run extension:safari:install
+```
+
+Then open Safari, choose `Safari` -> `Settings` -> `Extensions`, and enable `RustyReader`.
+
+Safari keeps extensions that come from an installed Safari Web Extension App. It removes temporary extensions after 24 hours or when Safari quits.
+
+## Temporary local install
+
+For a quick throwaway Safari test:
 
 ```bash
 npm run extension:safari:zip

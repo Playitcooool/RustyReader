@@ -18,6 +18,7 @@
     "extension:safari:build": "npm --prefix extensions/safari run build",
     "extension:safari:zip": "npm --prefix extensions/safari run zip",
     "extension:safari:package": "npm --prefix extensions/safari run package",
+    "extension:safari:install": "npm --prefix extensions/safari run install:persistent",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
   },

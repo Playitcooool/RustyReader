@@ -155,7 +155,17 @@ Chrome usage notes:
 
 ### Safari Extension
 
-Use the downloaded Safari temporary extension zip:
+Use the persistent Safari Web Extension App for normal local use:
+
+```bash
+npm run extension:safari:install
+```
+
+This builds and installs `/Applications/RustyReader Safari.app`, then opens it so Safari can register the extension. In Safari, open `Settings` -> `Extensions`, enable `RustyReader`, then open the extension popup, choose a collection, and import the current page or document.
+
+Temporary Safari extensions are only for quick tests. Safari removes them after 24 hours or when Safari quits.
+
+If you still need the downloaded temporary extension zip:
 
 1. Download [RustyReader Safari Temporary Extension ZIP](https://github.com/Playitcooool/rust-ai-paper-reader/releases/download/v0.1.0/rustyreader-safari-temporary-extension.zip).
 2. Start RustyReader from the installed desktop app.
@@ -164,8 +174,6 @@ Use the downloaded Safari temporary extension zip:
 5. Open `Settings` -> `Extensions`.
 6. Enable `RustyReader`.
 7. Open the extension popup, choose a collection, and import the current page or document.
-
-Safari temporary extensions are intended for quick local use. Safari removes them after 24 hours or when Safari quits. For persistent development, build and run the Safari Web Extension App from Xcode.
 
 Safari packaging requires full Xcode, not only Command Line Tools. Make sure Xcode is selected:
 
@@ -191,12 +199,19 @@ Package it as a Safari Web Extension App:
 npm run extension:safari:package
 ```
 
+Build and install it persistently:
+
+```bash
+npm run extension:safari:install
+```
+
 Outputs:
 
 ```text
 extensions/safari/build/extension
 extensions/safari/dist/rustyreader-safari-temporary-extension.zip
 extensions/safari/build/RustyReaderSafari
+/Applications/RustyReader Safari.app
 ```
 
 Run and enable it in Safari for persistent development:

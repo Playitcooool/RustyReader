@@ -6,6 +6,7 @@
   "scripts": {
     "build": "node scripts/build-safari-extension.js",
     "zip": "node scripts/package-temporary-extension.js",
-    "package": "node scripts/package-safari-extension.js"
+    "package": "node scripts/package-safari-extension.js",
+    "install:persistent": "node scripts/install-persistent-extension.js"
   }
 }

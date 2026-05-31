@@ -22,6 +22,12 @@
   },
   "action": {
     "default_title": "Save to RustyReader",
+    "default_icon": {
+      "16": "extension/assets/icon-16.png",
+      "32": "extension/assets/icon-32.png",
+      "48": "extension/assets/icon-48.png",
+      "128": "extension/assets/icon-128.png"
+    },
     "default_popup": "extension/popup/popup.html"
   },
   "icons": {
