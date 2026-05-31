@@ -11,6 +11,7 @@ import type {
   ReaderView,
 } from "../../lib/contracts";
 import { clearChildren, safeScrollIntoView } from "../../lib/dom";
+import { blobFromBytes } from "../../lib/binaryData";
 import { escapeHtml } from "../../lib/htmlEscape";
 import { computeFitWidthZoomPct } from "./pdfFit";
 import { computeActivePageIndexFromRects } from "./pdfContinuousActivePage";
@@ -47,8 +48,6 @@ import {
   type PdfInkPoint,
 } from "./pdfInkAnchor";
 
-const blobFromBytes = (bytes: Uint8Array, type: string) =>
-  new Blob([bytes.slice()], { type });
 const defaultReadPrimaryAttachmentBytes = async () => new Uint8Array();
 
 const widthBucket = (widthPx: number) => Math.max(1, Math.ceil(widthPx / 64) * 64);

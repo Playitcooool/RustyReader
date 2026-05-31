@@ -7,6 +7,7 @@ import type {
   PdfEngineGetPageBundleInput,
   ReaderView,
 } from "../../lib/contracts";
+import { blobFromBytes } from "../../lib/binaryData";
 import { safeScrollIntoView } from "../../lib/dom";
 import { escapeHtml } from "../../lib/htmlEscape";
 import { computeFitWidthZoomPct } from "./pdfFit";
@@ -19,9 +20,6 @@ import {
 } from "./pdfSelection";
 import { installPdfJsTextLayerSelectionSupport } from "./pdfTextLayerSelectionSupport";
 import { buildRustPdfTextLayer, pageWidthAtScale1FromPoints } from "./pdfRustTextLayer";
-
-const blobFromBytes = (bytes: Uint8Array, type: string) =>
-  new Blob([bytes.slice()], { type });
 
 type PdfReaderProps = {
   view: ReaderView;
