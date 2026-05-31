@@ -8,6 +8,7 @@ import type {
   ReaderView,
 } from "../../lib/contracts";
 import { safeScrollIntoView } from "../../lib/dom";
+import { escapeHtml } from "../../lib/htmlEscape";
 import { computeFitWidthZoomPct } from "./pdfFit";
 import {
   buildPdfTextSelectionFromRange,
@@ -18,9 +19,6 @@ import {
 } from "./pdfSelection";
 import { installPdfJsTextLayerSelectionSupport } from "./pdfTextLayerSelectionSupport";
 import { buildRustPdfTextLayer, pageWidthAtScale1FromPoints } from "./pdfRustTextLayer";
-
-const escapeHtml = (value: string) =>
-  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 const blobFromBytes = (bytes: Uint8Array, type: string) =>
   new Blob([bytes.slice()], { type });

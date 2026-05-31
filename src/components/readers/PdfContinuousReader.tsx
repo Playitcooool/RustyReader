@@ -11,6 +11,7 @@ import type {
   ReaderView,
 } from "../../lib/contracts";
 import { clearChildren, safeScrollIntoView } from "../../lib/dom";
+import { escapeHtml } from "../../lib/htmlEscape";
 import { computeFitWidthZoomPct } from "./pdfFit";
 import { computeActivePageIndexFromRects } from "./pdfContinuousActivePage";
 import { buildOcrTextLayer } from "./pdfOcrTextLayer";
@@ -45,9 +46,6 @@ import {
   type PdfInkAnchor,
   type PdfInkPoint,
 } from "./pdfInkAnchor";
-
-const escapeHtml = (value: string) =>
-  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 const blobFromBytes = (bytes: Uint8Array, type: string) =>
   new Blob([bytes.slice()], { type });
