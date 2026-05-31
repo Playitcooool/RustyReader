@@ -1,4 +1,13 @@
 import type { AITaskStreamEvent, AppApi, LibraryChangedEvent } from "./contracts";
+import {
+  toPdfDocumentInfo,
+  toPdfInitialPageBundle,
+  toPdfOutlineItems,
+  toPdfPageBundle,
+  toPdfPageText,
+  toPdfSearchResult,
+  toUint8Array,
+} from "./pdfEngineResponses";
 
 export const isTauriRuntime = () =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -7,126 +16,6 @@ export async function createTauriApi(): Promise<AppApi> {
   const { invoke } = await import("@tauri-apps/api/core");
   const { listen } = await import("@tauri-apps/api/event");
   const { open } = await import("@tauri-apps/plugin-dialog");
-  const toUint8Array = (value: unknown): Uint8Array => {
-    if (value instanceof Uint8Array) return value;
-    if (value instanceof ArrayBuffer) return new Uint8Array(value);
-    if (Array.isArray(value)) return Uint8Array.from(value);
-    if (
-      value &&
-      typeof value === "object" &&
-      "data" in value &&
-      Array.isArray((value as { data: unknown }).data)
-    ) {
-      return Uint8Array.from((value as { data: number[] }).data);
-    }
-    throw new Error("Unexpected attachment byte response.");
-  };
-
-  const toPdfPageBundle = (value: unknown) => {
-    if (!value || typeof value !== "object") throw new Error("Unexpected PDF page bundle response.");
-    const obj = value as Record<string, unknown>;
-    return {
-      png_bytes: toUint8Array(obj.png_bytes),
-      width_px: Number(obj.width_px),
-      height_px: Number(obj.height_px),
-      page_width_pt: Number(obj.page_width_pt),
-      page_height_pt: Number(obj.page_height_pt),
-      spans: Array.isArray(obj.spans)
-        ? (obj.spans as unknown[]).map((span) => {
-            const s = span && typeof span === "object" ? (span as Record<string, unknown>) : {};
-            return {
-              text: typeof s.text === "string" ? s.text : "",
-              x0: Number(s.x0),
-              y0: Number(s.y0),
-              x1: Number(s.x1),
-              y1: Number(s.y1),
-            };
-          })
-        : [],
-    };
-  };
-
-  const toPdfSpans = (value: unknown) =>
-    Array.isArray(value)
-      ? value.map((span) => {
-          const s = span && typeof span === "object" ? (span as Record<string, unknown>) : {};
-          return {
-            text: typeof s.text === "string" ? s.text : "",
-            x0: Number(s.x0),
-            y0: Number(s.y0),
-            x1: Number(s.x1),
-            y1: Number(s.y1),
-          };
-        })
-      : [];
-
-  const toPdfDocumentInfo = (value: unknown) => {
-    if (!value || typeof value !== "object") throw new Error("Unexpected PDF document info response.");
-    const obj = value as Record<string, unknown>;
-    return {
-      page_count: Number(obj.page_count),
-      pages: Array.isArray(obj.pages)
-        ? obj.pages.map((page) => {
-            const p = page && typeof page === "object" ? (page as Record<string, unknown>) : {};
-            return {
-              width_pt: Number(p.width_pt),
-              height_pt: Number(p.height_pt),
-            };
-          })
-        : [],
-    };
-  };
-
-  const toPdfPageText = (value: unknown) => {
-    if (!value || typeof value !== "object") throw new Error("Unexpected PDF page text response.");
-    const obj = value as Record<string, unknown>;
-    return {
-      page_index0: Number(obj.page_index0),
-      spans: toPdfSpans(obj.spans),
-    };
-  };
-
-  const toPdfInitialPageBundle = (value: unknown) => {
-    if (!value || typeof value !== "object") throw new Error("Unexpected PDF initial bundle response.");
-    const obj = value as Record<string, unknown>;
-    return {
-      document_info: toPdfDocumentInfo(obj.document_info),
-      bundle: toPdfPageBundle(obj.bundle),
-    };
-  };
-
-  const toPdfOutlineItems = (value: unknown): import("./contracts").PdfOutlineItem[] =>
-    Array.isArray(value)
-      ? value.map((item) => {
-          const obj = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
-          return {
-            id: typeof obj.id === "string" ? obj.id : "",
-            title: typeof obj.title === "string" ? obj.title : "",
-            page_index0: Number(obj.page_index0),
-            children: toPdfOutlineItems(obj.children),
-          };
-        })
-      : [];
-
-  const toPdfSearchResult = (value: unknown) => {
-    if (!value || typeof value !== "object") throw new Error("Unexpected PDF search response.");
-    const obj = value as Record<string, unknown>;
-    const matches = Array.isArray(obj.matches)
-      ? (obj.matches as unknown[]).map((match) => {
-          const m = match && typeof match === "object" ? (match as Record<string, unknown>) : {};
-          return {
-            page_index0: Number(m.page_index0),
-            span_index: Number(m.span_index),
-            start: Number(m.start),
-            end: Number(m.end),
-          };
-        })
-      : [];
-    return {
-      total: Number(obj.total ?? matches.length),
-      matches,
-    };
-  };
 
   return {
     listCollections: () => invoke("list_collections"),
