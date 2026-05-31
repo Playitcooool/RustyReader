@@ -28,6 +28,7 @@ import { installPdfJsTextLayerSelectionSupport } from "./pdfTextLayerSelectionSu
 import { pickPdfPageTextSource, shouldFallbackToPdfOcr, type PdfPageTextSource } from "./pdfTextSource";
 import { buildRustPdfTextLayer, pageWidthAtScale1FromPoints } from "./pdfRustTextLayer";
 import { loadPdfJsDocument, renderPdfJsPageToPng, type PdfJsDocument } from "./pdfJsPageRenderer";
+import { findScrollFallbackTarget, schedulePdfReaderIdle } from "./pdfReaderBrowser";
 import { bucketPdfRenderWidth } from "./pdfRenderSizing";
 import {
   DEFAULT_PDF_TEXT_BOX_COLOR,
@@ -187,36 +188,6 @@ type DrawingInkStroke = {
   color: string;
   width: number;
   points: PdfInkPoint[];
-};
-
-const supportsRequestIdleCallback = () =>
-  typeof window !== "undefined" && typeof window.requestIdleCallback === "function";
-
-const scheduleIdle = (callback: () => void) => {
-  if (typeof window === "undefined") return () => {};
-  if (supportsRequestIdleCallback()) {
-    const id = window.requestIdleCallback(() => callback(), { timeout: 180 });
-    return () => window.cancelIdleCallback?.(id);
-  }
-  const id = window.setTimeout(callback, 24);
-  return () => window.clearTimeout(id);
-};
-
-const isScrollable = (element: HTMLElement) => {
-  const style = window.getComputedStyle(element);
-  const overflowY = style.overflowY || style.overflow;
-  if (!/(auto|scroll|overlay)/.test(overflowY)) return false;
-  return element.scrollHeight > element.clientHeight + 1;
-};
-
-const findScrollFallbackTarget = (element: HTMLElement | null): EventTarget | null => {
-  if (typeof window === "undefined" || !element) return null;
-  let current = element.parentElement;
-  while (current) {
-    if (isScrollable(current)) return current;
-    current = current.parentElement;
-  }
-  return window;
 };
 
 export function PdfContinuousReader({
@@ -1031,7 +1002,7 @@ export function PdfContinuousReader({
 
     if (idleRequests.length > 0) {
       idleRenderCancelRef.current?.();
-      idleRenderCancelRef.current = scheduleIdle(() => runBatches(idleRequests));
+      idleRenderCancelRef.current = schedulePdfReaderIdle(() => runBatches(idleRequests));
     }
 
     return () => {
