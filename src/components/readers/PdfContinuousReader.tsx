@@ -13,6 +13,7 @@ import type {
 import { clearChildren, safeScrollIntoView } from "../../lib/dom";
 import { blobFromBytes } from "../../lib/binaryData";
 import { escapeHtml } from "../../lib/htmlEscape";
+import { clamp } from "../../lib/viewMath";
 import { computeFitWidthZoomPct } from "./pdfFit";
 import { computeActivePageIndexFromRects } from "./pdfContinuousActivePage";
 import { buildOcrTextLayer } from "./pdfOcrTextLayer";
@@ -51,7 +52,6 @@ import {
 const defaultReadPrimaryAttachmentBytes = async () => new Uint8Array();
 
 const widthBucket = (widthPx: number) => Math.max(1, Math.ceil(widthPx / 64) * 64);
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const PREFETCH_PAGE_RADIUS = 2;
 const SEARCH_TARGET_RENDER_RADIUS = 1;
 const PAGE_TEXT_CACHE_LIMIT = 32;

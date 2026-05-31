@@ -1,3 +1,5 @@
+import { clamp } from "../../lib/viewMath";
+
 export type PdfInkPoint = {
   x: number;
   y: number;
@@ -21,8 +23,6 @@ export const MAX_PDF_ERASER_SIZE = 72;
 
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
-
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
 export const normalizePdfInkColor = (value: unknown) => {
   if (typeof value !== "string") return DEFAULT_PDF_INK_COLOR;

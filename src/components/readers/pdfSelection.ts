@@ -1,3 +1,5 @@
+import { clamp } from "../../lib/viewMath";
+
 export type PdfHighlightColor = "yellow" | "red" | "green" | "blue" | "purple";
 
 export type PdfTextAnchor = {
@@ -69,8 +71,6 @@ export const selectionRectFromRange = (range: Range): PdfSelectionRect => {
     bottom: sanitizeClientRectNumber(rect.bottom),
   };
 };
-
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
 const globalOffsetWithinHost = (host: HTMLElement, container: Node, offset: number) => {
   if (!host.contains(container) && host !== container) return null;

@@ -54,6 +54,7 @@ import { NormalizedReader } from "../readers/NormalizedReader";
 import { PdfContinuousReader } from "../readers/PdfContinuousReader";
 import { attachmentFormatLabel, type ReaderFitMode } from "../../lib/appView";
 import type { Collection, LibraryItem, ReaderView, Annotation } from "../../lib/contracts";
+import { clamp } from "../../lib/viewMath";
 import type { ActivePdfHighlight, PdfTextBoxAnnotationDraft, ReaderTextSelection, TranslationPopover, WorkspaceMode } from "../../hooks/useReaderState";
 import type { PdfHighlightColor, PdfTextSelection } from "../readers/pdfSelection";
 import {
@@ -280,7 +281,6 @@ export function ReaderWorkspace(props: Props) {
   const showPdfFocusHighlightBar = Boolean(workspaceMode === "pdf_focus" && activePaper?.attachment_format === "pdf" && pdfSelection);
   const pdfFocusHighlightBarStyle = useMemo(() => {
     if (!showPdfFocusHighlightBar || !pdfSelection) return {};
-    const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
     const BAR_WIDTH_PX = 224;
     const BAR_HEIGHT_PX = 44;
     const GAP_PX = 10;
@@ -378,7 +378,6 @@ export function ReaderWorkspace(props: Props) {
 
   const readerContextMenuStyle = useMemo(() => {
     if (!readerContextMenu) return {};
-    const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
     const WIDTH_PX = 220;
     const HEIGHT_PX = showPdfHighlightActions ? 340 : 164;
     const PADDING_PX = 8;
@@ -389,7 +388,6 @@ export function ReaderWorkspace(props: Props) {
   }, [readerContextMenu, showPdfHighlightActions, viewportSize.height, viewportSize.width]);
   const translationPopoverStyle = useMemo(() => {
     if (!translationPopover) return {};
-    const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
     const WIDTH_PX = 320;
     const HEIGHT_PX = 180;
     const GAP_PX = 10;

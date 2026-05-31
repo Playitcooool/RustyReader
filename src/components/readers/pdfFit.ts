@@ -1,4 +1,4 @@
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+import { clamp } from "../../lib/viewMath";
 
 export const computeFitWidthZoomPct = (input: {
   containerWidth: number;
@@ -23,4 +23,3 @@ export const computeFitWidthZoomPct = (input: {
   const zoom = scale * 100;
   return Math.round(clamp(zoom, minZoomPct, maxZoomPct));
 };
-
