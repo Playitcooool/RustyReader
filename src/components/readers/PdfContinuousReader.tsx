@@ -22,6 +22,7 @@ import {
   type PdfTextSelection,
 } from "./pdfSelection";
 import { installPdfJsTextLayerSelectionSupport } from "./pdfTextLayerSelectionSupport";
+import { pickPdfPageTextSource, shouldFallbackToPdfOcr, type PdfPageTextSource } from "./pdfTextSource";
 import { buildRustPdfTextLayer, pageWidthAtScale1FromPoints } from "./pdfRustTextLayer";
 import { loadPdfJsDocument, renderPdfJsPageToPng, type PdfJsDocument } from "./pdfJsPageRenderer";
 import {
@@ -59,8 +60,6 @@ const SEARCH_TARGET_RENDER_RADIUS = 1;
 const PAGE_TEXT_CACHE_LIMIT = 32;
 const ACTIVE_PAGE_ANCHOR_RATIO = 0.38;
 const OCR_CONFIG_VERSION = "pdf-native-fallback-v1";
-const SUSPICIOUS_TEXT_RATIO_THRESHOLD = 0.12;
-const SUSPICIOUS_CHAR_RE = /[\uFFFD\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\uE000-\uF8FF]/g;
 const MAX_INITIAL_RASTER_SCALE = 1;
 const MAX_RASTER_SCALE = 2;
 const OCR_CONCURRENCY = 1;
@@ -137,8 +136,6 @@ type PdfContinuousReaderProps = {
   onSearchMatchesChange?: (state: { total: number; activeIndex: number }) => void;
 };
 
-type PageTextSource = "native" | "ocr" | "none";
-
 type RenderedPageState = {
   imageUrl: string;
   cssWidthPx: number;
@@ -148,7 +145,7 @@ type RenderedPageState = {
   rasterScale: number;
   bucketWidthPx: number;
   requestKey: string;
-  textSource: PageTextSource;
+  textSource: PdfPageTextSource;
 };
 
 type PageShellInfo = {
@@ -224,26 +221,6 @@ const findScrollFallbackTarget = (element: HTMLElement | null): EventTarget | nu
   }
   return window;
 };
-
-function pickPageTextSource(strings: string[]): PageTextSource {
-  if (strings.length === 0) return "none";
-  return "native";
-}
-
-function shouldFallbackToOcr(strings: string[]): boolean {
-  const normalized = strings.map((value) => value.trim()).filter(Boolean);
-  if (normalized.length === 0) return true;
-
-  const joined = normalized.join(" ");
-  if (!joined) return true;
-
-  const suspiciousChars = joined.match(SUSPICIOUS_CHAR_RE) ?? [];
-  if (suspiciousChars.length === 0) return false;
-
-  const totalChars = Array.from(joined).length;
-  if (totalChars <= 0) return true;
-  return suspiciousChars.length / totalChars >= SUSPICIOUS_TEXT_RATIO_THRESHOLD;
-}
 
 export function PdfContinuousReader({
   view,
@@ -399,7 +376,7 @@ export function PdfContinuousReader({
   }, []);
 
   const setTextLayerForPage = useCallback(
-    (input: { pageIndex0: number; strings: string[]; divs: HTMLElement[]; textSource: PageTextSource }) => {
+    (input: { pageIndex0: number; strings: string[]; divs: HTMLElement[]; textSource: PdfPageTextSource }) => {
       const { pageIndex0, strings, divs, textSource } = input;
       const host = textLayerHostByIndexRef.current.get(pageIndex0);
       if (!host) return;
@@ -828,7 +805,7 @@ export function PdfContinuousReader({
         rasterScale: request.rasterScale,
         bucketWidthPx: request.bucketWidthPx,
         requestKey: request.requestKey,
-        textSource: pickPageTextSource(nativeStrings),
+        textSource: pickPdfPageTextSource(nativeStrings),
       };
       pagesRef.current = {
         ...pagesRef.current,
@@ -861,13 +838,13 @@ export function PdfContinuousReader({
         pageIndex0: request.pageIndex0,
         divs: nativeLayer.divs,
         strings: nativeLayer.strings,
-        textSource: pickPageTextSource(nativeLayer.strings),
+        textSource: pickPdfPageTextSource(nativeLayer.strings),
       });
       if (request.pageIndex0 === page) setStatus("ready");
 
       const ocrEligible =
         runOcrFallback &&
-        shouldFallbackToOcr(nativeLayer.strings) &&
+        shouldFallbackToPdfOcr(nativeLayer.strings) &&
         (request.pageIndex0 === page || visiblePageIndexesRef.current.includes(request.pageIndex0)) &&
         !inFlightOcrPagesRef.current.has(request.pageIndex0) &&
         inFlightOcrPagesRef.current.size < OCR_CONCURRENCY;
@@ -896,7 +873,7 @@ export function PdfContinuousReader({
               pageIndex0: request.pageIndex0,
               divs: built.divs,
               strings: built.strings,
-              textSource: built.divs.length > 0 ? "ocr" : pickPageTextSource(nativeLayer.strings),
+              textSource: built.divs.length > 0 ? "ocr" : pickPdfPageTextSource(nativeLayer.strings),
             });
             void result;
           } catch (error) {
