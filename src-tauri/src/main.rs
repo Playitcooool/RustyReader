@@ -597,6 +597,7 @@ fn main() {
             commands::assign_tag,
             commands::list_items,
             commands::query_library_items,
+            commands::library_tree_search_filter,
             commands::search_items,
             commands::import_files,
             commands::get_connector_settings,

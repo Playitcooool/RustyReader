@@ -1056,6 +1056,45 @@ export const fakeApi: AppApi = {
     return items;
   },
 
+  async libraryTreeSearchFilter(input) {
+    if (input.collection_id === null || input.search.trim().length === 0) {
+      return { item_ids: [], collection_ids: [] };
+    }
+    const collectionIds = new Set([input.collection_id, ...childCollectionIds(input.collection_id)]);
+    const lowered = input.search.trim().toLowerCase();
+    const matchesSearch = (item: LibraryItem) =>
+      [
+        item.title,
+        item.authors,
+        item.source,
+        item.doi ?? "",
+        String(item.publication_year ?? ""),
+        item.tags.join(" "),
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(lowered);
+    const matchingItems = state.items
+      .map(buildLibraryItem)
+      .filter((item) => collectionIds.has(item.collection_id))
+      .filter(matchesSearch);
+    const seenCollectionIds = new Set<number>();
+    const allowedCollectionIds: number[] = [];
+    const parentById = new Map(state.collections.map((collection) => [collection.id, collection.parent_id]));
+    for (const item of matchingItems) {
+      let cursor: number | null = item.collection_id;
+      while (cursor !== null && !seenCollectionIds.has(cursor)) {
+        seenCollectionIds.add(cursor);
+        allowedCollectionIds.push(cursor);
+        cursor = parentById.get(cursor) ?? null;
+      }
+    }
+    return {
+      item_ids: matchingItems.map((item) => item.id),
+      collection_ids: allowedCollectionIds,
+    };
+  },
+
   async searchItems(query) {
     const lowered = query.trim().toLowerCase();
     return state.items

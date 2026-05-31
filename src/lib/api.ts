@@ -180,6 +180,7 @@ export async function createTauriApi(): Promise<AppApi> {
     moveItem: (input) => invoke("move_item", { input }),
     listItems: (collectionId) => invoke("list_items", { collectionId }),
     queryLibraryItems: (input) => invoke("query_library_items", { input }),
+    libraryTreeSearchFilter: (input) => invoke("library_tree_search_filter", { input }),
     searchItems: (query) => invoke("search_items", { input: { query } }),
     getReaderView: (itemId) => invoke("get_reader_view", { itemId }),
     updateMarkdownItem: (input) => invoke("update_markdown_item", { input }),

@@ -88,6 +88,18 @@ pub struct LibraryQueryInput {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LibraryTreeSearchFilterInput {
+    pub collection_id: Option<i64>,
+    pub search: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LibraryTreeSearchFilter {
+    pub item_ids: Vec<i64>,
+    pub collection_ids: Vec<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CollectionDeleteSummary {
     pub deleted_collection_ids: Vec<i64>,
     pub deleted_item_ids: Vec<i64>,
@@ -1581,6 +1593,30 @@ impl LibraryService {
 
         let tags = self.list_tags(None)?;
         Ok(query_library_items(&collections, &items, &tags, &input))
+    }
+
+    pub fn library_tree_search_filter(
+        &self,
+        input: LibraryTreeSearchFilterInput,
+    ) -> Result<LibraryTreeSearchFilter> {
+        let conn = self.connect()?;
+        let mut collection_statement =
+            conn.prepare("SELECT id, name, parent_id FROM collections ORDER BY name ASC")?;
+        let collection_rows = collection_statement.query_map([], map_collection)?;
+        let collections = collection_rows.collect::<rusqlite::Result<Vec<_>>>()?;
+
+        let mut item_statement = conn.prepare(
+            "
+            SELECT i.id, i.title, i.collection_id, a.id, a.path, a.status, i.authors, i.publication_year, i.source, i.doi
+            FROM items i
+            JOIN attachments a ON a.item_id = i.id AND a.is_primary = 1
+            ORDER BY i.id DESC
+            ",
+        )?;
+        let rows = item_statement.query_map([], map_library_item)?;
+        let items = hydrate_item_tags(&conn, rows.collect::<rusqlite::Result<Vec<_>>>()?)?;
+
+        Ok(library_tree_search_filter(&collections, &items, &input))
     }
 
     pub fn update_item_metadata(
@@ -4599,6 +4635,59 @@ fn query_library_items(
     output
 }
 
+fn library_tree_search_filter(
+    collections: &[Collection],
+    items: &[LibraryItem],
+    input: &LibraryTreeSearchFilterInput,
+) -> LibraryTreeSearchFilter {
+    let Some(collection_id) = input.collection_id else {
+        return LibraryTreeSearchFilter {
+            item_ids: Vec::new(),
+            collection_ids: Vec::new(),
+        };
+    };
+    if input.search.trim().is_empty() {
+        return LibraryTreeSearchFilter {
+            item_ids: Vec::new(),
+            collection_ids: Vec::new(),
+        };
+    }
+
+    let mut collection_scope = descendant_ids_for_collection(collections, collection_id);
+    collection_scope.insert(collection_id);
+    let parent_by_id = collections
+        .iter()
+        .map(|collection| (collection.id, collection.parent_id))
+        .collect::<HashMap<_, _>>();
+    let matching_items = items
+        .iter()
+        .filter(|item| collection_scope.contains(&item.collection_id))
+        .filter(|item| library_item_matches_search(item, &input.search))
+        .collect::<Vec<_>>();
+
+    let item_ids = matching_items
+        .iter()
+        .map(|item| item.id)
+        .collect::<Vec<_>>();
+    let mut seen_collections = HashSet::<i64>::new();
+    let mut collection_ids = Vec::<i64>::new();
+    for item in matching_items {
+        let mut cursor = Some(item.collection_id);
+        while let Some(collection_id) = cursor {
+            if !seen_collections.insert(collection_id) {
+                break;
+            }
+            collection_ids.push(collection_id);
+            cursor = parent_by_id.get(&collection_id).copied().flatten();
+        }
+    }
+
+    LibraryTreeSearchFilter {
+        item_ids,
+        collection_ids,
+    }
+}
+
 fn color_pdf_text_anchor(anchor: &str, color: PdfHighlightColor) -> Result<String> {
     let mut parsed =
         serde_json::from_str::<PdfTextAnchor>(anchor).context("invalid PDF text anchor")?;
@@ -6744,6 +6833,84 @@ mod tests {
     #[test]
     fn queries_library_items_return_empty_without_selected_collection() {
         assert!(query_library_items(&[], &[item(10, 1)], &[], &library_query(None)).is_empty());
+    }
+
+    #[test]
+    fn builds_library_tree_filter_for_matching_items_and_ancestors() {
+        let collections = vec![
+            Collection {
+                id: 1,
+                name: "Root".to_string(),
+                parent_id: None,
+            },
+            Collection {
+                id: 2,
+                name: "Child".to_string(),
+                parent_id: Some(1),
+            },
+            Collection {
+                id: 3,
+                name: "Other".to_string(),
+                parent_id: None,
+            },
+        ];
+        let mut first = item(10, 2);
+        first.title = "Transformer Scaling Laws".to_string();
+        let mut second = item(11, 3);
+        second.title = "Transformer Outside Scope".to_string();
+        let mut third = item(12, 1);
+        third.title = "Diffusion Notes".to_string();
+
+        let result = library_tree_search_filter(
+            &collections,
+            &[first, second, third],
+            &LibraryTreeSearchFilterInput {
+                collection_id: Some(1),
+                search: "transformer".to_string(),
+            },
+        );
+
+        assert_eq!(result.item_ids, vec![10]);
+        assert_eq!(result.collection_ids, vec![2, 1]);
+    }
+
+    #[test]
+    fn library_tree_filter_is_empty_without_search_or_collection() {
+        let collections = vec![Collection {
+            id: 1,
+            name: "Root".to_string(),
+            parent_id: None,
+        }];
+        let items = vec![item(10, 1)];
+
+        assert_eq!(
+            library_tree_search_filter(
+                &collections,
+                &items,
+                &LibraryTreeSearchFilterInput {
+                    collection_id: Some(1),
+                    search: " ".to_string(),
+                },
+            ),
+            LibraryTreeSearchFilter {
+                item_ids: Vec::new(),
+                collection_ids: Vec::new(),
+            }
+        );
+        assert_eq!(
+            library_tree_search_filter(
+                &collections,
+                &items,
+                &LibraryTreeSearchFilterInput {
+                    collection_id: None,
+                    search: "root".to_string(),
+                },
+            ),
+            LibraryTreeSearchFilter {
+                item_ids: Vec::new(),
+                collection_ids: Vec::new(),
+            }
+        );
     }
 
     #[test]

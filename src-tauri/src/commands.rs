@@ -1,8 +1,9 @@
 use app_core::service::{
     AIArtifact, AISession, AISessionReference, AISessionReferenceKind, AISessionScope, AISettings,
     AITask, Annotation, EvidenceChunk, EvidenceCitationTarget, EvidenceQueryOptions,
-    ImportBatchResult, ImportMode, LibraryItem, LibraryQueryInput, PdfHighlightColor, ResearchNote,
-    Tag, TranslateSelectionResult, TranslationProvider, UpdateAISettingsInput,
+    ImportBatchResult, ImportMode, LibraryItem, LibraryQueryInput, LibraryTreeSearchFilter,
+    LibraryTreeSearchFilterInput, PdfHighlightColor, ResearchNote, Tag, TranslateSelectionResult,
+    TranslationProvider, UpdateAISettingsInput,
 };
 use serde::{Deserialize, Serialize};
 use std::env;
@@ -294,6 +295,16 @@ pub(crate) fn query_library_items(
 ) -> Result<Vec<LibraryItem>, String> {
     service(&state)
         .query_library_items(input)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) fn library_tree_search_filter(
+    state: State<'_, AppState>,
+    input: LibraryTreeSearchFilterInput,
+) -> Result<LibraryTreeSearchFilter, String> {
+    service(&state)
+        .library_tree_search_filter(input)
         .map_err(|error| error.to_string())
 }
 

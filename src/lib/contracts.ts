@@ -56,6 +56,16 @@ export type LibraryQueryInput = {
   item_sort: "recent" | "title" | "year_desc";
 };
 
+export type LibraryTreeSearchFilterInput = {
+  collection_id: number | null;
+  search: string;
+};
+
+export type LibraryTreeSearchFilter = {
+  item_ids: number[];
+  collection_ids: number[];
+};
+
 export type CollectionDeleteSummary = {
   deleted_collection_ids: number[];
   deleted_item_ids: number[];
@@ -427,6 +437,7 @@ export type AppApi = {
   moveItem: (input: { item_id: number; collection_id: number }) => Promise<void>;
   listItems: (collectionId?: number) => Promise<LibraryItem[]>;
   queryLibraryItems: (input: LibraryQueryInput) => Promise<LibraryItem[]>;
+  libraryTreeSearchFilter: (input: LibraryTreeSearchFilterInput) => Promise<LibraryTreeSearchFilter>;
   searchItems: (query: string) => Promise<LibraryItem[]>;
   getReaderView: (itemId: number) => Promise<ReaderView>;
   updateMarkdownItem: (input: { item_id: number; markdown: string }) => Promise<ReaderView>;

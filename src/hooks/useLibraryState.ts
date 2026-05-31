@@ -2,10 +2,8 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  descendantIdsForCollection,
   droppedPathsFromFileList,
   isSupportedPath,
-  matchesSearch,
   readStoredString,
   type AttachmentFilter,
   type ItemSort,
@@ -44,6 +42,7 @@ export function useLibraryState({
   const [selectedCollectionId, setSelectedCollectionId] = useState<number | null>(null);
   const [selectedTagId, setSelectedTagId] = useState<number | null>(null);
   const [visibleItems, setVisibleItems] = useState<LibraryItem[]>([]);
+  const [treeSearchFilter, setTreeSearchFilter] = useState<{ allowedItemIds: Set<number>; allowedCollectionIds: Set<number> } | null>(null);
   const [search, setSearch] = useState("");
   const [itemSort, setItemSort] = useState<ItemSort>(() =>
     readStoredString(ITEM_SORT_KEY, DEFAULT_ITEM_SORT, ["recent", "title", "year_desc"] as const),
@@ -64,16 +63,6 @@ export function useLibraryState({
     () => collections.find((collection) => collection.id === selectedCollectionId) ?? null,
     [collections, selectedCollectionId],
   );
-  const selectedCollectionScope = useMemo(() => {
-    if (selectedCollectionId === null) return null;
-    const scope = descendantIdsForCollection(collections, selectedCollectionId);
-    scope.add(selectedCollectionId);
-    return scope;
-  }, [collections, selectedCollectionId]);
-  const activeCollectionItems = useMemo(() => {
-    if (!selectedCollectionScope) return [];
-    return libraryItems.filter((item) => selectedCollectionScope.has(item.collection_id) && matchesSearch(item, search));
-  }, [libraryItems, search, selectedCollectionScope]);
   const importHasIssues = Boolean(lastImportResult && (lastImportResult.duplicates.length > 0 || lastImportResult.failed.length > 0));
 
   useEffect(() => {
@@ -108,6 +97,35 @@ export function useLibraryState({
       cancelled = true;
     };
   }, [attachmentFilter, getApi, itemSort, libraryItems, search, selectedCollectionId, selectedTagId, setStatusMessage]);
+
+  useEffect(() => {
+    const normalized = search.trim();
+    if (normalized.length === 0) {
+      setTreeSearchFilter(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const filter = await (await getApi()).libraryTreeSearchFilter({
+          collection_id: selectedCollectionId,
+          search,
+        });
+        if (cancelled) return;
+        setTreeSearchFilter({
+          allowedItemIds: new Set(filter.item_ids),
+          allowedCollectionIds: new Set(filter.collection_ids),
+        });
+      } catch (error) {
+        if (cancelled) return;
+        setTreeSearchFilter({ allowedItemIds: new Set(), allowedCollectionIds: new Set() });
+        setStatusMessage(error instanceof Error ? error.message : "Failed to filter library tree.");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [collections, getApi, libraryItems, search, selectedCollectionId, setStatusMessage]);
 
   const loadLibrary = useCallback(async (options: { refreshStatuses?: boolean } = {}) => {
     const runtimeApi = await getApi();
@@ -339,23 +357,6 @@ export function useLibraryState({
     event.preventDefault();
     setResourceContextMenu(detail);
   }, []);
-
-  const treeSearchFilter = useMemo(() => {
-    const normalized = search.trim().toLowerCase();
-    if (normalized.length === 0) return null;
-    const matchingItems = activeCollectionItems;
-    const allowedItemIds = new Set(matchingItems.map((item) => item.id));
-    const parentById = new Map(collections.map((collection) => [collection.id, collection.parent_id]));
-    const allowedCollectionIds = new Set<number>();
-    for (const item of matchingItems) {
-      let cursor: number | null = item.collection_id;
-      while (cursor !== null && !allowedCollectionIds.has(cursor)) {
-        allowedCollectionIds.add(cursor);
-        cursor = parentById.get(cursor) ?? null;
-      }
-    }
-    return { allowedItemIds, allowedCollectionIds };
-  }, [activeCollectionItems, collections, search]);
 
   const contextMenuCollection = resourceContextMenu?.kind === "collection" ? collections.find((collection) => collection.id === resourceContextMenu.targetId) ?? null : null;
   const contextMenuItem = resourceContextMenu?.kind === "item" ? libraryItems.find((item) => item.id === resourceContextMenu.targetId) ?? null : null;
