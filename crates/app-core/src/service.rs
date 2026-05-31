@@ -42,6 +42,7 @@ pub struct Collection {
     pub id: i64,
     pub name: String,
     pub parent_id: Option<i64>,
+    pub item_count: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -829,6 +830,7 @@ impl LibraryService {
             id: conn.last_insert_rowid(),
             name: name.to_owned(),
             parent_id,
+            item_count: 0,
         })
     }
 
@@ -973,15 +975,16 @@ impl LibraryService {
 
     pub fn list_collections(&self) -> Result<Vec<Collection>> {
         let conn = self.connect()?;
-        let mut statement =
-            conn.prepare("SELECT id, name, parent_id FROM collections ORDER BY name ASC")?;
-        let rows = statement.query_map([], |row| {
-            Ok(Collection {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                parent_id: row.get(2)?,
-            })
-        })?;
+        let mut statement = conn.prepare(
+            "
+            SELECT c.id, c.name, c.parent_id, COUNT(i.id)
+            FROM collections c
+            LEFT JOIN items i ON i.collection_id = c.id
+            GROUP BY c.id
+            ORDER BY c.name ASC
+            ",
+        )?;
+        let rows = statement.query_map([], map_collection)?;
         rows.collect::<rusqlite::Result<Vec<_>>>()
             .map_err(Into::into)
     }
@@ -1577,8 +1580,15 @@ impl LibraryService {
 
     pub fn query_library_items(&self, input: LibraryQueryInput) -> Result<Vec<LibraryItem>> {
         let conn = self.connect()?;
-        let mut collection_statement =
-            conn.prepare("SELECT id, name, parent_id FROM collections ORDER BY name ASC")?;
+        let mut collection_statement = conn.prepare(
+            "
+            SELECT c.id, c.name, c.parent_id, COUNT(i.id)
+            FROM collections c
+            LEFT JOIN items i ON i.collection_id = c.id
+            GROUP BY c.id
+            ORDER BY c.name ASC
+            ",
+        )?;
         let collection_rows = collection_statement.query_map([], map_collection)?;
         let collections = collection_rows.collect::<rusqlite::Result<Vec<_>>>()?;
 
@@ -1602,8 +1612,15 @@ impl LibraryService {
         input: LibraryTreeSearchFilterInput,
     ) -> Result<LibraryTreeSearchFilter> {
         let conn = self.connect()?;
-        let mut collection_statement =
-            conn.prepare("SELECT id, name, parent_id FROM collections ORDER BY name ASC")?;
+        let mut collection_statement = conn.prepare(
+            "
+            SELECT c.id, c.name, c.parent_id, COUNT(i.id)
+            FROM collections c
+            LEFT JOIN items i ON i.collection_id = c.id
+            GROUP BY c.id
+            ORDER BY c.name ASC
+            ",
+        )?;
         let collection_rows = collection_statement.query_map([], map_collection)?;
         let collections = collection_rows.collect::<rusqlite::Result<Vec<_>>>()?;
 
@@ -4911,8 +4928,15 @@ fn expand_session_references(
     conn: &Connection,
     references: &[AISessionReference],
 ) -> Result<SessionPromptExpansion> {
-    let mut collection_statement =
-        conn.prepare("SELECT id, name, parent_id FROM collections ORDER BY name ASC")?;
+    let mut collection_statement = conn.prepare(
+        "
+        SELECT c.id, c.name, c.parent_id, COUNT(i.id)
+        FROM collections c
+        LEFT JOIN items i ON i.collection_id = c.id
+        GROUP BY c.id
+        ORDER BY c.name ASC
+        ",
+    )?;
     let collection_rows = collection_statement.query_map([], map_collection)?;
     let collections = collection_rows.collect::<rusqlite::Result<Vec<_>>>()?;
     let mut statement = conn.prepare(
@@ -5715,6 +5739,7 @@ fn map_collection(row: &rusqlite::Row<'_>) -> rusqlite::Result<Collection> {
         id: row.get(0)?,
         name: row.get(1)?,
         parent_id: row.get(2)?,
+        item_count: row.get(3)?,
     })
 }
 
@@ -6713,11 +6738,13 @@ mod tests {
                 id: 1,
                 name: "Root".to_string(),
                 parent_id: None,
+                item_count: 0,
             },
             Collection {
                 id: 2,
                 name: "Child".to_string(),
                 parent_id: Some(1),
+                item_count: 0,
             },
         ];
         let items = vec![item(10, 1), item(11, 1), item(12, 2)];
@@ -6739,21 +6766,25 @@ mod tests {
                 id: 1,
                 name: "Root".to_string(),
                 parent_id: None,
+                item_count: 0,
             },
             Collection {
                 id: 2,
                 name: "Beta".to_string(),
                 parent_id: Some(1),
+                item_count: 0,
             },
             Collection {
                 id: 3,
                 name: "Alpha".to_string(),
                 parent_id: Some(1),
+                item_count: 0,
             },
             Collection {
                 id: 4,
                 name: "Grandchild".to_string(),
                 parent_id: Some(3),
+                item_count: 0,
             },
         ];
         let items = vec![
@@ -6777,6 +6808,7 @@ mod tests {
             id: 1,
             name: "Root".to_string(),
             parent_id: None,
+            item_count: 0,
         }];
         let items = vec![item(10, 1)];
         let references = vec![
@@ -6798,16 +6830,19 @@ mod tests {
                 id: 1,
                 name: "Root".to_string(),
                 parent_id: None,
+                item_count: 0,
             },
             Collection {
                 id: 2,
                 name: "Child".to_string(),
                 parent_id: Some(1),
+                item_count: 0,
             },
             Collection {
                 id: 3,
                 name: "Other".to_string(),
                 parent_id: None,
+                item_count: 0,
             },
         ];
         let mut first = item(10, 1);
@@ -6840,6 +6875,7 @@ mod tests {
             id: 1,
             name: "Root".to_string(),
             parent_id: None,
+            item_count: 0,
         }];
         let tags = vec![
             Tag {
@@ -6905,16 +6941,19 @@ mod tests {
                 id: 1,
                 name: "Root".to_string(),
                 parent_id: None,
+                item_count: 0,
             },
             Collection {
                 id: 2,
                 name: "Child".to_string(),
                 parent_id: Some(1),
+                item_count: 0,
             },
             Collection {
                 id: 3,
                 name: "Other".to_string(),
                 parent_id: None,
+                item_count: 0,
             },
         ];
         let mut first = item(10, 2);
@@ -6943,6 +6982,7 @@ mod tests {
             id: 1,
             name: "Root".to_string(),
             parent_id: None,
+            item_count: 0,
         }];
         let items = vec![item(10, 1)];
 

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   filenameStem,
-  itemCountForCollection,
   sessionReferenceLabel,
   taskLabel,
 } from "../lib/appView";
@@ -475,7 +474,7 @@ export function useAiSessionState({
         kind: "collection",
         targetId: collection.id,
         label: collection.name,
-        meta: `${itemCountForCollection(libraryItems, collection.id)} papers`,
+        meta: `${collection.item_count} papers`,
         badges: ["Collection"],
       });
     }

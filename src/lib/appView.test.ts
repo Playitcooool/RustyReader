@@ -69,10 +69,10 @@ describe("appView item helpers", () => {
 
 describe("appView collection helpers", () => {
   const collections: Collection[] = [
-    { id: 1, parent_id: null, name: "Root B" },
-    { id: 2, parent_id: null, name: "Root A" },
-    { id: 3, parent_id: 1, name: "Child" },
-    { id: 4, parent_id: 3, name: "Grandchild" },
+    { id: 1, parent_id: null, name: "Root B", item_count: 0 },
+    { id: 2, parent_id: null, name: "Root A", item_count: 0 },
+    { id: 3, parent_id: 1, name: "Child", item_count: 0 },
+    { id: 4, parent_id: 3, name: "Grandchild", item_count: 0 },
   ];
 
   it("returns sorted children and recursive descendants", () => {

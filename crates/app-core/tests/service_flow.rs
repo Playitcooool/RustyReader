@@ -267,6 +267,36 @@ fn starts_with_an_empty_library() {
 }
 
 #[test]
+fn list_collections_includes_direct_item_counts() {
+    let root = tempdir().unwrap();
+    let service = LibraryService::new(root.path()).unwrap();
+    let first = service.create_collection("First", None).unwrap();
+    let second = service.create_collection("Second", None).unwrap();
+
+    let pdf_a = fixture_path(root.path(), "first-a.pdf");
+    let pdf_b = fixture_path(root.path(), "first-b.pdf");
+    let pdf_c = fixture_path(root.path(), "second.pdf");
+    write_pdf_fixture(&pdf_a);
+    write_pdf_fixture_without_metadata(&pdf_b, &[Some("Second paper")]);
+    write_pdf_fixture_without_metadata(&pdf_c, &[Some("Other paper")]);
+    service
+        .import_files(first.id, &[pdf_a, pdf_b], ImportMode::ManagedCopy)
+        .unwrap();
+    service
+        .import_files(second.id, &[pdf_c], ImportMode::ManagedCopy)
+        .unwrap();
+
+    let collections = service.list_collections().unwrap();
+    assert_eq!(
+        collections
+            .iter()
+            .map(|collection| (collection.name.as_str(), collection.item_count))
+            .collect::<Vec<_>>(),
+        vec![("First", 2), ("Second", 1)]
+    );
+}
+
+#[test]
 fn review_draft_prompts_use_literature_review_template_and_evidence_rules() {
     let root = tempdir().unwrap();
     let transport = Arc::new(StubTransport::default());

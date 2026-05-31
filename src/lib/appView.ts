@@ -164,9 +164,6 @@ export const expandSessionReferenceItemIds = (
   return output;
 };
 
-export const itemCountForCollection = (libraryItems: LibraryItem[], collectionId: number) =>
-  libraryItems.filter((item) => item.collection_id === collectionId).length;
-
 export const sessionReferenceLabel = (
   reference: AISessionReference,
   libraryItems: LibraryItem[],

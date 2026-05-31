@@ -79,6 +79,9 @@ type MockState = {
   sessionTaskDelayMs?: number;
 };
 
+type MockCollectionInput = Omit<Collection, "item_count"> & Partial<Pick<Collection, "item_count">>;
+type MockStateInput = Partial<Omit<MockState, "collections"> & { collections: MockCollectionInput[] }>;
+
 const exportWrites: Array<{ path: string; authorization_token: string; contents: string }> = [];
 
 const richItemSummary = (title: string, collectionLabel: string, firstLine: string) =>
@@ -86,8 +89,8 @@ const richItemSummary = (title: string, collectionLabel: string, firstLine: stri
 
 const initialState = (): MockState => ({
   collections: [
-    { id: 1, name: "Machine Learning", parent_id: null },
-    { id: 2, name: "Systems", parent_id: null },
+    { id: 1, name: "Machine Learning", parent_id: null, item_count: 2 },
+    { id: 2, name: "Systems", parent_id: null, item_count: 1 },
   ],
   items: [
     {
@@ -514,6 +517,14 @@ const noteTitleFromArtifact = (collectionId: number, markdown: string) =>
 
 const noteDisplayTitle = (title: string, markdown: string) => extractHeading(markdown) || title;
 
+const collectionItemCount = (collectionId: number) =>
+  state.items.filter((item) => item.collection_id === collectionId).length;
+
+const withCollectionItemCount = (collection: Collection): Collection => ({
+  ...collection,
+  item_count: collectionItemCount(collection.id),
+});
+
 const publicAiSettings = (): AISettings => ({
   active_provider: state.aiSettings.active_provider,
   openai_model: state.aiSettings.openai_model,
@@ -617,10 +628,16 @@ export function resetFakeApi() {
   libraryChangedListeners.clear();
 }
 
-export function replaceFakeApiState(nextState: Partial<MockState>) {
+export function replaceFakeApiState(nextState: MockStateInput) {
+  const baseState = initialState();
+  const { collections, ...rest } = nextState;
   state = {
-    ...initialState(),
-    ...nextState,
+    ...baseState,
+    ...rest,
+    collections: (collections ?? baseState.collections).map((collection) => ({
+      ...collection,
+      item_count: collection.item_count ?? 0,
+    })),
   };
   exportWrites.length = 0;
   libraryChangedListeners.clear();
@@ -632,7 +649,7 @@ export function failNextFakeAiStream(message = "Mock AI stream failed.") {
 
 export const fakeApi: AppApi = {
   async listCollections() {
-    return [...state.collections];
+    return state.collections.map(withCollectionItemCount);
   },
 
   async createCollection(input) {
@@ -640,6 +657,7 @@ export const fakeApi: AppApi = {
       id: state.nextId++,
       name: input.name,
       parent_id: input.parent_id ?? null,
+      item_count: 0,
     };
     state.collections.push(collection);
     return collection;

@@ -2,6 +2,7 @@ export type Collection = {
   id: number;
   name: string;
   parent_id: number | null;
+  item_count: number;
 };
 
 export type Tag = {
