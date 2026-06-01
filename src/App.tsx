@@ -46,6 +46,9 @@ const ITEM_SORT_KEY = "paper-reader.item-sort";
 const ATTACHMENT_FILTER_KEY = "paper-reader.attachment-filter";
 const READER_FIT_MODE_KEY = "paper-reader.reader-fit-mode";
 const READER_ZOOM_KEY = "paper-reader.reader-zoom";
+const THEME_KEY = "paper-reader.theme";
+const THEMES = ["light", "dark"] as const;
+type AppTheme = (typeof THEMES)[number];
 type FocusSidebarPanel = "library" | "outline";
 
 const isPdfTextSelection = (selection: unknown): selection is import("./components/readers/pdfSelection").PdfTextSelection =>
@@ -55,6 +58,7 @@ export default function App({ api }: { api: AppApi }) {
   const getApi = useCallback(() => Promise.resolve(api), [api]);
   const [, setStatusMessage] = useState("");
   const [isSidebarVisible, setIsSidebarVisible] = useState(() => readStoredBoolean(SIDEBAR_OPEN_KEY, true));
+  const [theme, setTheme] = useState<AppTheme>(() => readStoredString(THEME_KEY, "dark", THEMES));
   const [focusSidebarPanel, setFocusSidebarPanel] = useState<FocusSidebarPanel>("library");
   const [sidebarWidth, setSidebarWidth] = useState(() => readStoredNumber(SIDEBAR_WIDTH_KEY, DEFAULT_SIDEBAR_WIDTH));
   const [aiPanelWidth, setAiPanelWidth] = useState(() => readStoredNumber(AI_PANEL_WIDTH_KEY, DEFAULT_AI_PANEL_WIDTH));
@@ -73,6 +77,12 @@ export default function App({ api }: { api: AppApi }) {
   const [deeplApiKeyInput, setDeeplApiKeyInput] = useState("");
   const appShellRef = useRef<HTMLDivElement | null>(null);
   const aiComposerInputRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+    window.localStorage.setItem(THEME_KEY, theme);
+  }, [theme]);
 
   const library = useLibraryState({
     api,
@@ -522,6 +532,7 @@ export default function App({ api }: { api: AppApi }) {
     <div
       ref={appShellRef}
       className={`app-shell ${isPdfFocusMode ? "app-shell-focus" : "app-shell-workspace"} ${isPdfFocusMode && isSidebarVisible ? "app-shell-focus-sidebar-open" : ""} ${ai.isAiPanelOpen ? "app-shell-ai-open" : ""}`}
+      data-theme={theme}
       style={{ "--sidebar-width": `${clamp(sidebarWidth, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH)}px`, "--ai-panel-width": `${clamp(aiPanelWidth, AI_PANEL_MIN_WIDTH, AI_PANEL_MAX_WIDTH)}px` } as CSSProperties}
     >
       {library.resourceContextMenu && (library.contextMenuCollection || library.contextMenuItem) ? (
@@ -571,7 +582,9 @@ export default function App({ api }: { api: AppApi }) {
           renamingCollectionId={library.renamingCollectionId}
           search={library.search}
           selectedCollectionId={library.selectedCollectionId}
+          theme={theme}
           treeSearchFilter={library.treeSearchFilter}
+          onToggleTheme={() => setTheme((current) => current === "dark" ? "light" : "dark")}
         />
       ) : null}
 

@@ -15,7 +15,7 @@
 .reader-tab,
 .ai-tab {
   padding: 10px 13px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--card-bg);
   color: inherit;
 }
 
@@ -26,7 +26,7 @@
   min-width: 0;
   padding: 3px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--card-bg);
 }
 
 .reader-shell-workspace .reader-tab-shell {
@@ -56,7 +56,7 @@
   width: 26px;
   height: 26px;
   border-radius: 9px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--control-bg-hover);
   color: inherit;
 }
 
@@ -85,16 +85,16 @@
   align-items: center;
   gap: 12px;
   padding: 12px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--panel-border);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.025);
+  background: var(--subtle-bg);
   color: inherit;
   text-align: left;
 }
 
 .collection-document-row:hover {
   border-color: rgba(226, 139, 83, 0.34);
-  background: rgba(255, 255, 255, 0.045);
+  background: var(--subtle-bg-hover);
 }
 
 .collection-document-row-active {
@@ -131,7 +131,7 @@
 .collection-document-status {
   padding: 4px 8px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--control-bg-hover);
   color: var(--text-soft);
   font-size: 0.75rem;
   line-height: 1;
@@ -187,7 +187,7 @@
 .focus-action-button {
   padding: 7px 11px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.045);
+  background: var(--subtle-bg-hover);
   color: var(--text-soft);
 }
 
@@ -201,8 +201,8 @@
 .reader-document {
   padding: 18px;
   border-radius: 22px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--control-bg);
+  border: 1px solid var(--panel-border);
 }
 
 .reader-outline {
@@ -217,13 +217,13 @@
   padding: 10px 12px;
   text-align: left;
   color: inherit;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--subtle-bg);
 }
 
 .outline-link-active {
   background: rgba(226, 139, 83, 0.18);
   outline: 1px solid rgba(226, 139, 83, 0.46);
-  color: #fff4e8;
+  color: var(--accent-active-text);
 }
 
 .reader-document {
@@ -262,8 +262,8 @@
   min-width: 0;
   padding: 3px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.045);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--subtle-bg-hover);
+  border: 1px solid var(--panel-border);
 }
 
 .reader-control-group-page {
@@ -284,7 +284,7 @@
   min-height: 34px;
   padding: 8px 10px;
   border-radius: 9px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--card-bg);
 }
 
 .reader-zoom-label {
@@ -306,7 +306,7 @@
 
 .reader-panel-focus .reader-toolbar {
   padding: 8px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--control-border);
   border-radius: 16px;
   background: rgba(10, 11, 14, 0.78);
   box-shadow:
@@ -337,8 +337,8 @@
 }
 
 .reader-panel-focus .reader-toolbar .reader-control-group {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 255, 255, 0.05);
+  background: var(--card-bg);
+  border-color: var(--panel-border);
 }
 
 .reader-panel-focus .reader-toolbar .reader-control-group-page {
@@ -358,9 +358,9 @@
 .reader-page-input {
   width: 52px;
   padding: 8px 6px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--panel-border);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--card-bg);
   color: inherit;
   text-align: center;
 }
@@ -369,9 +369,9 @@
   min-width: 220px;
   flex: 1 1 220px;
   padding: 8px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--panel-border);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--card-bg);
   color: inherit;
 }
 
@@ -397,16 +397,16 @@
 .reader-panel-focus .citation-card {
   max-width: 840px;
   margin: 0 auto 18px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--subtle-bg);
 }
 
 .note-editor {
   min-height: 160px;
   width: 100%;
   padding: 12px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--control-border);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--control-bg);
   color: inherit;
   resize: vertical;
 }
@@ -440,13 +440,13 @@
 .reader-html th,
 .reader-html td {
   padding: 8px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--control-border-hover);
   text-align: left;
   vertical-align: top;
 }
 
 .reader-html th {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--control-bg-hover);
   font-weight: 600;
   color: rgba(244, 239, 230, 0.92);
 }
@@ -456,14 +456,14 @@
 }
 
 .reader-html tr:nth-child(even) td {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--subtle-bg);
 }
 
 .reader-html mark {
   padding: 0 0.15em;
   border-radius: 0.3em;
   background: rgba(226, 139, 83, 0.42);
-  color: #fff7ee;
+  color: var(--primary-text);
 }
 
 .reader-html mark.reader-search-hit-active {
@@ -483,7 +483,7 @@
   width: 100%;
   min-height: 0;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--subtle-bg);
   color: rgba(244, 239, 230, 0.9);
 }
 
@@ -504,7 +504,7 @@
 .markdown-mdx-toolbar {
   min-height: 56px;
   padding: 8px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--control-border);
   border-radius: 16px;
   margin: 0 0 18px;
   background: rgba(10, 11, 14, 0.78);
@@ -522,16 +522,16 @@
 }
 
 .markdown-mdx-toolbar :where(button, [role="button"]) {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--card-bg);
 }
 
 .markdown-mdx-toolbar :where(button, [role="button"]):hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--control-bg-hover);
 }
 
 .markdown-mdx-toolbar :where(select) {
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--panel-border);
+  background: var(--card-bg);
 }
 
 .markdown-mdx-editor button,
@@ -618,7 +618,7 @@
   gap: 10px;
   padding: 10px 12px;
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--panel-border);
   background:
     linear-gradient(135deg, rgba(226, 139, 83, 0.14), rgba(102, 164, 212, 0.1)),
     rgba(18, 20, 24, 0.82);
@@ -628,15 +628,15 @@
 .find-hud-input {
   width: 240px;
   padding: 8px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--panel-border);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--card-bg);
   color: inherit;
 }
 
 .document-lead {
   font-size: 1.1rem;
-  color: #f8dfc7;
+  color: var(--accent-strong);
 }
 
 .action-grid {

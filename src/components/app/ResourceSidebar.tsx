@@ -4,7 +4,7 @@ import type { Collection, ImportBatchResult, LibraryItem, PdfOutlineItem } from 
 import { droppedPathsFromFileList } from "../../lib/filePaths";
 import type { ResourceContextMenuState } from "../../hooks/useLibraryState";
 import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { ChevronLeftIcon, PlusIcon } from "./Icons";
+import { ChevronLeftIcon, MoonIcon, PlusIcon, SunIcon } from "./Icons";
 
 type Props = {
   collectionDraftName: string;
@@ -35,6 +35,8 @@ type Props = {
   search: string;
   selectedCollectionId: number | null;
   treeSearchFilter: { allowedItemIds: Set<number>; allowedCollectionIds: Set<number> } | null;
+  theme: "light" | "dark";
+  onToggleTheme: () => void;
 };
 
 export function ResourceSidebar(props: Props) {
@@ -66,7 +68,9 @@ export function ResourceSidebar(props: Props) {
     renamingCollectionId,
     search,
     selectedCollectionId,
+    theme,
     treeSearchFilter,
+    onToggleTheme,
   } = props;
 
   const importHasIssues = Boolean(lastImportResult && (lastImportResult.duplicates.length > 0 || lastImportResult.failed.length > 0));
@@ -218,6 +222,16 @@ export function ResourceSidebar(props: Props) {
           <p className="eyebrow">Workspace</p>
           <h1>{focusPanel === "outline" ? "Outline" : "Library"}</h1>
         </div>
+        <button
+          aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+          aria-pressed={theme === "dark"}
+          className="icon-button theme-toggle-button"
+          title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+          type="button"
+          onClick={onToggleTheme}
+        >
+          {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+        </button>
       </div>
       {focusSidebarEnabled ? (
         <div className="toolbar-row" role="tablist" aria-label="PDF focus sidebar">

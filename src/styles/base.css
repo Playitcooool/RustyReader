@@ -1,26 +1,78 @@
 :root {
-  color: #f4efe6;
-  background:
-    radial-gradient(circle at top left, rgba(201, 111, 52, 0.18), transparent 30%),
-    radial-gradient(circle at bottom right, rgba(28, 77, 120, 0.24), transparent 34%),
-    #14161a;
+  color: var(--text-primary);
+  background: var(--shell-bg);
   font-family:
     "SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue",
     "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   font-size: 16px;
   line-height: 1.5;
+  color-scheme: dark;
   --shell-bg:
     radial-gradient(circle at top left, rgba(201, 111, 52, 0.18), transparent 30%),
     radial-gradient(circle at bottom right, rgba(28, 77, 120, 0.24), transparent 34%),
     #14161a;
+  --shell-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 18%);
+  --reader-shell-bg: rgba(19, 22, 29, 0.72);
   --panel-bg: rgba(10, 12, 16, 0.78);
+  --menu-bg: rgba(10, 12, 16, 0.94);
   --panel-border: rgba(255, 255, 255, 0.08);
   --card-bg: rgba(255, 255, 255, 0.04);
   --card-bg-strong: rgba(255, 255, 255, 0.06);
+  --control-bg: rgba(255, 255, 255, 0.05);
+  --control-bg-hover: rgba(255, 255, 255, 0.08);
+  --control-border: rgba(255, 255, 255, 0.1);
+  --control-border-hover: rgba(255, 255, 255, 0.14);
+  --subtle-bg: rgba(255, 255, 255, 0.03);
+  --subtle-bg-hover: rgba(255, 255, 255, 0.045);
+  --primary-gradient: linear-gradient(135deg, #e28b53, #c14c3c);
+  --primary-text: #fff8f1;
+  --accent: #e28b53;
+  --accent-strong: #f7c9a1;
+  --accent-soft: rgba(226, 139, 83, 0.18);
+  --accent-active-text: #fff4e8;
   --focus-outline: rgba(226, 139, 83, 0.46);
   --focus-fill: rgba(226, 139, 83, 0.18);
+  --text-primary: #f4efe6;
   --text-soft: rgba(244, 239, 230, 0.74);
   --text-dim: rgba(244, 239, 230, 0.56);
+  --shadow-strong: rgba(0, 0, 0, 0.45);
+  --shadow-soft: rgba(0, 0, 0, 0.16);
+  --inset-highlight: rgba(255, 255, 255, 0.03);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --shell-bg:
+    radial-gradient(circle at top left, rgba(226, 139, 83, 0.13), transparent 31%),
+    radial-gradient(circle at bottom right, rgba(94, 147, 190, 0.16), transparent 35%),
+    #f6f4ef;
+  --shell-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.62), transparent 22%);
+  --reader-shell-bg: rgba(247, 246, 242, 0.86);
+  --panel-bg: rgba(255, 254, 250, 0.82);
+  --menu-bg: rgba(255, 254, 250, 0.96);
+  --panel-border: rgba(45, 44, 40, 0.1);
+  --card-bg: rgba(255, 255, 255, 0.62);
+  --card-bg-strong: rgba(255, 255, 255, 0.78);
+  --control-bg: rgba(33, 32, 29, 0.045);
+  --control-bg-hover: rgba(33, 32, 29, 0.075);
+  --control-border: rgba(45, 44, 40, 0.12);
+  --control-border-hover: rgba(45, 44, 40, 0.18);
+  --subtle-bg: rgba(45, 44, 40, 0.035);
+  --subtle-bg-hover: rgba(45, 44, 40, 0.06);
+  --primary-gradient: linear-gradient(135deg, #cf6f34, #aa453a);
+  --primary-text: #fffaf4;
+  --accent: #b95f2d;
+  --accent-strong: #8f4c24;
+  --accent-soft: rgba(207, 111, 52, 0.13);
+  --accent-active-text: #5f2f16;
+  --focus-outline: rgba(185, 95, 45, 0.32);
+  --focus-fill: rgba(207, 111, 52, 0.13);
+  --text-primary: #24221f;
+  --text-soft: rgba(36, 34, 31, 0.72);
+  --text-dim: rgba(36, 34, 31, 0.52);
+  --shadow-strong: rgba(55, 48, 39, 0.16);
+  --shadow-soft: rgba(55, 48, 39, 0.08);
+  --inset-highlight: rgba(255, 255, 255, 0.72);
 }
 
 * {
@@ -46,4 +98,3 @@ textarea {
 #root {
   min-height: 100vh;
 }
-
