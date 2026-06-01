@@ -634,7 +634,7 @@ export function ReaderWorkspace(props: Props) {
         </section>
       ) : workspaceMode === "pdf_focus" && activePaper && activePaper.attachment_format !== "pdf" && readerView ? (
         <section className="reader-panel reader-panel-focus">
-          <div className="reader-toolbar reader-toolbar-focus" role="toolbar" aria-label="Reader toolbar">
+          <div className="reader-toolbar reader-toolbar-focus" role="toolbar" aria-label={canEditMarkdown ? "Markdown edit toolbar" : "Reader toolbar"}>
             <div className="reader-control-group reader-control-group-zoom">
               <button aria-label="Zoom out" className="icon-button" title="Zoom out" type="button" onClick={() => onStepNormalizedZoom(-1)}>
                 <ZoomOutIcon />
@@ -651,11 +651,8 @@ export function ReaderWorkspace(props: Props) {
                 </button>
               ) : null}
             </div>
-            {aiPanelToggle}
-          </div>
-          {canEditMarkdown ? (
-            <div className="markdown-focus-editor-shell">
-              <div className="markdown-save-row">
+            {canEditMarkdown ? (
+              <div className="reader-control-group">
                 <button
                   aria-label="Save Markdown"
                   className="icon-button"
@@ -667,6 +664,11 @@ export function ReaderWorkspace(props: Props) {
                   <SaveIcon />
                 </button>
               </div>
+            ) : null}
+            {aiPanelToggle}
+          </div>
+          {canEditMarkdown ? (
+            <div className="markdown-focus-editor-shell">
               <MDXEditor
                 key={readerView.item_id}
                 ref={mdxEditorRef}
