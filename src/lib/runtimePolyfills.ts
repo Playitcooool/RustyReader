@@ -17,7 +17,7 @@ export function getRuntimePolyfillDiagnostics(): RuntimePolyfillDiagnostics {
 }
 
 function installAtPolyfills() {
-  // pdfjs-dist@5.x assumes modern JS builtins (notably `.at()`); older WKWebView builds can miss them.
+  // Older WKWebView builds can miss modern JS builtins used by the app.
 
   if (
     typeof Array !== "undefined" &&
@@ -116,7 +116,7 @@ class ReadableStreamControllerPolyfill<T> {
   close() {
     this.#stream._close();
   }
-  // pdf.js shouldn't hit this in our current paths, but keep it for completeness.
+  // Keep this minimal stream reader compatible with older WKWebView builds.
   error(reason?: unknown) {
     this.#stream._error(reason);
   }
@@ -143,7 +143,7 @@ class ReadableStreamDefaultReaderPolyfill<T> {
 }
 
 // Minimal, queue-based Web Streams polyfill for older WebKit builds.
-// This is intentionally tiny: it only supports the bits pdf.js TextLayer needs.
+// This is intentionally tiny: it only supports the stream operations our app touches.
 class ReadableStreamPolyfill<T = unknown> {
   #queue: T[] = [];
   #readWaiters: Array<(result: ReadResult<T>) => void> = [];
@@ -215,7 +215,7 @@ class ReadableStreamPolyfill<T = unknown> {
   }
 }
 
-// Tiny health check for the specific usage pdf.js TextLayer relies on:
+// Tiny health check for the stream usage exercised by the app:
 // `start(controller) -> enqueue(value) -> close() -> reader.read()` yields the first chunk.
 // Some older or partial Web Streams implementations in embedded WebViews can break this.
 async function isReadableStreamHealthy(ReadableStreamCtor: unknown): Promise<boolean> {
@@ -257,7 +257,7 @@ async function ensureReadableStreamPolyfillInstalled() {
   diagnostics.readableStreamOverridden = false;
   diagnostics.readableStreamOverrideFailed = false;
 
-  // Some pdf.js text-layer paths expect ReadableStream to exist even when the document is loaded from bytes.
+  // Some older WebKit builds do not expose a healthy ReadableStream.
   // Older WKWebView builds may miss it entirely, or ship a partial implementation.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const current = (globalThis as any).ReadableStream;
@@ -295,7 +295,7 @@ async function ensureReadableStreamPolyfillInstalled() {
 export async function installRuntimePolyfills() {
   installAtPolyfills();
 
-  // pdf.js AnnotationLayer uses Element.prototype.replaceChildren.
+  // Keep DOM replacement available on older WebKit builds.
   if (
     typeof Element !== "undefined" &&
     typeof (Element.prototype as unknown as { replaceChildren?: unknown }).replaceChildren !== "function"
@@ -307,7 +307,7 @@ export async function installRuntimePolyfills() {
     };
   }
 
-  // pdfjs-dist 5.x uses URL.parse in some code paths; older WKWebView builds don't have it.
+  // Older WKWebView builds don't have URL.parse.
   if (typeof URL !== "undefined" && typeof (URL as unknown as { parse?: unknown }).parse !== "function") {
     (URL as unknown as { parse: (input: string, base?: string) => URL | null }).parse = (
       input: string,
@@ -334,7 +334,7 @@ export async function installRuntimePolyfills() {
       )) as typeof Promise.allSettled;
   }
 
-  // pdfjs-dist 5.x TextLayer uses Promise.withResolvers; older WebKit/Tauri builds may miss it.
+  // Older WebKit/Tauri builds may miss Promise.withResolvers.
   if (
     typeof Promise !== "undefined" &&
     typeof (Promise as unknown as { withResolvers?: unknown }).withResolvers !== "function"

@@ -56,7 +56,7 @@ export function buildOcrTextLayer(input: {
   fragment.appendChild(end);
   host.appendChild(fragment);
 
-  // pdf.js' TextLayer uses horizontal scaling to better match the underlying glyph boxes.
+    // Browser text layers use horizontal scaling to better match the underlying glyph boxes.
   // Measure after the batch insert so OCR pages do not force layout once per appended node.
   for (const item of pendingScale) {
     const naturalWidth = item.span.getBoundingClientRect().width;

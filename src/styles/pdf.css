@@ -197,9 +197,9 @@
   background: rgba(255, 255, 255, 0.01);
 }
 
-/* Minimal pdf.js TextLayer + AnnotationLayer CSS (scoped).
+/* Minimal PDF text-layer CSS (scoped).
    Avoid broad selectors like ".textLayer span" because we inject nested spans
-   (search hits + highlight decorations) inside the pdf.js textDiv spans. */
+   (search hits + highlight decorations) inside the Rust text-span nodes. */
 .pdf-reader .textLayer {
   position: absolute;
   inset: 0;
@@ -212,7 +212,7 @@
   --min-font-size-inv: calc(1 / var(--min-font-size));
 }
 
-/* Target only pdf.js' own text layer nodes. Keep it narrow so we don't break nested highlight spans. */
+/* Target only our base text layer nodes. Keep it narrow so we don't break nested highlight spans. */
 .pdf-reader .textLayer span[role="presentation"],
 .pdf-reader .textLayer br[role="presentation"] {
   position: absolute;

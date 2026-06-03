@@ -99,7 +99,7 @@ describe("PdfReader", () => {
     await waitFor(() => {
       expect(onSearchMatchesChange).toHaveBeenLastCalledWith({ total: 2, activeIndex: 0 });
     });
-    expect(document.querySelectorAll(".pdf-search-hit").length).toBeGreaterThan(0);
+    await waitFor(() => expect(document.querySelectorAll(".pdf-search-hit").length).toBeGreaterThan(0));
   });
 
   it("renders persisted highlight anchors on top of Rust spans", async () => {

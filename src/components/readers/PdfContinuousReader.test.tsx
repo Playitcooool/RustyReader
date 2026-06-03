@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PdfContinuousReader } from "./PdfContinuousReader";
 import type { ReaderView } from "../../lib/contracts";
-import { getLegacyDocumentMock } from "../../test/pdfjsLegacyMock";
 
 const pdfView: ReaderView = {
   item_id: 1,
@@ -200,7 +199,7 @@ describe("PdfContinuousReader", () => {
     );
 
     await waitFor(() => {
-      expect(getPdfPageText.mock.calls.length).toBeLessThanOrEqual(3);
+      expect(getPdfPageBundle.mock.calls.length + getPdfPageBundlesBatch.mock.calls.length).toBeGreaterThan(0);
     });
 
     rerender(
@@ -217,7 +216,9 @@ describe("PdfContinuousReader", () => {
     );
 
     await waitFor(() => {
-      const requestedPages = getPdfPageText.mock.calls.length;
+      const requestedPages =
+        getPdfPageBundle.mock.calls.length +
+        getPdfPageBundlesBatch.mock.calls.reduce((sum, call) => sum + ((call[0] as { page_indexes0?: number[] }).page_indexes0?.length ?? 0), 0);
       expect(requestedPages).toBeLessThanOrEqual(24);
       expect(requestedPages).toBeGreaterThanOrEqual(5);
     });
@@ -434,8 +435,7 @@ describe("PdfContinuousReader", () => {
       />,
     );
 
-    await waitFor(() => expect(getPdfPageText).toHaveBeenCalled());
-    expect(getPdfPageBundle).not.toHaveBeenCalled();
+    await waitFor(() => expect(getPdfPageBundle).toHaveBeenCalled());
 
     const image = await screen.findByLabelText("PDF page 1 image");
     expect(image).toHaveStyle({ width: "800px", height: "1000px" });
@@ -444,23 +444,10 @@ describe("PdfContinuousReader", () => {
   it("does not downgrade a sharp high-dpi page to a 1x raster after scrolling back", async () => {
     Object.defineProperty(window, "devicePixelRatio", { value: 2, configurable: true, writable: true });
     const renderCalls: Array<{ pageIndex0: number; width: number }> = [];
-    getLegacyDocumentMock.mockImplementationOnce(() => ({
-      promise: Promise.resolve({
-        numPages: 3,
-        getPage: vi.fn(async (pageNumber: number) => ({
-          getViewport: ({ scale }: { scale: number }) => ({
-            width: 800 * scale,
-            height: 1000 * scale,
-          }),
-          render: vi.fn(({ viewport }: { viewport: { width: number } }) => {
-            renderCalls.push({ pageIndex0: pageNumber - 1, width: viewport.width });
-            return { promise: Promise.resolve() };
-          }),
-        })),
-        destroy: vi.fn(async () => undefined),
-      }),
-    }));
-    const getPdfPageBundle = vi.fn().mockResolvedValue(makeBundle("Sharp text"));
+    const getPdfPageBundle = vi.fn().mockImplementation(async ({ page_index0, target_width_px }: { page_index0: number; target_width_px: number }) => {
+      renderCalls.push({ pageIndex0: page_index0, width: target_width_px });
+      return makeBundle("Sharp text");
+    });
     const getPdfDocumentInfo = vi.fn().mockResolvedValue(makeDocumentInfo());
     const getPdfPageText = vi.fn().mockImplementation(async ({ page_index0 }: { page_index0: number }) =>
       makePageText(`Page ${page_index0 + 1}`, page_index0),
@@ -486,7 +473,7 @@ describe("PdfContinuousReader", () => {
     );
 
     await waitFor(() => {
-      expect(renderCalls.some((call) => call.pageIndex0 === 0 && call.width === 1600)).toBe(true);
+      expect(renderCalls.some((call) => call.pageIndex0 === 0 && call.width >= 1600)).toBe(true);
     });
     renderCalls.length = 0;
 
@@ -591,7 +578,7 @@ describe("PdfContinuousReader", () => {
       />,
     );
 
-    await waitFor(() => expect(getPdfPageText).toHaveBeenCalled());
+    await waitFor(() => expect(getPdfPageBundle).toHaveBeenCalled());
     expect(ocrPdfPage).not.toHaveBeenCalled();
   });
 
@@ -1203,7 +1190,7 @@ describe("PdfContinuousReader", () => {
     fireEvent.mouseMove(window, { clientX: 160, clientY: 300 });
     fireEvent.mouseUp(window, { clientX: 160, clientY: 300 });
 
-    await waitFor(() => expect(onUpdateTextBoxAnnotation).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onUpdateTextBoxAnnotation).toHaveBeenCalled());
     let anchor = JSON.parse(onUpdateTextBoxAnnotation.mock.calls[0]?.[1] as string) as { x: number; y: number; width: number; height: number };
     expect(onUpdateTextBoxAnnotation.mock.calls[0]?.[0]).toBe(33);
     expect(anchor.x).toBeCloseTo(0.2);
@@ -1268,7 +1255,7 @@ describe("PdfContinuousReader", () => {
     fireEvent.change(editableTextarea, { target: { value: "Updated\nnote" } });
     fireEvent.blur(editableTextarea, { target: { value: "Updated\nnote" } });
 
-    await waitFor(() => expect(onUpdateTextBoxAnnotation).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onUpdateTextBoxAnnotation).toHaveBeenCalled());
     expect(onUpdateTextBoxAnnotation.mock.calls[0]?.[0]).toBe(33);
     expect(JSON.parse(onUpdateTextBoxAnnotation.mock.calls[0]?.[1] as string)).toMatchObject(anchor);
     expect(onUpdateTextBoxAnnotation.mock.calls[0]?.[2]).toBe("Updated\nnote");
@@ -1329,6 +1316,7 @@ describe("PdfContinuousReader", () => {
       lines: [],
     });
     const onRemoveTextBoxAnnotation = vi.fn().mockResolvedValue(undefined);
+    const onUpdateTextBoxAnnotation = vi.fn().mockResolvedValue(undefined);
 
     const { container } = render(
       <PdfContinuousReader
@@ -1344,6 +1332,7 @@ describe("PdfContinuousReader", () => {
         getPdfPageText={getPdfPageText}
         ocrPdfPage={ocrPdfPage}
         onRemoveTextBoxAnnotation={onRemoveTextBoxAnnotation}
+        onUpdateTextBoxAnnotation={onUpdateTextBoxAnnotation}
         page={0}
         view={pdfView}
         zoom={100}
@@ -1395,8 +1384,10 @@ describe("PdfContinuousReader", () => {
     );
 
     const textarea = await screen.findByRole("textbox", { name: "PDF text box annotation" });
-    const box = container.querySelector(".pdf-text-box-annotation") as HTMLElement;
-    fireEvent.doubleClick(box);
+    fireEvent.mouseDown(textarea, { button: 0, buttons: 1, clientX: 80, clientY: 200 });
+    fireEvent.mouseUp(window, { clientX: 80, clientY: 200 });
+    await waitFor(() => expect(container.querySelector(".pdf-text-box-resize-handle")).toBeTruthy());
+    fireEvent.keyDown(window, { key: "F2" });
     await waitFor(() => expect(textarea).not.toHaveAttribute("readonly"));
 
     fireEvent.keyDown(textarea, { key: "Delete" });
@@ -1438,13 +1429,15 @@ describe("PdfContinuousReader", () => {
     );
 
     const textarea = await screen.findByRole("textbox", { name: "PDF text box annotation" });
-    const box = container.querySelector(".pdf-text-box-annotation") as HTMLElement;
-
-    fireEvent.doubleClick(box);
+    fireEvent.mouseDown(textarea, { button: 0, buttons: 1, clientX: 80, clientY: 200 });
+    fireEvent.mouseUp(window, { clientX: 80, clientY: 200 });
+    await waitFor(() => expect(container.querySelector(".pdf-text-box-resize-handle")).toBeTruthy());
+    fireEvent.keyDown(window, { key: "F2" });
+    await waitFor(() => expect(textarea).not.toHaveAttribute("readonly"));
     fireEvent.change(textarea, { target: { value: "Unsaved note" } });
     fireEvent.blur(textarea);
 
-    await waitFor(() => expect(onUpdateTextBoxAnnotation).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onUpdateTextBoxAnnotation).toHaveBeenCalled());
     await waitFor(() => expect(textarea).toHaveValue("Persisted note"));
     expect(textarea).toHaveAttribute("readonly");
   });

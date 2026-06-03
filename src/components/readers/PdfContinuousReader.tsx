@@ -7,6 +7,7 @@ import type {
   PdfDocumentInfo,
   PdfSearchMatch,
   PdfSearchResult,
+  PdfPageBundle,
   PdfPageText,
   ReaderView,
 } from "../../lib/contracts";
@@ -27,7 +28,6 @@ import {
 import { installPdfJsTextLayerSelectionSupport } from "./pdfTextLayerSelectionSupport";
 import { pickPdfPageTextSource, shouldFallbackToPdfOcr, type PdfPageTextSource } from "./pdfTextSource";
 import { buildRustPdfTextLayer, pageWidthAtScale1FromPoints } from "./pdfRustTextLayer";
-import { loadPdfJsDocument, renderPdfJsPageToPng, type PdfJsDocument } from "./pdfJsPageRenderer";
 import { findScrollFallbackTarget, schedulePdfReaderIdle } from "./pdfReaderBrowser";
 import { bucketPdfRenderWidth } from "./pdfRenderSizing";
 import {
@@ -50,8 +50,6 @@ import {
   type PdfInkAnchor,
   type PdfInkPoint,
 } from "./pdfInkAnchor";
-
-const defaultReadPrimaryAttachmentBytes = async () => new Uint8Array();
 
 const PREFETCH_PAGE_RADIUS = 2;
 const SEARCH_TARGET_RENDER_RADIUS = 1;
@@ -88,7 +86,10 @@ type PdfContinuousReaderProps = {
     primary_attachment_id: number;
     page_index0: number;
     target_width_px: number;
-  }) => Promise<unknown>;
+  }) => Promise<{
+    document_info: PdfDocumentInfo;
+    bundle: PdfPageBundle;
+  }>;
   getPdfPageBundle: (input: {
     primary_attachment_id: number;
     page_index0: number;
@@ -175,6 +176,23 @@ type RenderRequest = {
   priority: "immediate" | "idle";
   rasterScale: number;
 };
+type RenderedPdfPage = {
+  pngBytes: Uint8Array;
+  widthPx: number;
+  heightPx: number;
+  cssHeightPx: number;
+};
+
+const renderedPageFromBundle = (bundle: PdfPageBundle, cssWidthPx: number): RenderedPdfPage => {
+  const widthPx = Math.max(1, bundle.width_px);
+  const heightPx = Math.max(1, bundle.height_px);
+  return {
+    pngBytes: bundle.png_bytes,
+    widthPx,
+    heightPx,
+    cssHeightPx: Math.max(1, Math.round((heightPx / widthPx) * Math.max(1, cssWidthPx))),
+  };
+};
 
 type ScrollSyncReason = "scroll" | "observer" | "page_effect";
 type SearchMatchWithHitIndex = { pageIndex: number; divIndex: number; start: number; end: number; hitIndex: number };
@@ -210,12 +228,12 @@ export function PdfContinuousReader({
   zoom,
   fitMode = "fit_width",
   getPdfDocumentInfo,
-  getPdfInitialPageBundle: _getPdfInitialPageBundle,
-  getPdfPageBundle: _getPdfPageBundle,
-  getPdfPageBundlesBatch: _getPdfPageBundlesBatch,
+  getPdfInitialPageBundle,
+  getPdfPageBundle,
+  getPdfPageBundlesBatch,
   getPdfPageText,
   getPdfPageTextsBatch,
-  readPrimaryAttachmentBytes = defaultReadPrimaryAttachmentBytes,
+  readPrimaryAttachmentBytes: _readPrimaryAttachmentBytes,
   pdfEngineSearch,
   ocrPdfPage,
   onPageCountChange,
@@ -268,7 +286,6 @@ export function PdfContinuousReader({
   const [errorMessage, setErrorMessage] = useState("");
   const [stageWidth, setStageWidth] = useState(0);
   const [pdfDocumentInfo, setPdfDocumentInfo] = useState<PdfDocumentInfo | null>(null);
-  const [pdfJsDocument, setPdfJsDocument] = useState<PdfJsDocument | null>(null);
   const [pageWidthAtScale1, setPageWidthAtScale1] = useState<number | null>(null);
   const [pageShells, setPageShells] = useState<Record<number, PageShellInfo>>({});
   const [pages, setPages] = useState<Record<number, RenderedPageState>>({});
@@ -530,7 +547,6 @@ export function PdfContinuousReader({
     setStatus("loading");
     setErrorMessage("");
     setPdfDocumentInfo(null);
-    setPdfJsDocument(null);
     setPageWidthAtScale1(null);
     setTextLayerReadyByPage({});
     setPages({});
@@ -556,24 +572,16 @@ export function PdfContinuousReader({
 
     void (async () => {
       try {
-        const [infoResult, bytes] = await Promise.all([
-          getPdfDocumentInfo(primaryAttachmentId).catch((error) => {
-            void error;
-            return null;
-          }),
-          readPrimaryAttachmentBytes(primaryAttachmentId),
-        ]);
+        const initial = getPdfInitialPageBundle
+          ? await getPdfInitialPageBundle({
+            primary_attachment_id: primaryAttachmentId,
+            page_index0: 0,
+            target_width_px: 816,
+          })
+          : null;
         if (cancelled) return;
-        const pdfJs = await loadPdfJsDocument(bytes);
-        if (cancelled) {
-          void pdfJs.destroy?.();
-          return;
-        }
-        setPdfJsDocument(pdfJs);
-        const info = infoResult ?? {
-          page_count: Math.max(1, pdfJs.numPages || view.page_count || 1),
-          pages: [],
-        };
+        const info = initial?.document_info ?? await getPdfDocumentInfo(primaryAttachmentId);
+        if (cancelled) return;
         setPdfDocumentInfo(info);
         const nextPageCount = Math.max(1, info.page_count || view.page_count || 1);
         setPageCount(nextPageCount);
@@ -582,8 +590,7 @@ export function PdfContinuousReader({
         if (firstPage?.width_pt) {
           setPageWidthAtScale1(pageWidthAtScale1FromPoints(firstPage.width_pt));
         } else {
-          const page1 = await pdfJs.getPage(1);
-          if (!cancelled) setPageWidthAtScale1(page1.getViewport({ scale: 1 }).width);
+          setPageWidthAtScale1(816);
         }
       } catch (error) {
         if (cancelled) return;
@@ -594,12 +601,8 @@ export function PdfContinuousReader({
 
     return () => {
       cancelled = true;
-      setPdfJsDocument((current) => {
-        void current?.destroy?.();
-        return null;
-      });
     };
-  }, [getPdfDocumentInfo, readPrimaryAttachmentBytes, view.page_count, view.primary_attachment_id]);
+  }, [getPdfDocumentInfo, getPdfInitialPageBundle, view.page_count, view.primary_attachment_id]);
 
   useEffect(() => {
     if (!pdfDocumentInfo) return;
@@ -749,7 +752,7 @@ export function PdfContinuousReader({
   useEffect(() => {
     let cancelled = false;
     const primaryAttachmentId = view.primary_attachment_id;
-    if (!primaryAttachmentId || renderRequests.length === 0 || !pdfDocumentInfo || !pdfJsDocument) return;
+    if (!primaryAttachmentId || renderRequests.length === 0 || !pdfDocumentInfo) return;
 
     const pageSizePoints = (pageIndex0: number) => {
       const info = pdfDocumentInfo.pages[pageIndex0] ?? pdfDocumentInfo.pages[0];
@@ -761,7 +764,7 @@ export function PdfContinuousReader({
 
     const applyPage = (
       request: RenderRequest,
-      rendered: Awaited<ReturnType<typeof renderPdfJsPageToPng>>,
+      rendered: RenderedPdfPage,
       text: PdfPageText,
       runOcrFallback: boolean,
     ) => {
@@ -894,20 +897,16 @@ export function PdfContinuousReader({
         if (host && !renderedPageDimensionsMatch(existing, request.cssWidthPx, request.cssHeightPx)) clearChildren(host);
 
         void effectiveZoom;
-        const [rendered, text] = await Promise.all([
-          renderPdfJsPageToPng({
-            document: pdfJsDocument,
-            pageIndex0: request.pageIndex0,
-            cssWidthPx: request.cssWidthPx,
-            rasterScale: request.rasterScale,
-          }),
-          getPdfPageText({
-            primary_attachment_id: primaryAttachmentId,
-            page_index0: request.pageIndex0,
-          }),
-        ]);
+        const bundle = await getPdfPageBundle({
+          primary_attachment_id: primaryAttachmentId,
+          page_index0: request.pageIndex0,
+          target_width_px: request.targetRasterWidthPx,
+        });
         if (cancelled) return;
-        applyPage(request, rendered, text, true);
+        applyPage(request, renderedPageFromBundle(bundle, request.cssWidthPx), {
+          page_index0: request.pageIndex0,
+          spans: bundle.spans,
+        }, true);
       } catch (error) {
         if (cancelled) return;
         setStatus("error");
@@ -939,33 +938,30 @@ export function PdfContinuousReader({
       }
 
       try {
-        const [renderedPages, textPages] = await Promise.all([
-          Promise.all(
-            uniquePages.map((pageIndex0) => {
-              const request = batch.find((entry) => entry.pageIndex0 === pageIndex0);
-              return renderPdfJsPageToPng({
-                document: pdfJsDocument,
-                pageIndex0,
-                cssWidthPx: request?.cssWidthPx ?? desiredWidthCssPx,
-                rasterScale: request?.rasterScale ?? MAX_INITIAL_RASTER_SCALE,
-              });
-            }),
-          ),
-          getPdfPageTextsBatch
-            ? getPdfPageTextsBatch({
+        const renderedPages = getPdfPageBundlesBatch
+          ? await getPdfPageBundlesBatch({
+            primary_attachment_id: primaryAttachmentId,
+            page_indexes0: uniquePages,
+            target_width_px: Math.max(...batch.map((request) => request.targetRasterWidthPx)),
+          })
+          : await Promise.all(uniquePages.map((page_index0) => {
+            const request = batch.find((entry) => entry.pageIndex0 === page_index0);
+            return getPdfPageBundle({
               primary_attachment_id: primaryAttachmentId,
-              page_indexes0: uniquePages,
-            })
-            : Promise.all(uniquePages.map((page_index0) => getPdfPageText({ primary_attachment_id: primaryAttachmentId, page_index0 }))),
-        ]);
+              page_index0,
+              target_width_px: request?.targetRasterWidthPx ?? Math.max(1, Math.round(desiredWidthCssPx)),
+            });
+          }));
         if (cancelled) return;
         for (let i = 0; i < uniquePages.length; i += 1) {
           const pageIndex0 = uniquePages[i]!;
           const request = batch.find((r) => r.pageIndex0 === pageIndex0);
-          const rendered = renderedPages[i];
-          const text = textPages[i];
-          if (!request || !rendered || !text) continue;
-          applyPage(request, rendered, text, false);
+          const bundle = renderedPages[i];
+          if (!request || !bundle) continue;
+          applyPage(request, renderedPageFromBundle(bundle, request.cssWidthPx), {
+            page_index0: pageIndex0,
+            spans: bundle.spans,
+          }, false);
         }
       } catch (error) {
         if (cancelled) return;
@@ -1043,12 +1039,11 @@ export function PdfContinuousReader({
   }, [
     desiredWidthCssPx,
     effectiveZoom,
-    getPdfPageText,
-    getPdfPageTextsBatch,
+    getPdfPageBundle,
+    getPdfPageBundlesBatch,
     ocrPdfPage,
     page,
     pdfDocumentInfo,
-    pdfJsDocument,
     renderRequests,
     setTextLayerForPage,
     view.primary_attachment_id,

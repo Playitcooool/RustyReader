@@ -1,15 +1,5 @@
 /// <reference types="vite/client" />
 
-declare module "pdfjs-dist/build/pdf.worker.min.mjs?url" {
-  const workerUrl: string;
-  export default workerUrl;
-}
-
-declare module "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url" {
-  const workerUrl: string;
-  export default workerUrl;
-}
-
 // Our TS config targets older libs, but runtime polyfills add `.at()` for older WebViews.
 // Declare it here so `tsc -b` doesn't require bumping `lib` to ES2022+.
 declare global {
