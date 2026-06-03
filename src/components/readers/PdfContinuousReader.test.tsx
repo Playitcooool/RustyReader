@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PdfContinuousReader } from "./PdfContinuousReader";
 import type { ReaderView } from "../../lib/contracts";
+import { getLegacyDocumentMock } from "../../test/pdfjsLegacyMock";
 
 const pdfView: ReaderView = {
   item_id: 1,
@@ -438,6 +439,82 @@ describe("PdfContinuousReader", () => {
 
     const image = await screen.findByLabelText("PDF page 1 image");
     expect(image).toHaveStyle({ width: "800px", height: "1000px" });
+  });
+
+  it("does not downgrade a sharp high-dpi page to a 1x raster after scrolling back", async () => {
+    Object.defineProperty(window, "devicePixelRatio", { value: 2, configurable: true, writable: true });
+    const renderCalls: Array<{ pageIndex0: number; width: number }> = [];
+    getLegacyDocumentMock.mockImplementationOnce(() => ({
+      promise: Promise.resolve({
+        numPages: 3,
+        getPage: vi.fn(async (pageNumber: number) => ({
+          getViewport: ({ scale }: { scale: number }) => ({
+            width: 800 * scale,
+            height: 1000 * scale,
+          }),
+          render: vi.fn(({ viewport }: { viewport: { width: number } }) => {
+            renderCalls.push({ pageIndex0: pageNumber - 1, width: viewport.width });
+            return { promise: Promise.resolve() };
+          }),
+        })),
+        destroy: vi.fn(async () => undefined),
+      }),
+    }));
+    const getPdfPageBundle = vi.fn().mockResolvedValue(makeBundle("Sharp text"));
+    const getPdfDocumentInfo = vi.fn().mockResolvedValue(makeDocumentInfo());
+    const getPdfPageText = vi.fn().mockImplementation(async ({ page_index0 }: { page_index0: number }) =>
+      makePageText(`Page ${page_index0 + 1}`, page_index0),
+    );
+    const ocrPdfPage = vi.fn().mockResolvedValue({
+      primary_attachment_id: 101,
+      page_index0: 0,
+      lang: "eng+chi_sim",
+      config_version: "test",
+      lines: [],
+    });
+
+    const { rerender } = render(
+      <PdfContinuousReader
+        getPdfDocumentInfo={getPdfDocumentInfo}
+        getPdfPageBundle={getPdfPageBundle}
+        getPdfPageText={getPdfPageText}
+        ocrPdfPage={ocrPdfPage}
+        page={0}
+        view={pdfView}
+        zoom={100}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(renderCalls.some((call) => call.pageIndex0 === 0 && call.width === 1600)).toBe(true);
+    });
+    renderCalls.length = 0;
+
+    rerender(
+      <PdfContinuousReader
+        getPdfDocumentInfo={getPdfDocumentInfo}
+        getPdfPageBundle={getPdfPageBundle}
+        getPdfPageText={getPdfPageText}
+        ocrPdfPage={ocrPdfPage}
+        page={1}
+        view={pdfView}
+        zoom={100}
+      />,
+    );
+    rerender(
+      <PdfContinuousReader
+        getPdfDocumentInfo={getPdfDocumentInfo}
+        getPdfPageBundle={getPdfPageBundle}
+        getPdfPageText={getPdfPageText}
+        ocrPdfPage={ocrPdfPage}
+        page={0}
+        view={pdfView}
+        zoom={100}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByLabelText("PDF page 1 image")).toBeInTheDocument());
+    expect(renderCalls.some((call) => call.pageIndex0 === 0 && call.width === 800)).toBe(false);
   });
 
   it("falls back to OCR when native text is empty", async () => {

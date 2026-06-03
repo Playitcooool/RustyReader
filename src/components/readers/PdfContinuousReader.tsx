@@ -70,6 +70,14 @@ const pageShellDimensionsMatch = (shell: PageShellInfo | undefined, widthCssPx: 
 const renderedPageDimensionsMatch = (page: RenderedPageState | undefined, widthCssPx: number, heightCssPx: number) =>
   Boolean(page && page.cssWidthPx === widthCssPx && page.cssHeightPx === heightCssPx);
 
+const renderedPageCoversRequest = (page: RenderedPageState | undefined, request: RenderRequest) =>
+  Boolean(
+    page &&
+    page.cssWidthPx === request.cssWidthPx &&
+    page.cssHeightPx === request.cssHeightPx &&
+    page.rasterScale >= request.rasterScale,
+  );
+
 type PdfContinuousReaderProps = {
   view: ReaderView;
   page: number;
@@ -758,6 +766,12 @@ export function PdfContinuousReader({
       runOcrFallback: boolean,
     ) => {
       if (cancelled) return;
+      const existingPage = pagesRef.current[request.pageIndex0];
+      if (renderedPageCoversRequest(existingPage, request)) {
+        const url = URL.createObjectURL(blobFromBytes(rendered.pngBytes, "image/png"));
+        URL.revokeObjectURL(url);
+        return;
+      }
       if (latestRequestKeyByPageRef.current.get(request.pageIndex0) !== request.requestKey) {
         const url = URL.createObjectURL(blobFromBytes(rendered.pngBytes, "image/png"));
         URL.revokeObjectURL(url);
@@ -866,7 +880,7 @@ export function PdfContinuousReader({
 
     const processRequest = async (request: RenderRequest) => {
       const existing = pagesRef.current[request.pageIndex0];
-      if (existing && existing.requestKey === request.requestKey) return;
+      if (renderedPageCoversRequest(existing, request)) return;
       if (requestedRenderKeysRef.current.has(request.requestKey)) return;
       if (inFlightRenderKeysRef.current.has(request.requestKey)) return;
       if (inFlightRenderPagesRef.current.has(request.pageIndex0) && request.priority === "idle") return;
@@ -907,7 +921,7 @@ export function PdfContinuousReader({
     const processBatch = async (batch: RenderRequest[]) => {
       batch = batch.filter((request) => {
         const existing = pagesRef.current[request.pageIndex0];
-        if (existing && existing.requestKey === request.requestKey) return false;
+        if (renderedPageCoversRequest(existing, request)) return false;
         if (requestedRenderKeysRef.current.has(request.requestKey)) return false;
         if (inFlightRenderKeysRef.current.has(request.requestKey)) return false;
         return true;
