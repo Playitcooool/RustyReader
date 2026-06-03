@@ -719,6 +719,38 @@ describe("PdfContinuousReader", () => {
     });
   });
 
+  it("clears a stale text selection when the reader is clicked", async () => {
+    const getPdfPageBundle = vi.fn().mockResolvedValue(makeBundle("Hello world"));
+    const getPdfDocumentInfo = vi.fn().mockResolvedValue(makeDocumentInfo());
+    const getPdfPageText = vi.fn().mockResolvedValue(makePageText("Hello world"));
+    const ocrPdfPage = vi.fn().mockResolvedValue({
+      primary_attachment_id: 101,
+      page_index0: 0,
+      lang: "eng+chi_sim",
+      config_version: "test",
+      lines: [],
+    });
+    const onSelectionChange = vi.fn();
+
+    render(
+      <PdfContinuousReader
+        getPdfDocumentInfo={getPdfDocumentInfo}
+        getPdfPageBundle={getPdfPageBundle}
+        getPdfPageText={getPdfPageText}
+        ocrPdfPage={ocrPdfPage}
+        onSelectionChange={onSelectionChange}
+        page={0}
+        view={pdfView}
+        zoom={100}
+      />,
+    );
+
+    const reader = await screen.findByTestId("pdf-reader");
+    fireEvent.pointerDown(reader, { button: 0, pointerId: 1, pointerType: "mouse" });
+
+    expect(onSelectionChange).toHaveBeenCalledWith(null);
+  });
+
   it("commits a text box draft with Enter and includes current text style", async () => {
     const getPdfPageBundle = vi.fn().mockResolvedValue(makeBundle("Hello world"));
     const getPdfDocumentInfo = vi.fn().mockResolvedValue(makeDocumentInfo());

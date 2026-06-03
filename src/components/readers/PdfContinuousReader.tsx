@@ -2106,6 +2106,7 @@ export function PdfContinuousReader({
       onPointerDown={(event) => {
         const target = event.target;
         if (target instanceof Element && target.closest(".pdf-text-box-annotation")) return;
+        if (event.button !== 2) onSelectionChange?.(null);
         setSelectedTextBoxAnnotationId(null);
         setEditingTextBoxAnnotationId(null);
       }}
