@@ -64,6 +64,12 @@ const OCR_CONCURRENCY = 1;
 const PAGE_GAP_PX = 12;
 const VIRTUAL_WINDOW_RADIUS = 8;
 
+const pageShellDimensionsMatch = (shell: PageShellInfo | undefined, widthCssPx: number, heightCssPx: number) =>
+  Boolean(shell && shell.widthCssPx === widthCssPx && shell.heightCssPx === heightCssPx);
+
+const renderedPageDimensionsMatch = (page: RenderedPageState | undefined, widthCssPx: number, heightCssPx: number) =>
+  Boolean(page && page.cssWidthPx === widthCssPx && page.cssHeightPx === heightCssPx);
+
 type PdfContinuousReaderProps = {
   view: ReaderView;
   page: number;
@@ -783,13 +789,18 @@ export function PdfContinuousReader({
         ...current,
         [request.pageIndex0]: nextRenderedState,
       }));
-      setPageShells((current) => ({
-        ...current,
-        [request.pageIndex0]: {
-          widthCssPx: request.cssWidthPx,
-          heightCssPx: rendered.cssHeightPx,
-        },
-      }));
+      setPageShells((current) => {
+        if (pageShellDimensionsMatch(current[request.pageIndex0], request.cssWidthPx, rendered.cssHeightPx)) {
+          return current;
+        }
+        return {
+          ...current,
+          [request.pageIndex0]: {
+            widthCssPx: request.cssWidthPx,
+            heightCssPx: rendered.cssHeightPx,
+          },
+        };
+      });
 
       const currentHost = textLayerHostByIndexRef.current.get(request.pageIndex0);
       if (!currentHost) return;
@@ -865,7 +876,8 @@ export function PdfContinuousReader({
       inFlightRenderKeysRef.current.add(request.requestKey);
       try {
         const host = textLayerHostByIndexRef.current.get(request.pageIndex0);
-        if (host) clearChildren(host);
+        const existing = pagesRef.current[request.pageIndex0];
+        if (host && !renderedPageDimensionsMatch(existing, request.cssWidthPx, request.cssHeightPx)) clearChildren(host);
 
         void effectiveZoom;
         const [rendered, text] = await Promise.all([
@@ -908,7 +920,8 @@ export function PdfContinuousReader({
         inFlightRenderPagesRef.current.add(request.pageIndex0);
         inFlightRenderKeysRef.current.add(request.requestKey);
         const host = textLayerHostByIndexRef.current.get(request.pageIndex0);
-        if (host) clearChildren(host);
+        const existing = pagesRef.current[request.pageIndex0];
+        if (host && !renderedPageDimensionsMatch(existing, request.cssWidthPx, request.cssHeightPx)) clearChildren(host);
       }
 
       try {
