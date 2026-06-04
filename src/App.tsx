@@ -107,6 +107,14 @@ export default function App({ api }: { api: AppApi }) {
 
   const activeCollection = library.activeCollection;
   const activePaper = readerState.activePaper;
+  const clearReaderSelectionState = useCallback(() => {
+    window.getSelection?.()?.removeAllRanges();
+    readerState.setPdfSelection(null);
+    readerState.setReaderSelection(null);
+    readerState.dismissActivePdfHighlight();
+    readerState.closeTranslationPopover();
+  }, [readerState]);
+
   const closeReaderFloatingUi = useCallback(() => {
     readerState.setIsFindHudOpen(false);
     readerState.setReaderSearchQuery("");
@@ -118,6 +126,16 @@ export default function App({ api }: { api: AppApi }) {
     readerState.dismissActivePdfHighlight();
     readerState.closeTranslationPopover();
   }, [readerState]);
+
+  const navigatePdfOutline = useCallback((pageIndex0: number) => {
+    clearReaderSelectionState();
+    readerState.setReaderPageClamped(pageIndex0);
+  }, [clearReaderSelectionState, readerState]);
+
+  const selectCollection = useCallback((collectionId: number) => {
+    clearReaderSelectionState();
+    library.setSelectedCollectionId(collectionId);
+  }, [clearReaderSelectionState, library]);
 
   const closeFindHud = useCallback(() => {
     readerState.setIsFindHudOpen(false);
@@ -572,9 +590,9 @@ export default function App({ api }: { api: AppApi }) {
           onHideFocusSidebar={isPdfFocusMode ? () => setIsSidebarVisible(false) : undefined}
           onGetPdfOutline={readerState.getPdfOutline}
           onImportPaths={library.importPaths}
-          onNavigatePdfOutline={readerState.setReaderPageClamped}
+          onNavigatePdfOutline={navigatePdfOutline}
           onSearchChange={library.setSearch}
-          onSelectedCollectionChange={library.setSelectedCollectionId}
+          onSelectedCollectionChange={selectCollection}
           onSetCollectionDraftName={library.setCollectionDraftName}
           onStartCreateCollection={library.startCreateCollection}
           onStartRenameCollection={library.startRenameCollection}

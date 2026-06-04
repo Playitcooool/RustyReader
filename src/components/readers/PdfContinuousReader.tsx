@@ -21,6 +21,7 @@ import { buildOcrTextLayer } from "./pdfOcrTextLayer";
 import {
   buildPdfTextSelectionFromRange,
   parsePdfTextAnchor,
+  rangeIntersectsPdfTextLayer,
   type PdfTextAnchor,
   type PdfSelectionRect,
   type PdfTextSelection,
@@ -2054,7 +2055,7 @@ export function PdfContinuousReader({
         if (quote.trim() && startPage !== null && startPage === endPage) {
           const host = textLayerHostByIndexRef.current.get(startPage);
           const divs = textDivsByIndexRef.current.get(startPage) ?? [];
-          if (host && host.contains(range.commonAncestorContainer)) {
+          if (host && rangeIntersectsPdfTextLayer(range, host)) {
             next = buildPdfTextSelectionFromRange({ quote, range, host, divs, pageNumber1: startPage + 1 });
           }
         }
@@ -2072,7 +2073,7 @@ export function PdfContinuousReader({
           pageIndex0 = closestPageIndex(range.startContainer);
           if (pageIndex0 !== null) {
             const host = textLayerHostByIndexRef.current.get(pageIndex0);
-            insideTextLayer = host ? host.contains(range.commonAncestorContainer) : false;
+            insideTextLayer = host ? rangeIntersectsPdfTextLayer(range, host) : false;
           }
           const element =
             range.startContainer.nodeType === Node.ELEMENT_NODE

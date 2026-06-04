@@ -14,6 +14,7 @@ import { computeFitWidthZoomPct } from "./pdfFit";
 import {
   buildPdfTextSelectionFromRange,
   parsePdfTextAnchor,
+  rangeIntersectsPdfTextLayer,
   type PdfTextAnchor,
   type PdfSelectionRect,
   type PdfTextSelection,
@@ -438,7 +439,7 @@ export function PdfReader({
       if (host && selection && selection.rangeCount > 0) {
         const range = selection.getRangeAt(0);
         const quote = selection.toString();
-        if (quote.trim() && host.contains(range.commonAncestorContainer)) {
+        if (quote.trim() && rangeIntersectsPdfTextLayer(range, host)) {
           next = buildPdfTextSelectionFromRange({
             quote,
             range,
@@ -458,7 +459,7 @@ export function PdfReader({
       try {
         if (selection && selection.rangeCount > 0) {
           const range = selection.getRangeAt(0);
-          insideTextLayer = host ? host.contains(range.commonAncestorContainer) : false;
+          insideTextLayer = host ? rangeIntersectsPdfTextLayer(range, host) : false;
           const element =
             range.startContainer.nodeType === Node.ELEMENT_NODE
               ? (range.startContainer as Element)

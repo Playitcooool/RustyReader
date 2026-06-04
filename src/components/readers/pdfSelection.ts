@@ -84,6 +84,68 @@ const globalOffsetWithinHost = (host: HTMLElement, container: Node, offset: numb
   return range.toString().length;
 };
 
+const rangeIntersectsNodeSafely = (range: Range, node: Node) => {
+  try {
+    if (typeof range.intersectsNode === "function") return range.intersectsNode(node);
+  } catch {
+    // Fall through to a boundary comparison below.
+  }
+
+  try {
+    const nodeRange = document.createRange();
+    nodeRange.selectNodeContents(node);
+    return (
+      range.compareBoundaryPoints(Range.END_TO_START, nodeRange) > 0 &&
+      range.compareBoundaryPoints(Range.START_TO_END, nodeRange) < 0
+    );
+  } catch {
+    return false;
+  }
+};
+
+export const rangeIntersectsPdfTextLayer = (range: Range, host: HTMLElement) => {
+  if (host.contains(range.startContainer) || host.contains(range.endContainer)) return true;
+  return rangeIntersectsNodeSafely(range, host);
+};
+
+const textBoundaryNode = (root: Node, edge: "first" | "last") => {
+  if (root.nodeType === Node.TEXT_NODE) return root;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  if (edge === "first") return node;
+
+  let last: Node | null = node;
+  while (node) {
+    last = node;
+    node = walker.nextNode();
+  }
+  return last;
+};
+
+const clampRangeToTextLayer = (range: Range, host: HTMLElement, divs: HTMLElement[]) => {
+  if (host.contains(range.startContainer) && host.contains(range.endContainer)) {
+    return { startContainer: range.startContainer, startOffset: range.startOffset, endContainer: range.endContainer, endOffset: range.endOffset };
+  }
+
+  const selectedDivs = divs.filter((div) => rangeIntersectsNodeSafely(range, div));
+  const firstDiv = selectedDivs[0];
+  const lastDiv = selectedDivs[selectedDivs.length - 1];
+  if (!firstDiv || !lastDiv) return null;
+
+  const firstText = textBoundaryNode(firstDiv, "first");
+  const lastText = textBoundaryNode(lastDiv, "last");
+  if (!firstText || !lastText) return null;
+
+  const startInside = host.contains(range.startContainer);
+  const endInside = host.contains(range.endContainer);
+  return {
+    startContainer: startInside ? range.startContainer : firstText,
+    startOffset: startInside ? range.startOffset : 0,
+    endContainer: endInside ? range.endContainer : lastText,
+    endOffset: endInside ? range.endOffset : lastText.textContent?.length ?? 0,
+  };
+};
+
 const mapGlobalOffsetToDiv = (
   globalOffset: number,
   lengths: number[],
@@ -125,13 +187,23 @@ export const buildPdfTextSelectionFromRange = (input: {
 }): PdfTextSelection | null => {
   const { quote, range, host, divs, pageNumber1 } = input;
   if (!quote || quote.trim().length === 0) return null;
-  if ((!host.contains(range.startContainer) && host !== range.startContainer) || (!host.contains(range.endContainer) && host !== range.endContainer)) {
+  if (divs.length === 0) return null;
+  if (!rangeIntersectsPdfTextLayer(range, host)) return null;
+
+  const clampedRange = clampRangeToTextLayer(range, host, divs);
+  if (!clampedRange) return null;
+  const anchorRange = document.createRange();
+  try {
+    anchorRange.setStart(clampedRange.startContainer, clampedRange.startOffset);
+    anchorRange.setEnd(clampedRange.endContainer, clampedRange.endOffset);
+  } catch {
     return null;
   }
-  if (divs.length === 0) return null;
+  const anchorQuote = anchorRange.toString() || quote;
+  if (!anchorQuote.trim()) return null;
 
-  const startGlobal = globalOffsetWithinHost(host, range.startContainer, range.startOffset);
-  const endGlobal = globalOffsetWithinHost(host, range.endContainer, range.endOffset);
+  const startGlobal = globalOffsetWithinHost(host, clampedRange.startContainer, clampedRange.startOffset);
+  const endGlobal = globalOffsetWithinHost(host, clampedRange.endContainer, clampedRange.endOffset);
   if (startGlobal === null || endGlobal === null) return null;
 
   const lengths = divs.map((div) => div.textContent?.length ?? 0);
@@ -146,7 +218,7 @@ export const buildPdfTextSelectionFromRange = (input: {
     startOffset: start.offset,
     endDivIndex: end.divIndex,
     endOffset: end.offset,
-    quote,
+    quote: anchorQuote,
   };
-  return { anchor: JSON.stringify(anchor), quote, rect: selectionRectFromRange(range) };
+  return { anchor: JSON.stringify(anchor), quote: anchorQuote, rect: selectionRectFromRange(range) };
 };
