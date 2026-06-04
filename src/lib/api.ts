@@ -4,6 +4,7 @@ import {
   toPdfInitialPageBundle,
   toPdfOutlineItems,
   toPdfPageBundle,
+  toPdfPageLinks,
   toPdfPageText,
   toPdfSearchResult,
   toUint8Array,
@@ -179,6 +180,12 @@ export async function createTauriApi(): Promise<AppApi> {
     pdfEngineGetOutline: async (input) =>
       toPdfOutlineItems(
         await invoke("pdf_engine_get_outline", {
+          input,
+        }),
+      ),
+    pdfEngineGetLinks: async (input) =>
+      toPdfPageLinks(
+        await invoke("pdf_engine_get_links", {
           input,
         }),
       ),

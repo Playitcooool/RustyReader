@@ -340,6 +340,17 @@ export type PdfOutlineItem = {
   children: PdfOutlineItem[];
 };
 
+export type PdfPageLink = {
+  id: string;
+  page_index0: number;
+  // PDF points (origin bottom-left). Converted to CSS pixels in the frontend.
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  target_page_index0: number;
+};
+
 export type PdfInitialPageBundle = {
   document_info: PdfDocumentInfo;
   bundle: PdfPageBundle;
@@ -362,6 +373,10 @@ export type PdfEngineGetDocumentInfoInput = {
 };
 
 export type PdfEngineGetOutlineInput = {
+  primary_attachment_id: number;
+};
+
+export type PdfEngineGetLinksInput = {
   primary_attachment_id: number;
 };
 
@@ -529,6 +544,7 @@ export type AppApi = {
   ocrPdfPage: (input: OcrPdfPageInput) => Promise<OcrPageResult>;
   pdfEngineGetDocumentInfo: (input: PdfEngineGetDocumentInfoInput) => Promise<PdfDocumentInfo>;
   pdfEngineGetOutline: (input: PdfEngineGetOutlineInput) => Promise<PdfOutlineItem[]>;
+  pdfEngineGetLinks: (input: PdfEngineGetLinksInput) => Promise<PdfPageLink[]>;
   pdfEngineGetInitialPageBundle: (input: PdfEngineGetPageBundleInput) => Promise<PdfInitialPageBundle>;
   pdfEngineGetPageBundle: (input: PdfEngineGetPageBundleInput) => Promise<PdfPageBundle>;
   pdfEngineGetPageBundlesBatch: (input: PdfEngineGetPageBundlesBatchInput) => Promise<PdfPageBundle[]>;

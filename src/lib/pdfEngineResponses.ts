@@ -3,6 +3,7 @@ import type {
   PdfInitialPageBundle,
   PdfOutlineItem,
   PdfPageBundle,
+  PdfPageLink,
   PdfPageText,
   PdfSearchResult,
   PdfTextSpan,
@@ -95,6 +96,22 @@ export const toPdfOutlineItems = (value: unknown): PdfOutlineItem[] =>
           title: typeof obj.title === "string" ? obj.title : "",
           page_index0: Number(obj.page_index0),
           children: toPdfOutlineItems(obj.children),
+        };
+      })
+    : [];
+
+export const toPdfPageLinks = (value: unknown): PdfPageLink[] =>
+  Array.isArray(value)
+    ? value.map((link) => {
+        const obj = link && typeof link === "object" ? (link as Record<string, unknown>) : {};
+        return {
+          id: typeof obj.id === "string" ? obj.id : "",
+          page_index0: Number(obj.page_index0),
+          x0: Number(obj.x0),
+          y0: Number(obj.y0),
+          x1: Number(obj.x1),
+          y1: Number(obj.y1),
+          target_page_index0: Number(obj.target_page_index0),
         };
       })
     : [];

@@ -55,6 +55,17 @@ pub(crate) struct PdfOutlineItem {
     children: Vec<PdfOutlineItem>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct PdfPageLink {
+    id: String,
+    page_index0: i64,
+    x0: f32,
+    y0: f32,
+    x1: f32,
+    y1: f32,
+    target_page_index0: i64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct PdfInitialPageBundle {
     document_info: PdfDocumentInfo,
@@ -75,6 +86,11 @@ pub(crate) struct PdfEngineGetDocumentInfoInput {
 
 #[derive(Deserialize)]
 pub(crate) struct PdfEngineGetOutlineInput {
+    primary_attachment_id: i64,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct PdfEngineGetLinksInput {
     primary_attachment_id: i64,
 }
 
@@ -128,6 +144,7 @@ pub(crate) struct PdfEngineSearchInput {
 pub(crate) struct PdfEngineCache {
     pub(crate) document_info_by_attachment: HashMap<i64, PdfDocumentInfo>,
     pub(crate) outline_by_attachment: HashMap<i64, Vec<PdfOutlineItem>>,
+    pub(crate) links_by_attachment: HashMap<i64, Vec<PdfPageLink>>,
     pub(crate) text_spans_by_page: HashMap<(i64, i64), Vec<PdfTextSpan>>,
     text_spans_order: VecDeque<(i64, i64)>,
     pub(crate) bundle_by_key: HashMap<(i64, i64, u32), PdfPageBundle>,
@@ -197,6 +214,58 @@ fn outline_page_index_for_node(
         return outline_page_index_from_destination(doc, destination, page_index_by_id);
     }
     let action = node
+        .get(b"A")
+        .ok()
+        .and_then(|object| outline_dict_from_object(doc, object))?;
+    if action.get(b"S").ok()?.as_name().ok()? != b"GoTo" {
+        return None;
+    }
+    outline_page_index_from_destination(doc, action.get(b"D").ok()?, page_index_by_id)
+}
+
+fn object_from_reference<'a>(doc: &'a LopdfDocument, object: &'a Object) -> Option<&'a Object> {
+    match object {
+        Object::Reference(object_id) => doc.get_object(*object_id).ok(),
+        _ => Some(object),
+    }
+}
+
+fn object_array_from_object<'a>(
+    doc: &'a LopdfDocument,
+    object: &'a Object,
+) -> Option<&'a Vec<Object>> {
+    object_from_reference(doc, object)?.as_array().ok()
+}
+
+fn number_from_object(object: &Object) -> Option<f32> {
+    match object {
+        Object::Integer(value) => Some(*value as f32),
+        Object::Real(value) => Some(*value),
+        _ => None,
+    }
+}
+
+fn rect_from_object(doc: &LopdfDocument, object: &Object) -> Option<(f32, f32, f32, f32)> {
+    let rect = object_array_from_object(doc, object)?;
+    if rect.len() < 4 {
+        return None;
+    }
+    let x0 = number_from_object(&rect[0])?;
+    let y0 = number_from_object(&rect[1])?;
+    let x1 = number_from_object(&rect[2])?;
+    let y1 = number_from_object(&rect[3])?;
+    Some((x0.min(x1), y0.min(y1), x0.max(x1), y0.max(y1)))
+}
+
+fn link_target_page_index(
+    doc: &LopdfDocument,
+    annotation: &Dictionary,
+    page_index_by_id: &HashMap<ObjectId, i64>,
+) -> Option<i64> {
+    if let Ok(destination) = annotation.get(b"Dest") {
+        return outline_page_index_from_destination(doc, destination, page_index_by_id);
+    }
+    let action = annotation
         .get(b"A")
         .ok()
         .and_then(|object| outline_dict_from_object(doc, object))?;
@@ -324,6 +393,59 @@ fn extract_pdf_outline(bytes: &[u8]) -> Result<Vec<PdfOutlineItem>, String> {
         String::new(),
         &mut HashSet::new(),
     ))
+}
+
+fn extract_pdf_links(bytes: &[u8]) -> Result<Vec<PdfPageLink>, String> {
+    let doc = LopdfDocument::load_mem(bytes).map_err(|error| error.to_string())?;
+    let pages = doc.get_pages();
+    let page_index_by_id = pages
+        .iter()
+        .map(|(page_number, object_id)| (*object_id, i64::from(*page_number) - 1))
+        .collect::<HashMap<_, _>>();
+    let mut links = Vec::new();
+
+    for (page_number, page_id) in pages {
+        let page_index0 = i64::from(page_number) - 1;
+        let page = doc
+            .get_dictionary(page_id)
+            .map_err(|error| error.to_string())?;
+        let Some(annots) = page
+            .get(b"Annots")
+            .ok()
+            .and_then(|object| object_array_from_object(&doc, object))
+        else {
+            continue;
+        };
+
+        for (annot_index, annot_object) in annots.iter().enumerate() {
+            let Some(annotation) = outline_dict_from_object(&doc, annot_object) else {
+                continue;
+            };
+            if annotation.get(b"Subtype").ok().and_then(|object| object.as_name().ok()) != Some(b"Link") {
+                continue;
+            }
+            let Some(target_page_index0) = link_target_page_index(&doc, annotation, &page_index_by_id) else {
+                continue;
+            };
+            let Some((x0, y0, x1, y1)) = annotation.get(b"Rect").ok().and_then(|object| rect_from_object(&doc, object)) else {
+                continue;
+            };
+            if (x1 - x0).abs() <= f32::EPSILON || (y1 - y0).abs() <= f32::EPSILON {
+                continue;
+            }
+            links.push(PdfPageLink {
+                id: format!("link-{page_index0}-{annot_index}"),
+                page_index0,
+                x0,
+                y0,
+                x1,
+                y1,
+                target_page_index0,
+            });
+        }
+    }
+
+    Ok(links)
 }
 
 fn unique_preserve_order(page_indexes0: &[i64]) -> Result<Vec<i64>, String> {
@@ -606,6 +728,40 @@ pub(crate) async fn pdf_engine_get_outline(
             .outline_by_attachment
             .insert(input.primary_attachment_id, outline.clone());
         Ok(outline)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub(crate) async fn pdf_engine_get_links(
+    state: State<'_, AppState>,
+    input: PdfEngineGetLinksInput,
+) -> Result<Vec<PdfPageLink>, String> {
+    if let Some(cached) = state
+        .pdf_cache
+        .lock()
+        .map_err(|_| "pdf cache poisoned".to_string())?
+        .links_by_attachment
+        .get(&input.primary_attachment_id)
+        .cloned()
+    {
+        return Ok(cached);
+    }
+
+    let library_root = state.library_root.clone();
+    let pdf_cache = state.pdf_cache.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let bytes = service_for_root(&library_root)?
+            .read_primary_attachment_bytes(input.primary_attachment_id)
+            .map_err(|error| error.to_string())?;
+        let links = extract_pdf_links(&bytes)?;
+        pdf_cache
+            .lock()
+            .map_err(|_| "pdf cache poisoned".to_string())?
+            .links_by_attachment
+            .insert(input.primary_attachment_id, links.clone());
+        Ok(links)
     })
     .await
     .map_err(|error| error.to_string())?
@@ -1343,6 +1499,73 @@ mod tests {
         bytes
     }
 
+    fn make_pdf_with_links() -> Vec<u8> {
+        let mut doc = Document::with_version("1.5");
+        let pages_id = doc.new_object_id();
+        let page_one_id = push_page(&mut doc, pages_id, 612.0, 792.0);
+        let page_two_id = push_page(&mut doc, pages_id, 612.0, 792.0);
+        let direct_link_id = doc.new_object_id();
+        let action_link_id = doc.new_object_id();
+        let remote_link_id = doc.new_object_id();
+        let catalog_id = doc.add_object(lopdf::dictionary! {
+            "Type" => "Catalog",
+            "Pages" => pages_id,
+        });
+
+        doc.objects.insert(
+            pages_id,
+            Object::Dictionary(lopdf::dictionary! {
+                "Type" => "Pages",
+                "Kids" => vec![page_one_id.into(), page_two_id.into()],
+                "Count" => 2,
+            }),
+        );
+        doc.objects.insert(
+            direct_link_id,
+            Object::Dictionary(lopdf::dictionary! {
+                "Type" => "Annot",
+                "Subtype" => "Link",
+                "Rect" => vec![72.into(), 700.into(), 200.into(), 720.into()],
+                "Dest" => vec![page_two_id.into(), "Fit".into()],
+            }),
+        );
+        doc.objects.insert(
+            action_link_id,
+            Object::Dictionary(lopdf::dictionary! {
+                "Type" => "Annot",
+                "Subtype" => "Link",
+                "Rect" => vec![72.into(), 650.into(), 240.into(), 670.into()],
+                "A" => lopdf::dictionary! {
+                    "S" => "GoTo",
+                    "D" => vec![page_one_id.into(), "Fit".into()],
+                },
+            }),
+        );
+        doc.objects.insert(
+            remote_link_id,
+            Object::Dictionary(lopdf::dictionary! {
+                "Type" => "Annot",
+                "Subtype" => "Link",
+                "Rect" => vec![72.into(), 620.into(), 240.into(), 640.into()],
+                "A" => lopdf::dictionary! {
+                    "S" => "URI",
+                    "URI" => Object::string_literal("https://example.com"),
+                },
+            }),
+        );
+        if let Some(Object::Dictionary(page_one)) = doc.objects.get_mut(&page_one_id) {
+            page_one.set(
+                "Annots",
+                vec![direct_link_id.into(), action_link_id.into(), remote_link_id.into()],
+            );
+        }
+        doc.trailer.set("Root", catalog_id);
+
+        let mut bytes = Vec::new();
+        doc.save_to(&mut bytes).expect("test pdf should serialize");
+        bytes
+    }
+
     #[test]
     fn pdf_cache_enforces_text_and_bundle_limits() {
         let mut cache = PdfEngineCache::default();
@@ -1416,6 +1639,21 @@ mod tests {
             .expect("outline should parse");
 
         assert!(outline.is_empty());
+    }
+
+    #[test]
+    fn link_extraction_reads_internal_page_destinations() {
+        let links = extract_pdf_links(&make_pdf_with_links()).expect("links should parse");
+
+        assert_eq!(links.len(), 2);
+        assert_eq!(links[0].page_index0, 0);
+        assert_eq!(links[0].target_page_index0, 1);
+        assert_eq!(links[0].x0, 72.0);
+        assert_eq!(links[0].y0, 700.0);
+        assert_eq!(links[0].x1, 200.0);
+        assert_eq!(links[0].y1, 720.0);
+        assert_eq!(links[1].page_index0, 0);
+        assert_eq!(links[1].target_page_index0, 0);
     }
 
     #[test]

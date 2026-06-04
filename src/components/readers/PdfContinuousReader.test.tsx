@@ -165,6 +165,55 @@ describe("PdfContinuousReader", () => {
     });
   });
 
+  it("jumps to PDF internal link destinations", async () => {
+    const getPdfPageBundle = vi.fn().mockImplementation(async ({ page_index0 }: { page_index0: number }) =>
+      makeBundle(`Page ${page_index0 + 1}`),
+    );
+    const getPdfDocumentInfo = vi.fn().mockResolvedValue(makeDocumentInfo());
+    const getPdfPageText = vi.fn().mockImplementation(async ({ page_index0 }: { page_index0: number }) =>
+      makePageText(`Page ${page_index0 + 1}`, page_index0),
+    );
+    const getPdfLinks = vi.fn().mockResolvedValue([
+      {
+        id: "link-0-0",
+        page_index0: 0,
+        x0: 10,
+        y0: 700,
+        x1: 200,
+        y1: 720,
+        target_page_index0: 2,
+      },
+    ]);
+    const onNavigateToPage = vi.fn();
+    const ocrPdfPage = vi.fn().mockResolvedValue({
+      primary_attachment_id: 101,
+      page_index0: 0,
+      lang: "eng+chi_sim",
+      config_version: "test",
+      lines: [],
+    });
+
+    render(
+      <PdfContinuousReader
+        getPdfDocumentInfo={getPdfDocumentInfo}
+        getPdfLinks={getPdfLinks}
+        getPdfPageBundle={getPdfPageBundle}
+        getPdfPageText={getPdfPageText}
+        ocrPdfPage={ocrPdfPage}
+        onNavigateToPage={onNavigateToPage}
+        page={0}
+        view={pdfView}
+        zoom={100}
+      />,
+    );
+
+    const link = await screen.findByRole("button", { name: "Jump to page 3" });
+    fireEvent.click(link);
+
+    expect(getPdfLinks).toHaveBeenCalledWith(101);
+    expect(onNavigateToPage).toHaveBeenCalledWith(2);
+  });
+
   it("only requests nearby pages and releases far rendered pages", async () => {
     const longPdfView: ReaderView = { ...pdfView, page_count: 20 };
     const getPdfPageBundle = vi.fn().mockImplementation(async ({ page_index0 }: { page_index0: number }) =>

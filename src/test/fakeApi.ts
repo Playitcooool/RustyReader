@@ -20,6 +20,7 @@ import type {
   OcrPdfPageInput,
   PdfDocumentInfo,
   PdfEngineGetDocumentInfoInput,
+  PdfEngineGetLinksInput,
   PdfEngineGetOutlineInput,
   PdfInitialPageBundle,
   PdfEngineGetPageBundleInput,
@@ -28,6 +29,7 @@ import type {
   PdfEngineGetPageBundlesBatchInput,
   PdfEngineGetPageTextsBatchInput,
   PdfPageBundle,
+  PdfPageLink,
   PdfPageText,
   PdfOutlineItem,
   PdfSearchResult,
@@ -2071,6 +2073,10 @@ export const fakeApi: AppApi = {
         ],
       },
     ];
+  },
+
+  async pdfEngineGetLinks(_input: PdfEngineGetLinksInput): Promise<PdfPageLink[]> {
+    return [];
   },
 
   async pdfEngineGetInitialPageBundle(input: PdfEngineGetPageBundleInput): Promise<PdfInitialPageBundle> {

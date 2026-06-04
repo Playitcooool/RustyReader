@@ -94,6 +94,7 @@ type ReaderWorkspaceData = {
 type ReaderWorkspacePdfApi = {
   getPdfDocumentInfo: (primaryAttachmentId: number) => Promise<unknown>;
   getPdfInitialPageBundle?: (input: { primary_attachment_id: number; page_index0: number; target_width_px: number }) => Promise<unknown>;
+  getPdfLinks?: (primaryAttachmentId: number) => Promise<unknown>;
   getPdfOutline?: (primaryAttachmentId: number) => Promise<unknown>;
   getPdfPageBundle: (input: { primary_attachment_id: number; page_index0: number; target_width_px: number }) => Promise<unknown>;
   getPdfPageBundlesBatch: (input: { primary_attachment_id: number; page_indexes0: number[]; target_width_px: number }) => Promise<unknown>;
@@ -187,6 +188,7 @@ export function ReaderWorkspace(props: Props) {
   const {
     getPdfDocumentInfo,
     getPdfInitialPageBundle,
+    getPdfLinks,
     getPdfPageBundle,
     getPdfPageBundlesBatch,
     getPdfPageText,
@@ -589,6 +591,7 @@ export function ReaderWorkspace(props: Props) {
                 fitMode={readerFitMode}
                 getPdfDocumentInfo={getPdfDocumentInfo as never}
                 getPdfInitialPageBundle={getPdfInitialPageBundle as never}
+                getPdfLinks={getPdfLinks as never}
                 getPdfPageBundle={getPdfPageBundle as never}
                 getPdfPageBundlesBatch={getPdfPageBundlesBatch as never}
                 getPdfPageText={getPdfPageText as never}

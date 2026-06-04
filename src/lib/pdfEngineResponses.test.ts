@@ -5,6 +5,7 @@ import {
   toPdfInitialPageBundle,
   toPdfOutlineItems,
   toPdfPageBundle,
+  toPdfPageLinks,
   toPdfPageText,
   toPdfSearchResult,
   toUint8Array,
@@ -54,6 +55,10 @@ describe("pdfEngineResponses", () => {
         },
       ]),
     ).toEqual([{ id: "root", title: "Root", page_index0: 0, children: [{ id: "child", title: "Child", page_index0: 1, children: [] }] }]);
+
+    expect(toPdfPageLinks([{ id: "link", page_index0: "0", x0: "1", y0: 2, x1: 3, y1: "4", target_page_index0: "5" }])).toEqual([
+      { id: "link", page_index0: 0, x0: 1, y0: 2, x1: 3, y1: 4, target_page_index0: 5 },
+    ]);
 
     const initial = toPdfInitialPageBundle({
       document_info: { page_count: 1, pages: [{ width_pt: 612, height_pt: 792 }] },

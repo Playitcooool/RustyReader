@@ -5,6 +5,7 @@ import type {
   Annotation,
   OcrPdfPageInput,
   PdfDocumentInfo,
+  PdfPageLink,
   PdfSearchMatch,
   PdfSearchResult,
   PdfPageBundle,
@@ -91,6 +92,7 @@ type PdfContinuousReaderProps = {
     document_info: PdfDocumentInfo;
     bundle: PdfPageBundle;
   }>;
+  getPdfLinks?: (primaryAttachmentId: number) => Promise<PdfPageLink[]>;
   getPdfPageBundle: (input: {
     primary_attachment_id: number;
     page_index0: number;
@@ -230,6 +232,7 @@ export function PdfContinuousReader({
   fitMode = "fit_width",
   getPdfDocumentInfo,
   getPdfInitialPageBundle,
+  getPdfLinks,
   getPdfPageBundle,
   getPdfPageBundlesBatch,
   getPdfPageText,
@@ -239,7 +242,7 @@ export function PdfContinuousReader({
   ocrPdfPage,
   onPageCountChange,
   onActivePageChange,
-  onNavigateToPage: _onNavigateToPage,
+  onNavigateToPage,
   searchQuery = "",
   activeSearchMatchIndex = 0,
   annotations = [],
@@ -296,6 +299,7 @@ export function PdfContinuousReader({
   const [dominantPageIndex, setDominantPageIndex] = useState(0);
   const [visiblePageIndexes, setVisiblePageIndexes] = useState<number[]>([]);
   const [searchMatchesFromRust, setSearchMatchesFromRust] = useState<PdfSearchMatch[]>([]);
+  const [pdfLinks, setPdfLinks] = useState<PdfPageLink[]>([]);
   const [drawingTextBox, setDrawingTextBox] = useState<{
     pageIndex0: number;
     startX: number;
@@ -553,6 +557,7 @@ export function PdfContinuousReader({
     setPages({});
     setPageTextByIndex({});
     setPageShells({});
+    setPdfLinks([]);
     pageTextOrderRef.current = [];
     inFlightRenderPagesRef.current.clear();
     inFlightRenderKeysRef.current.clear();
@@ -604,6 +609,27 @@ export function PdfContinuousReader({
       cancelled = true;
     };
   }, [getPdfDocumentInfo, getPdfInitialPageBundle, view.page_count, view.primary_attachment_id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const primaryAttachmentId = view.primary_attachment_id;
+    if (!primaryAttachmentId || !getPdfLinks) {
+      setPdfLinks([]);
+      return;
+    }
+
+    void getPdfLinks(primaryAttachmentId)
+      .then((links) => {
+        if (!cancelled) setPdfLinks(links);
+      })
+      .catch(() => {
+        if (!cancelled) setPdfLinks([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getPdfLinks, view.primary_attachment_id]);
 
   useEffect(() => {
     if (!pdfDocumentInfo) return;
@@ -1262,6 +1288,42 @@ export function PdfContinuousReader({
         anchor: entry.anchor as PdfTextAnchor,
       }));
   }, [annotations, textEnabled]);
+
+  const pdfLinksByPage = useMemo(() => {
+    const grouped = new Map<number, PdfPageLink[]>();
+    for (const link of pdfLinks) {
+      if (!Number.isFinite(link.page_index0) || !Number.isFinite(link.target_page_index0)) continue;
+      const current = grouped.get(link.page_index0) ?? [];
+      current.push(link);
+      grouped.set(link.page_index0, current);
+    }
+    return grouped;
+  }, [pdfLinks]);
+
+  const pdfLinkStyle = useCallback((link: PdfPageLink, pageIndex0: number, width: number, height: number): CSSProperties | null => {
+    const pageInfo = pdfDocumentInfo?.pages[pageIndex0] ?? pdfDocumentInfo?.pages[0];
+    if (!pageInfo || pageInfo.width_pt <= 0 || pageInfo.height_pt <= 0 || width <= 0 || height <= 0) return null;
+    const scaleX = width / pageInfo.width_pt;
+    const scaleY = height / pageInfo.height_pt;
+    const left = clamp(link.x0 * scaleX, 0, width);
+    const top = clamp((pageInfo.height_pt - link.y1) * scaleY, 0, height);
+    const right = clamp(link.x1 * scaleX, 0, width);
+    const bottom = clamp((pageInfo.height_pt - link.y0) * scaleY, 0, height);
+    return {
+      left: `${left}px`,
+      top: `${top}px`,
+      width: `${Math.max(1, right - left)}px`,
+      height: `${Math.max(1, bottom - top)}px`,
+    };
+  }, [pdfDocumentInfo]);
+
+  const handlePdfLinkClick = useCallback((event: ReactMouseEvent<HTMLButtonElement>, link: PdfPageLink) => {
+    event.preventDefault();
+    event.stopPropagation();
+    window.getSelection?.()?.removeAllRanges();
+    onSelectionChange?.(null);
+    onNavigateToPage?.(link.target_page_index0);
+  }, [onNavigateToPage, onSelectionChange]);
 
   const textBoxesByPage = useMemo(() => {
     const grouped = new Map<number, Array<{ id: string; annotationId?: number; anchor: PdfTextBoxAnchor; body: string; persisted: boolean }>>();
@@ -2181,6 +2243,22 @@ export function PdfContinuousReader({
                       WebkitUserSelect: textEnabled && textLayerReadyByPage[index] ? "text" : "none",
                     }}
                   />
+                  {onNavigateToPage ? (pdfLinksByPage.get(index) ?? []).map((link) => {
+                    if (!height) return null;
+                    const style = pdfLinkStyle(link, index, width, height);
+                    if (!style) return null;
+                    return (
+                      <button
+                        key={link.id}
+                        aria-label={`Jump to page ${link.target_page_index0 + 1}`}
+                        className="pdf-page-link"
+                        style={style}
+                        title={`Jump to page ${link.target_page_index0 + 1}`}
+                        type="button"
+                        onClick={(event) => handlePdfLinkClick(event, link)}
+                      />
+                    );
+                  }) : null}
                   {inkStrokesByPage.has(index) || drawingInkStroke?.pageIndex0 === index ? (
                     <svg
                       aria-label={`PDF page ${index + 1} ink annotations`}

@@ -310,6 +310,22 @@
   border-radius: 0.22em;
 }
 
+.pdf-page-link {
+  position: absolute;
+  z-index: 2;
+  border: 0;
+  border-radius: 2px;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.pdf-page-link:hover,
+.pdf-page-link:focus-visible {
+  background: rgba(102, 164, 212, 0.16);
+  outline: 1px solid rgba(102, 164, 212, 0.52);
+}
+
 .reader-icon-tool {
   min-width: 38px;
   font-weight: 700;
