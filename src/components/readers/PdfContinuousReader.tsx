@@ -582,7 +582,7 @@ export function PdfContinuousReader({
           ? await getPdfInitialPageBundle({
             primary_attachment_id: primaryAttachmentId,
             page_index0: 0,
-            target_width_px: 816,
+            target_width_px: Math.max(1, Math.round(816 * rasterScale)),
           })
           : null;
         if (cancelled) return;
@@ -608,7 +608,7 @@ export function PdfContinuousReader({
     return () => {
       cancelled = true;
     };
-  }, [getPdfDocumentInfo, getPdfInitialPageBundle, view.page_count, view.primary_attachment_id]);
+  }, [getPdfDocumentInfo, getPdfInitialPageBundle, rasterScale, view.page_count, view.primary_attachment_id]);
 
   useEffect(() => {
     let cancelled = false;

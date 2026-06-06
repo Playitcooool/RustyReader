@@ -1,20 +1,20 @@
 use std::{
     collections::{HashMap, HashSet, VecDeque},
+    io::Cursor,
+    path::{Path, PathBuf},
     sync::{Arc, OnceLock},
 };
 
 use lopdf::{Dictionary, Document as LopdfDocument, Object, ObjectId};
-use pdf_oxide::{
-    document::PdfDocument as OxidePdfDocument,
-    rendering::{render_page, ImageFormat, RenderOptions},
-};
+use pdfium_render::prelude::*;
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{Manager, State};
 use tokio::sync::Semaphore;
 
 use crate::state::{service_for_root, AppState};
 
 pub(crate) static PDF_RENDER_SEMAPHORE: OnceLock<Arc<Semaphore>> = OnceLock::new();
+static PDFIUM: OnceLock<Result<Pdfium, String>> = OnceLock::new();
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct PdfTextSpan {
@@ -160,6 +160,106 @@ const PDF_BUNDLE_CACHE_BYTES_LIMIT: usize = 96 * 1024 * 1024;
 const MAX_BUNDLE_BATCH: usize = 4;
 const MAX_TEXT_BATCH: usize = 16;
 const SEARCH_CACHE_LIMIT: usize = 8;
+
+fn target_pdfium_dir_name() -> &'static str {
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    {
+        "macos-arm64"
+    }
+    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+    {
+        "macos-x64"
+    }
+    #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+    {
+        "windows-x64"
+    }
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    {
+        "linux-x64"
+    }
+    #[cfg(not(any(
+        all(target_os = "macos", target_arch = "aarch64"),
+        all(target_os = "macos", target_arch = "x86_64"),
+        all(target_os = "windows", target_arch = "x86_64"),
+        all(target_os = "linux", target_arch = "x86_64")
+    )))]
+    {
+        "unknown"
+    }
+}
+
+fn bundled_pdfium_candidates(resource_dir: Option<&Path>) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    let relative = Path::new("resources")
+        .join("pdfium")
+        .join(target_pdfium_dir_name());
+
+    if let Some(resource_dir) = resource_dir {
+        candidates.push(Pdfium::pdfium_platform_library_name_at_path(
+            &resource_dir.join(&relative),
+        ));
+    }
+    candidates.push(Pdfium::pdfium_platform_library_name_at_path(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(&relative),
+    ));
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(exe_dir) = exe.parent() {
+            candidates.push(Pdfium::pdfium_platform_library_name_at_path(
+                &exe_dir.join(&relative),
+            ));
+            candidates.push(Pdfium::pdfium_platform_library_name_at_path(exe_dir));
+        }
+    }
+    candidates
+}
+
+fn bind_pdfium(resource_dir: Option<PathBuf>) -> Result<Pdfium, String> {
+    let mut diagnostics = Vec::new();
+    for candidate in bundled_pdfium_candidates(resource_dir.as_deref()) {
+        match Pdfium::bind_to_library(&candidate) {
+            Ok(bindings) => return Ok(Pdfium::new(bindings)),
+            Err(error) => diagnostics.push(format!("{}: {error}", candidate.display())),
+        }
+    }
+
+    match Pdfium::bind_to_system_library() {
+        Ok(bindings) => Ok(Pdfium::new(bindings)),
+        Err(error) => {
+            diagnostics.push(format!("system library: {error}"));
+            Err(missing_pdfium_diagnostic(&diagnostics))
+        }
+    }
+}
+
+fn missing_pdfium_diagnostic(diagnostics: &[String]) -> String {
+    format!(
+        "PDFium library not found. Bundle {} under src-tauri/resources/pdfium/{}/ or install PDFium for development. Tried: {}",
+        Pdfium::pdfium_platform_library_name().to_string_lossy(),
+        target_pdfium_dir_name(),
+        diagnostics.join("; ")
+    )
+}
+
+fn pdfium(resource_dir: Option<PathBuf>) -> Result<&'static Pdfium, String> {
+    PDFIUM
+        .get_or_init(|| bind_pdfium(resource_dir))
+        .as_ref()
+        .map_err(Clone::clone)
+}
+
+fn app_resource_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
+    app.path().resource_dir().ok()
+}
+
+fn load_pdf_document<'a>(
+    pdfium: &'a Pdfium,
+    bytes: Vec<u8>,
+) -> Result<PdfDocument<'a>, String> {
+    pdfium
+        .load_pdf_from_byte_vec(bytes, None)
+        .map_err(|error| error.to_string())
+}
 
 fn remember_search_result(cache: &mut PdfEngineCache, key: (i64, String), result: PdfSearchResult) {
     cache.search_cache_by_query.insert(key.clone(), result);
@@ -552,55 +652,60 @@ fn width_bucket(width_px: u32) -> u32 {
     width_px.div_ceil(bucket) * bucket
 }
 
-fn spans_from_document(
-    doc: &OxidePdfDocument,
-    page_index: usize,
-) -> Result<Vec<PdfTextSpan>, String> {
-    let spans_raw = doc
-        .extract_spans(page_index)
+fn spans_from_document(doc: &PdfDocument<'_>, page_index: usize) -> Result<Vec<PdfTextSpan>, String> {
+    let page = doc
+        .pages()
+        .get(page_index.try_into().map_err(|_| "invalid page index")?)
         .map_err(|error| error.to_string())?;
-    let mut spans: Vec<PdfTextSpan> = Vec::with_capacity(spans_raw.len());
-    for span in spans_raw {
-        let text = span.text;
+    let page_text = page.text().map_err(|error| error.to_string())?;
+    let segments = page_text.segments();
+    let mut spans: Vec<PdfTextSpan> = Vec::new();
+    for segment in segments.iter() {
+        let text = segment.text();
         if text.trim().is_empty() {
             continue;
         }
-        let x0 = span.bbox.x;
-        let y0 = span.bbox.y;
-        let x1 = x0 + span.bbox.width;
-        let y1 = y0 + span.bbox.height;
+        let bounds = segment.bounds();
+        let x0 = bounds.left().value;
+        let y0 = bounds.bottom().value;
+        let x1 = bounds.right().value;
+        let y1 = bounds.top().value;
+        if !(x0.is_finite() && y0.is_finite() && x1.is_finite() && y1.is_finite()) {
+            continue;
+        }
         spans.push(PdfTextSpan {
             text,
-            x0,
-            y0,
-            x1,
-            y1,
+            x0: x0.min(x1),
+            y0: y0.min(y1),
+            x1: x0.max(x1),
+            y1: y0.max(y1),
         });
     }
     Ok(spans)
 }
 
 #[cfg(test)]
-fn document_info_from_document(doc: &OxidePdfDocument) -> Result<PdfDocumentInfo, String> {
-    let page_count = doc.page_count().map_err(|error| error.to_string())?;
+fn document_info_from_document(doc: &PdfDocument<'_>) -> Result<PdfDocumentInfo, String> {
+    let page_count = doc.pages().len() as usize;
     let mut pages = Vec::with_capacity(page_count);
     for page_index in 0..page_count {
-        let page_info = doc
-            .get_page_info(page_index)
+        let page_size = doc
+            .pages()
+            .page_size(page_index.try_into().map_err(|_| "invalid page index")?)
             .map_err(|error| error.to_string())?;
         pages.push(PdfPageInfo {
-            width_pt: page_info.media_box.width,
-            height_pt: page_info.media_box.height,
+            width_pt: page_size.width().value,
+            height_pt: page_size.height().value,
         });
     }
     Ok(PdfDocumentInfo { page_count, pages })
 }
 
 fn quick_document_info_from_document(
-    doc: &OxidePdfDocument,
+    doc: &PdfDocument<'_>,
     page_index: usize,
 ) -> Result<PdfDocumentInfo, String> {
-    let page_count = doc.page_count().map_err(|error| error.to_string())?;
+    let page_count = doc.pages().len() as usize;
     if page_count == 0 {
         return Ok(PdfDocumentInfo {
             page_count,
@@ -608,30 +713,32 @@ fn quick_document_info_from_document(
         });
     }
     let bounded_page_index = page_index.min(page_count - 1);
-    let page_info = doc
-        .get_page_info(bounded_page_index)
+    let page_size = doc
+        .pages()
+        .page_size(bounded_page_index.try_into().map_err(|_| "invalid page index")?)
         .map_err(|error| error.to_string())?;
     Ok(PdfDocumentInfo {
         page_count,
         pages: vec![PdfPageInfo {
-            width_pt: page_info.media_box.width,
-            height_pt: page_info.media_box.height,
+            width_pt: page_size.width().value,
+            height_pt: page_size.height().value,
         }],
     })
 }
 
 fn render_page_bundle_from_document(
-    doc: &mut OxidePdfDocument,
+    doc: &PdfDocument<'_>,
     page_index: usize,
     bucketed_width: u32,
     spans: Option<Vec<PdfTextSpan>>,
 ) -> Result<PdfPageBundle, String> {
-    let page_info = doc
-        .get_page_info(page_index)
+    let page = doc
+        .pages()
+        .get(page_index.try_into().map_err(|_| "invalid page index")?)
         .map_err(|error| error.to_string())?;
 
-    let page_width_pt = page_info.media_box.width;
-    let page_height_pt = page_info.media_box.height;
+    let page_width_pt = page.width().value;
+    let page_height_pt = page.height().value;
     if !(page_width_pt.is_finite()
         && page_height_pt.is_finite()
         && page_width_pt > 0.0
@@ -640,24 +747,28 @@ fn render_page_bundle_from_document(
         return Err("invalid page size".to_string());
     }
 
-    let dpi = ((bucketed_width as f32) * 72.0 / page_width_pt)
-        .clamp(36.0, 600.0)
-        .round() as u32;
-    let opts = RenderOptions {
-        dpi,
-        format: ImageFormat::Png,
-        ..Default::default()
-    };
-    let rendered = render_page(doc, page_index, &opts).map_err(|error| error.to_string())?;
+    let render_config = PdfRenderConfig::new()
+        .set_target_width(bucketed_width as i32)
+        .set_maximum_height(8192);
+    let rendered = page
+        .render_with_config(&render_config)
+        .map_err(|error| error.to_string())?;
+    let image = rendered.as_image().map_err(|error| error.to_string())?;
+    let width_px = image.width();
+    let height_px = image.height();
+    let mut cursor = Cursor::new(Vec::new());
+    image
+        .write_to(&mut cursor, image::ImageFormat::Png)
+        .map_err(|error| error.to_string())?;
     let spans = match spans {
         Some(spans) => spans,
         None => spans_from_document(doc, page_index)?,
     };
 
     Ok(PdfPageBundle {
-        png_bytes: rendered.data,
-        width_px: rendered.width,
-        height_px: rendered.height,
+        png_bytes: cursor.into_inner(),
+        width_px,
+        height_px,
         page_width_pt,
         page_height_pt,
         spans,
@@ -666,6 +777,7 @@ fn render_page_bundle_from_document(
 
 #[tauri::command]
 pub(crate) async fn pdf_engine_get_document_info(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: PdfEngineGetDocumentInfoInput,
 ) -> Result<PdfDocumentInfo, String> {
@@ -682,11 +794,12 @@ pub(crate) async fn pdf_engine_get_document_info(
 
     let library_root = state.library_root.clone();
     let pdf_cache = state.pdf_cache.clone();
+    let resource_dir = app_resource_dir(&app);
     tauri::async_runtime::spawn_blocking(move || {
         let bytes = service_for_root(&library_root)?
             .read_primary_attachment_bytes(input.primary_attachment_id)
             .map_err(|error| error.to_string())?;
-        let doc = OxidePdfDocument::from_bytes(bytes).map_err(|error| error.to_string())?;
+        let doc = load_pdf_document(pdfium(resource_dir)?, bytes)?;
         let info = quick_document_info_from_document(&doc, 0)?;
         pdf_cache
             .lock()
@@ -769,6 +882,7 @@ pub(crate) async fn pdf_engine_get_links(
 
 #[tauri::command]
 pub(crate) async fn pdf_engine_get_page_text(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: PdfEngineGetPageTextInput,
 ) -> Result<PdfPageText, String> {
@@ -791,11 +905,12 @@ pub(crate) async fn pdf_engine_get_page_text(
 
     let library_root = state.library_root.clone();
     let pdf_cache = state.pdf_cache.clone();
+    let resource_dir = app_resource_dir(&app);
     tauri::async_runtime::spawn_blocking(move || {
         let bytes = service_for_root(&library_root)?
             .read_primary_attachment_bytes(input.primary_attachment_id)
             .map_err(|error| error.to_string())?;
-        let doc = OxidePdfDocument::from_bytes(bytes).map_err(|error| error.to_string())?;
+        let doc = load_pdf_document(pdfium(resource_dir)?, bytes)?;
         let page_index: usize =
             usize::try_from(input.page_index0).map_err(|_| "invalid page index")?;
         let spans = spans_from_document(&doc, page_index)?;
@@ -818,6 +933,7 @@ pub(crate) async fn pdf_engine_get_page_text(
 
 #[tauri::command]
 pub(crate) async fn pdf_engine_get_initial_page_bundle(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: PdfEngineGetPageBundleInput,
 ) -> Result<PdfInitialPageBundle, String> {
@@ -864,13 +980,14 @@ pub(crate) async fn pdf_engine_get_initial_page_bundle(
         .map_err(|error| error.to_string())?;
     let library_root = state.library_root.clone();
     let pdf_cache = state.pdf_cache.clone();
+    let resource_dir = app_resource_dir(&app);
 
     tauri::async_runtime::spawn_blocking(move || {
         let _permit = permit;
         let bytes = service_for_root(&library_root)?
             .read_primary_attachment_bytes(input.primary_attachment_id)
             .map_err(|error| error.to_string())?;
-        let mut doc = OxidePdfDocument::from_bytes(bytes).map_err(|error| error.to_string())?;
+        let doc = load_pdf_document(pdfium(resource_dir)?, bytes)?;
         let page_index: usize =
             usize::try_from(input.page_index0).map_err(|_| "invalid page index")?;
         let document_info = quick_document_info_from_document(&doc, page_index)?;
@@ -885,7 +1002,7 @@ pub(crate) async fn pdf_engine_get_initial_page_bundle(
                 .cloned()
         };
         let bundle =
-            render_page_bundle_from_document(&mut doc, page_index, bucketed_width, cached_spans)?;
+            render_page_bundle_from_document(&doc, page_index, bucketed_width, cached_spans)?;
 
         let mut cache = pdf_cache
             .lock()
@@ -919,6 +1036,7 @@ pub(crate) async fn pdf_engine_get_initial_page_bundle(
 
 #[tauri::command]
 pub(crate) async fn pdf_engine_get_page_bundle(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: PdfEngineGetPageBundleInput,
 ) -> Result<PdfPageBundle, String> {
@@ -951,6 +1069,7 @@ pub(crate) async fn pdf_engine_get_page_bundle(
         .map_err(|error| error.to_string())?;
     let library_root = state.library_root.clone();
     let pdf_cache = state.pdf_cache.clone();
+    let resource_dir = app_resource_dir(&app);
 
     tauri::async_runtime::spawn_blocking(move || {
         let _permit = permit;
@@ -958,7 +1077,7 @@ pub(crate) async fn pdf_engine_get_page_bundle(
             .read_primary_attachment_bytes(input.primary_attachment_id)
             .map_err(|error| error.to_string())?;
 
-        let mut doc = OxidePdfDocument::from_bytes(bytes).map_err(|error| error.to_string())?;
+        let doc = load_pdf_document(pdfium(resource_dir)?, bytes)?;
         let page_index: usize =
             usize::try_from(input.page_index0).map_err(|_| "invalid page index")?;
 
@@ -974,7 +1093,7 @@ pub(crate) async fn pdf_engine_get_page_bundle(
             spans_from_document(&doc, page_index)?
         };
         let bundle = render_page_bundle_from_document(
-            &mut doc,
+            &doc,
             page_index,
             bucketed_width,
             Some(spans.clone()),
@@ -1005,6 +1124,7 @@ pub(crate) async fn pdf_engine_get_page_bundle(
 
 #[tauri::command]
 pub(crate) async fn pdf_engine_get_page_bundles_batch(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: PdfEngineGetPageBundlesBatchInput,
 ) -> Result<Vec<PdfPageBundle>, String> {
@@ -1063,6 +1183,7 @@ pub(crate) async fn pdf_engine_get_page_bundles_batch(
         .map_err(|error| error.to_string())?;
     let library_root = state.library_root.clone();
     let pdf_cache = state.pdf_cache.clone();
+    let resource_dir = app_resource_dir(&app);
 
     tauri::async_runtime::spawn_blocking(move || {
         let _permit = permit;
@@ -1089,35 +1210,11 @@ pub(crate) async fn pdf_engine_get_page_bundles_batch(
             let bytes = service_for_root(&library_root)?
                 .read_primary_attachment_bytes(input.primary_attachment_id)
                 .map_err(|error| error.to_string())?;
-            let mut doc = OxidePdfDocument::from_bytes(bytes).map_err(|error| error.to_string())?;
+            let doc = load_pdf_document(pdfium(resource_dir)?, bytes)?;
 
             for page_index0 in &missing {
                 let page_index: usize =
                     usize::try_from(*page_index0).map_err(|_| "invalid page index")?;
-                let page_info = doc
-                    .get_page_info(page_index)
-                    .map_err(|error| error.to_string())?;
-                let page_width_pt = page_info.media_box.width;
-                let page_height_pt = page_info.media_box.height;
-                if !(page_width_pt.is_finite()
-                    && page_height_pt.is_finite()
-                    && page_width_pt > 0.0
-                    && page_height_pt > 0.0)
-                {
-                    return Err("invalid page size".to_string());
-                }
-
-                let dpi = ((bucketed_width as f32) * 72.0 / page_width_pt)
-                    .clamp(36.0, 600.0)
-                    .round() as u32;
-                let opts = RenderOptions {
-                    dpi,
-                    format: ImageFormat::Png,
-                    ..Default::default()
-                };
-                let rendered =
-                    render_page(&mut doc, page_index, &opts).map_err(|error| error.to_string())?;
-
                 let cached_spans = {
                     let cache = pdf_cache
                         .lock()
@@ -1133,14 +1230,8 @@ pub(crate) async fn pdf_engine_get_page_bundles_batch(
                         .map_err(|error| format!("failed to extract PDF text spans: {error}"))?,
                 };
 
-                let bundle = PdfPageBundle {
-                    png_bytes: rendered.data,
-                    width_px: rendered.width,
-                    height_px: rendered.height,
-                    page_width_pt,
-                    page_height_pt,
-                    spans: spans.clone(),
-                };
+                let bundle =
+                    render_page_bundle_from_document(&doc, page_index, bucketed_width, Some(spans.clone()))?;
 
                 let mut cache = pdf_cache
                     .lock()
@@ -1184,6 +1275,7 @@ pub(crate) async fn pdf_engine_get_page_bundles_batch(
 
 #[tauri::command]
 pub(crate) async fn pdf_engine_get_page_texts_batch(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: PdfEngineGetPageTextsBatchInput,
 ) -> Result<Vec<PdfPageText>, String> {
@@ -1197,6 +1289,7 @@ pub(crate) async fn pdf_engine_get_page_texts_batch(
 
     let library_root = state.library_root.clone();
     let pdf_cache = state.pdf_cache.clone();
+    let resource_dir = app_resource_dir(&app);
     tauri::async_runtime::spawn_blocking(move || {
         let missing: Vec<i64> = {
             let cache = pdf_cache
@@ -1217,7 +1310,7 @@ pub(crate) async fn pdf_engine_get_page_texts_batch(
             let bytes = service_for_root(&library_root)?
                 .read_primary_attachment_bytes(input.primary_attachment_id)
                 .map_err(|error| error.to_string())?;
-            let doc = OxidePdfDocument::from_bytes(bytes).map_err(|error| error.to_string())?;
+            let doc = load_pdf_document(pdfium(resource_dir)?, bytes)?;
             for page_index0 in &missing {
                 let page_index: usize =
                     usize::try_from(*page_index0).map_err(|_| "invalid page index")?;
@@ -1264,6 +1357,7 @@ pub(crate) async fn pdf_engine_get_page_texts_batch(
 
 #[tauri::command]
 pub(crate) async fn pdf_engine_search(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: PdfEngineSearchInput,
 ) -> Result<PdfSearchResult, String> {
@@ -1289,12 +1383,13 @@ pub(crate) async fn pdf_engine_search(
     let max_matches = input.max_matches.unwrap_or(5_000).clamp(1, 50_000);
     let library_root = state.library_root.clone();
     let pdf_cache = state.pdf_cache.clone();
+    let resource_dir = app_resource_dir(&app);
     tauri::async_runtime::spawn_blocking(move || {
         let bytes = service_for_root(&library_root)?
             .read_primary_attachment_bytes(input.primary_attachment_id)
             .map_err(|error| error.to_string())?;
-        let doc = OxidePdfDocument::from_bytes(bytes).map_err(|error| error.to_string())?;
-        let page_count = doc.page_count().map_err(|error| error.to_string())?;
+        let doc = load_pdf_document(pdfium(resource_dir)?, bytes)?;
+        let page_count = doc.pages().len() as usize;
 
         let mut matches: Vec<PdfSearchMatch> = Vec::new();
         for page_index in 0..page_count {
@@ -1606,7 +1701,8 @@ mod tests {
     #[test]
     fn document_info_includes_every_page_size() {
         let bytes = make_two_page_pdf_with_distinct_sizes();
-        let doc = OxidePdfDocument::from_bytes(bytes).expect("test pdf should parse");
+        let doc = load_pdf_document(pdfium(None).expect("pdfium should load"), bytes)
+            .expect("test pdf should parse");
 
         let info = document_info_from_document(&doc).expect("document info should load");
 
@@ -1616,6 +1712,41 @@ mod tests {
         assert_eq!(info.pages[0].height_pt, 792.0);
         assert_eq!(info.pages[1].width_pt, 420.0);
         assert_eq!(info.pages[1].height_pt, 595.0);
+    }
+
+    #[test]
+    fn pdfium_render_outputs_png_page_size_and_text_spans() {
+        let bytes = make_two_page_pdf_with_distinct_sizes();
+        let doc = load_pdf_document(pdfium(None).expect("pdfium should load"), bytes)
+            .expect("test pdf should parse");
+
+        let bundle = render_page_bundle_from_document(&doc, 0, 640, None)
+            .expect("page should render");
+
+        assert!(bundle.png_bytes.starts_with(b"\x89PNG\r\n\x1a\n"));
+        assert!(bundle.width_px > 0);
+        assert!(bundle.height_px > 0);
+        assert_eq!(bundle.page_width_pt, 612.0);
+        assert_eq!(bundle.page_height_pt, 792.0);
+        assert!(bundle.spans.iter().any(|span| span.text.contains("Test")));
+        assert!(bundle.spans.iter().all(|span| {
+            span.x0.is_finite()
+                && span.y0.is_finite()
+                && span.x1.is_finite()
+                && span.y1.is_finite()
+                && span.x1 >= span.x0
+                && span.y1 >= span.y0
+        }));
+    }
+
+    #[test]
+    fn missing_pdfium_diagnostic_names_bundle_path_and_attempts() {
+        let message = missing_pdfium_diagnostic(&["missing candidate".to_string()]);
+
+        assert!(message.contains("PDFium library not found"));
+        assert!(message.contains("src-tauri/resources/pdfium"));
+        assert!(message.contains(target_pdfium_dir_name()));
+        assert!(message.contains("missing candidate"));
     }
 
     #[test]

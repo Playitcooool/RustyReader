@@ -22,6 +22,8 @@ import {
 import { installPdfJsTextLayerSelectionSupport } from "./pdfTextLayerSelectionSupport";
 import { buildRustPdfTextLayer, pageWidthAtScale1FromPoints } from "./pdfRustTextLayer";
 
+const MAX_RASTER_SCALE = 2;
+
 type PdfReaderProps = {
   view: ReaderView;
   page: number;
@@ -86,6 +88,10 @@ export function PdfReader({
 
   const textEnabled = true;
   const loweredSearch = useMemo(() => searchQuery.trim().toLowerCase(), [searchQuery]);
+  const rasterScale = useMemo(() => {
+    if (typeof window === "undefined" || !Number.isFinite(window.devicePixelRatio)) return 1;
+    return Math.max(1, Math.min(MAX_RASTER_SCALE, window.devicePixelRatio || 1));
+  }, []);
   const effectiveZoom = useMemo(() => {
     if (fitMode !== "fit_width") return zoom;
     if (!pageWidthAtScale1) return zoom;
@@ -101,6 +107,10 @@ export function PdfReader({
     const base = pageWidthAtScale1 ?? Math.max(640, stageWidth > 0 ? stageWidth - 40 : 816);
     return Math.max(1, Math.round(base * (effectiveZoom / 100)));
   }, [effectiveZoom, pageWidthAtScale1, stageWidth]);
+  const targetRasterWidthPx = useMemo(
+    () => Math.max(1, Math.round(desiredWidthCssPx * rasterScale)),
+    [desiredWidthCssPx, rasterScale],
+  );
 
   useEffect(() => {
     const nextCount = Math.max(1, view.page_count ?? 1);
@@ -168,13 +178,18 @@ export function PdfReader({
         const bundle = await getPdfPageBundle({
           primary_attachment_id: primaryAttachmentId,
           page_index0: page,
-          target_width_px: desiredWidthCssPx,
+          target_width_px: targetRasterWidthPx,
         });
         if (cancelled) return;
 
         setPageWidthAtScale1(pageWidthAtScale1FromPoints(bundle.page_width_pt));
-        setRenderedWidthCssPx(bundle.width_px);
-        setRenderedHeightCssPx(bundle.height_px);
+        const renderedWidthCssPx = desiredWidthCssPx;
+        const renderedHeightCssPx = Math.max(
+          1,
+          Math.round((bundle.height_px / Math.max(1, bundle.width_px)) * renderedWidthCssPx),
+        );
+        setRenderedWidthCssPx(renderedWidthCssPx);
+        setRenderedHeightCssPx(renderedHeightCssPx);
 
         const blobUrl = URL.createObjectURL(blobFromBytes(bundle.png_bytes, "image/png"));
         if (imageUrlRef.current) URL.revokeObjectURL(imageUrlRef.current);
@@ -184,8 +199,8 @@ export function PdfReader({
         const built = buildRustPdfTextLayer({
           host,
           bundle,
-          renderedWidthCssPx: bundle.width_px,
-          renderedHeightCssPx: bundle.height_px,
+          renderedWidthCssPx,
+          renderedHeightCssPx,
         });
         textDivsRef.current = built.divs;
         textDivStringsRef.current = built.strings;
@@ -206,7 +221,7 @@ export function PdfReader({
     return () => {
       cancelled = true;
     };
-  }, [desiredWidthCssPx, effectiveZoom, getPdfPageBundle, page, view.primary_attachment_id]);
+  }, [desiredWidthCssPx, effectiveZoom, getPdfPageBundle, page, targetRasterWidthPx, view.primary_attachment_id]);
 
   useEffect(() => {
     return () => {
