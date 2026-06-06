@@ -1583,6 +1583,19 @@ describe("App reading workspace", () => {
     expect(styles).toMatch(/\.markdown-focus-editor-shell\s*\{[^}]*overflow-y:\s*auto;[^}]*overflow-x:\s*hidden;/s);
     expect(styles).toMatch(/\.markdown-mdx-editor\s*\{[^}]*overflow:\s*visible;/s);
     expect(styles).toMatch(/\.markdown-mdx-toolbar\s*\{[^}]*position:\s*sticky;[^}]*top:\s*0;/s);
+    expect(styles).toMatch(/:root\s*\{[^}]*--focus-toolbar-bg:\s*rgba\(18,\s*20,\s*25,\s*0\.88\);[^}]*--focus-toolbar-text:/s);
+    expect(styles).toMatch(/:root\[data-theme="light"\]\s*\{[^}]*--focus-toolbar-bg:\s*rgba\(255,\s*254,\s*250,\s*0\.92\);[^}]*--focus-toolbar-text:/s);
+    expect(styles).toMatch(/\.reader-panel-focus\s+\.reader-toolbar\s*\{[^}]*background:\s*var\(--focus-toolbar-bg\);[^}]*color:\s*var\(--focus-toolbar-text\);/s);
+    expect(styles).toMatch(/\.markdown-mdx-toolbar\s*\{[^}]*background:\s*var\(--focus-toolbar-bg\);[^}]*color:\s*var\(--focus-toolbar-text\);/s);
+    expect(styles).toMatch(/\.markdown-mdx-toolbar\.mdxeditor-toolbar\s*\{[^}]*background:\s*var\(--focus-toolbar-bg\);[^}]*color:\s*var\(--focus-toolbar-text\);/s);
+    expect(styles).toMatch(/\.markdown-mdx-toolbar\s+:where\(button, \[role="button"\], select, \[data-toolbar-item\]\)\s*\{[^}]*color:\s*inherit;/s);
+    expect(styles).toMatch(/\[data-state="on"\][^{]*,\s*\.markdown-mdx-toolbar\s+:where\(button, \[role="button"\], \[data-toolbar-item\]\)\[data-state="open"\]\s*\{[^}]*background:\s*var\(--focus-toolbar-control-active-bg\);/s);
+    expect(styles).toMatch(/\[data-disabled\][^{]*,\s*\.markdown-mdx-toolbar\s+:where\(button, \[role="button"\], \[data-toolbar-item\]\):disabled\s*\{[^}]*color:\s*var\(--focus-toolbar-control-disabled\);/s);
+    expect(styles).toMatch(/\.mdxeditor-select-content\s*\{[^}]*background:\s*var\(--focus-toolbar-menu-bg\);[^}]*color:\s*var\(--focus-toolbar-text\);/s);
+    expect(styles).toMatch(/\.mdxeditor-select-content\s+:where\(\[role="option"\], \[role="menuitem"\], \[data-radix-collection-item\]\)\[data-highlighted\]\s*\{[^}]*background:\s*var\(--focus-toolbar-control-hover-bg\);/s);
+    expect(styles).toMatch(/\.markdown-mdx-toolbar\s+:where\(svg\)\s*\{[^}]*stroke:\s*currentColor;/s);
+    expect(styles).toMatch(/\.markdown-mdx-toolbar\s+:where\(\[role="separator"\], \[data-orientation="vertical"\]\)\s*\{[^}]*background:\s*var\(--focus-toolbar-border\);/s);
+    expect(styles).not.toMatch(/\.markdown-mdx-toolbar\s*\{[^}]*rgba\(10,\s*11,\s*14,/s);
     expect(styles).not.toMatch(/\.markdown-mdx-content\s*\{[^}]*overflow-y:\s*auto;/s);
   });
 
