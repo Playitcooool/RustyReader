@@ -209,7 +209,7 @@
   display: grid;
   align-content: start;
   gap: 12px;
-  color: rgba(244, 239, 230, 0.72);
+  color: var(--text-soft);
 }
 
 .outline-link {
@@ -332,7 +332,7 @@
   display: grid;
   place-items: center;
   padding: 32px 0;
-  color: rgba(244, 239, 230, 0.72);
+  color: var(--loading-text);
 }
 
 .reader-panel-focus .reader-toolbar .reader-control-group {
@@ -341,13 +341,13 @@
 }
 
 .reader-panel-focus .reader-toolbar .reader-control-group-page {
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 1px 0 var(--inset-highlight);
 }
 
 .reader-panel-focus .reader-toolbar .reader-control-group-search {
   background:
-    linear-gradient(135deg, rgba(102, 164, 212, 0.06), rgba(255, 255, 255, 0.025)),
-    rgba(255, 255, 255, 0.035);
+    linear-gradient(135deg, rgba(102, 164, 212, 0.06), var(--subtle-bg)),
+    var(--focus-toolbar-control-bg);
 }
 
 .reader-panel-focus .reader-toolbar .reader-toolbar-status {
@@ -414,13 +414,13 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  color: rgba(244, 239, 230, 0.84);
+  color: var(--document-text);
 }
 
 .reader-html .math-inline {
   font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
   font-size: 0.92em;
-  color: rgba(226, 216, 204, 0.92);
+  color: var(--document-math-text);
   background: transparent;
   padding: 0;
 }
@@ -447,11 +447,11 @@
 .reader-html th {
   background: var(--control-bg-hover);
   font-weight: 600;
-  color: rgba(244, 239, 230, 0.92);
+  color: var(--document-text-strong);
 }
 
 .reader-html td {
-  color: rgba(244, 239, 230, 0.78);
+  color: var(--document-text-soft);
 }
 
 .reader-html tr:nth-child(even) td {
@@ -483,7 +483,7 @@
   min-height: 0;
   overflow: visible;
   background: var(--subtle-bg);
-  color: rgba(244, 239, 230, 0.9);
+  color: var(--document-text-strong);
 }
 
 .markdown-mdx-editor,
@@ -494,7 +494,7 @@
 
 .markdown-mdx-content {
   padding: 24px clamp(18px, 4vw, 56px);
-  color: rgba(244, 239, 230, 0.9);
+  color: var(--document-text-strong);
   line-height: 1.7;
 }
 
@@ -624,9 +624,9 @@
   padding: 12px;
   border: 1px solid var(--panel-border);
   border-radius: 12px;
-  background: rgba(12, 14, 19, 0.96);
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
-  color: rgba(244, 239, 230, 0.9);
+  background: var(--popover-bg);
+  box-shadow: var(--popover-shadow);
+  color: var(--popover-text);
   overflow: auto;
 }
 
@@ -663,9 +663,7 @@
   padding: 10px 12px;
   border-radius: 14px;
   border: 1px solid var(--panel-border);
-  background:
-    linear-gradient(135deg, rgba(226, 139, 83, 0.14), rgba(102, 164, 212, 0.1)),
-    rgba(18, 20, 24, 0.82);
+  background: var(--hud-bg);
   backdrop-filter: blur(10px);
 }
 

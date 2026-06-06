@@ -32,6 +32,22 @@
   --accent-active-text: #fff4e8;
   --focus-outline: rgba(226, 139, 83, 0.46);
   --focus-fill: rgba(226, 139, 83, 0.18);
+  --focus-shell-bg:
+    radial-gradient(circle at top center, rgba(201, 111, 52, 0.08), transparent 24%),
+    linear-gradient(180deg, rgba(7, 9, 12, 0.78), rgba(7, 9, 12, 0.92));
+  --focus-sidebar-shadow: 18px 0 32px rgba(0, 0, 0, 0.36);
+  --focus-sidebar-toggle-bg: rgba(255, 255, 255, 0.06);
+  --focus-sidebar-toggle-border: rgba(255, 255, 255, 0.12);
+  --focus-reader-bg:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.02), transparent 30%),
+    linear-gradient(180deg, rgba(14, 16, 20, 0.96), rgba(10, 11, 14, 0.98));
+  --focus-reader-overlay:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02), transparent 14%, transparent 86%, rgba(255, 255, 255, 0.02)),
+    radial-gradient(circle at center, transparent 42%, rgba(0, 0, 0, 0.18));
+  --focus-tabs-bg: rgba(10, 11, 14, 0.92);
+  --focus-tabs-border: rgba(255, 255, 255, 0.08);
+  --focus-tabs-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
+  --focus-tab-shell-bg: rgba(255, 255, 255, 0.03);
   --focus-toolbar-bg: rgba(18, 20, 25, 0.88);
   --focus-toolbar-text: rgba(244, 239, 230, 0.9);
   --focus-toolbar-border: rgba(255, 255, 255, 0.12);
@@ -42,9 +58,74 @@
   --focus-toolbar-control-active-text: #fff4e8;
   --focus-toolbar-control-disabled: rgba(244, 239, 230, 0.38);
   --focus-toolbar-menu-bg: rgba(18, 20, 25, 0.96);
+  --focus-back-button-bg: rgba(255, 255, 255, 0.04);
+  --focus-back-button-hover-bg: rgba(255, 255, 255, 0.08);
+  --loading-text: rgba(244, 239, 230, 0.72);
+  --skeleton-bg:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04)),
+    rgba(255, 255, 255, 0.03);
+  --skeleton-shadow: 0 30px 90px rgba(0, 0, 0, 0.28), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --notice-bg: rgba(255, 193, 7, 0.1);
+  --notice-border: rgba(255, 193, 7, 0.18);
+  --notice-text: rgba(255, 255, 255, 0.92);
+  --document-text: rgba(244, 239, 230, 0.84);
+  --document-text-strong: rgba(244, 239, 230, 0.92);
+  --document-text-soft: rgba(244, 239, 230, 0.78);
+  --document-math-text: rgba(226, 216, 204, 0.92);
+  --popover-bg: rgba(12, 14, 19, 0.96);
+  --popover-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  --popover-text: rgba(244, 239, 230, 0.9);
+  --hud-bg:
+    linear-gradient(135deg, rgba(226, 139, 83, 0.14), rgba(102, 164, 212, 0.1)),
+    rgba(18, 20, 24, 0.82);
+  --floating-bar-bg: rgba(7, 9, 12, 0.92);
+  --floating-bar-shadow: 0 18px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --dialog-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02)),
+    rgba(16, 18, 24, 0.98);
+  --dialog-shadow: 0 34px 90px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --settings-nav-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.018)),
+    rgba(7, 10, 15, 0.42);
+  --settings-card-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02)),
+    rgba(255, 255, 255, 0.025);
+  --settings-card-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05), 0 16px 34px rgba(0, 0, 0, 0.14);
+  --settings-input-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02)),
+    rgba(11, 14, 19, 0.72);
+  --settings-input-hover-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.025)),
+    rgba(13, 16, 22, 0.78);
+  --settings-input-focus-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.03)),
+    rgba(14, 17, 23, 0.82);
+  --settings-provider-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.018)),
+    rgba(7, 10, 15, 0.34);
+  --settings-provider-hover-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.022)),
+    rgba(9, 12, 17, 0.42);
+  --settings-provider-active-bg:
+    linear-gradient(135deg, rgba(226, 139, 83, 0.14), rgba(102, 164, 212, 0.06)),
+    rgba(7, 10, 15, 0.42);
+  --settings-provider-panel-bg:
+    radial-gradient(circle at top right, rgba(226, 139, 83, 0.12), transparent 34%),
+    rgba(7, 10, 15, 0.36);
+  --ai-panel-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.02)),
+    rgba(18, 21, 29, 0.96);
+  --ai-panel-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
+  --ai-bottom-dock-bg:
+    linear-gradient(180deg, rgba(14, 16, 22, 0) 0%, rgba(14, 16, 22, 0.94) 16%, rgba(14, 16, 22, 0.98) 100%);
+  --ai-dock-panel-bg: rgba(18, 21, 29, 0.98);
+  --ai-dock-shadow: 0 -12px 32px rgba(0, 0, 0, 0.28);
+  --ai-composer-bg: rgba(19, 22, 29, 0.98);
+  --ai-composer-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02), 0 -10px 24px rgba(0, 0, 0, 0.18);
   --text-primary: #f4efe6;
   --text-soft: rgba(244, 239, 230, 0.74);
   --text-dim: rgba(244, 239, 230, 0.56);
+  --muted-text: var(--text-dim);
   --shadow-strong: rgba(0, 0, 0, 0.45);
   --shadow-soft: rgba(0, 0, 0, 0.16);
   --inset-highlight: rgba(255, 255, 255, 0.03);
@@ -77,6 +158,22 @@
   --accent-active-text: #5f2f16;
   --focus-outline: rgba(185, 95, 45, 0.32);
   --focus-fill: rgba(207, 111, 52, 0.13);
+  --focus-shell-bg:
+    radial-gradient(circle at top center, rgba(226, 139, 83, 0.1), transparent 25%),
+    linear-gradient(180deg, rgba(251, 249, 244, 0.9), rgba(238, 235, 228, 0.96));
+  --focus-sidebar-shadow: 18px 0 32px rgba(55, 48, 39, 0.16);
+  --focus-sidebar-toggle-bg: rgba(36, 34, 31, 0.055);
+  --focus-sidebar-toggle-border: rgba(45, 44, 40, 0.14);
+  --focus-reader-bg:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.58), transparent 30%),
+    linear-gradient(180deg, rgba(249, 247, 242, 0.96), rgba(239, 236, 230, 0.98));
+  --focus-reader-overlay:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.42), transparent 14%, transparent 86%, rgba(255, 255, 255, 0.38)),
+    radial-gradient(circle at center, transparent 42%, rgba(55, 48, 39, 0.06));
+  --focus-tabs-bg: rgba(255, 254, 250, 0.92);
+  --focus-tabs-border: rgba(45, 44, 40, 0.1);
+  --focus-tabs-shadow: 0 10px 26px rgba(55, 48, 39, 0.12);
+  --focus-tab-shell-bg: rgba(36, 34, 31, 0.045);
   --focus-toolbar-bg: rgba(255, 254, 250, 0.92);
   --focus-toolbar-text: rgba(36, 34, 31, 0.88);
   --focus-toolbar-border: rgba(45, 44, 40, 0.14);
@@ -87,9 +184,74 @@
   --focus-toolbar-control-active-text: #5f2f16;
   --focus-toolbar-control-disabled: rgba(36, 34, 31, 0.34);
   --focus-toolbar-menu-bg: rgba(255, 254, 250, 0.98);
+  --focus-back-button-bg: rgba(36, 34, 31, 0.045);
+  --focus-back-button-hover-bg: rgba(36, 34, 31, 0.08);
+  --loading-text: rgba(36, 34, 31, 0.68);
+  --skeleton-bg:
+    linear-gradient(90deg, rgba(36, 34, 31, 0.04), rgba(36, 34, 31, 0.08), rgba(36, 34, 31, 0.04)),
+    rgba(36, 34, 31, 0.035);
+  --skeleton-shadow: 0 30px 90px rgba(55, 48, 39, 0.12), inset 0 0 0 1px rgba(45, 44, 40, 0.08);
+  --notice-bg: rgba(185, 95, 45, 0.1);
+  --notice-border: rgba(185, 95, 45, 0.18);
+  --notice-text: rgba(36, 34, 31, 0.86);
+  --document-text: rgba(36, 34, 31, 0.84);
+  --document-text-strong: rgba(36, 34, 31, 0.9);
+  --document-text-soft: rgba(36, 34, 31, 0.72);
+  --document-math-text: rgba(55, 48, 39, 0.88);
+  --popover-bg: rgba(255, 254, 250, 0.97);
+  --popover-shadow: 0 18px 46px rgba(55, 48, 39, 0.16);
+  --popover-text: rgba(36, 34, 31, 0.88);
+  --hud-bg:
+    linear-gradient(135deg, rgba(207, 111, 52, 0.12), rgba(94, 147, 190, 0.09)),
+    rgba(255, 254, 250, 0.9);
+  --floating-bar-bg: rgba(255, 254, 250, 0.94);
+  --floating-bar-shadow: 0 18px 38px rgba(55, 48, 39, 0.2), 0 0 0 1px rgba(45, 44, 40, 0.1);
+  --dialog-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.46)),
+    rgba(255, 254, 250, 0.98);
+  --dialog-shadow: 0 34px 90px rgba(55, 48, 39, 0.18), inset 0 0 0 1px rgba(45, 44, 40, 0.08);
+  --settings-nav-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.68), rgba(255, 255, 255, 0.38)),
+    rgba(36, 34, 31, 0.035);
+  --settings-card-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.48)),
+    rgba(255, 255, 255, 0.52);
+  --settings-card-shadow: inset 0 0 0 1px rgba(45, 44, 40, 0.08), 0 16px 34px rgba(55, 48, 39, 0.08);
+  --settings-input-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.46)),
+    rgba(36, 34, 31, 0.035);
+  --settings-input-hover-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.56)),
+    rgba(36, 34, 31, 0.055);
+  --settings-input-focus-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.62)),
+    rgba(207, 111, 52, 0.055);
+  --settings-provider-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.68), rgba(255, 255, 255, 0.42)),
+    rgba(36, 34, 31, 0.035);
+  --settings-provider-hover-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.52)),
+    rgba(36, 34, 31, 0.055);
+  --settings-provider-active-bg:
+    linear-gradient(135deg, rgba(207, 111, 52, 0.12), rgba(94, 147, 190, 0.06)),
+    rgba(255, 255, 255, 0.56);
+  --settings-provider-panel-bg:
+    radial-gradient(circle at top right, rgba(207, 111, 52, 0.12), transparent 34%),
+    rgba(255, 255, 255, 0.5);
+  --ai-panel-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.46)),
+    rgba(255, 254, 250, 0.96);
+  --ai-panel-shadow: 0 18px 44px rgba(55, 48, 39, 0.14);
+  --ai-bottom-dock-bg:
+    linear-gradient(180deg, rgba(247, 246, 242, 0) 0%, rgba(247, 246, 242, 0.94) 16%, rgba(247, 246, 242, 0.98) 100%);
+  --ai-dock-panel-bg: rgba(255, 254, 250, 0.98);
+  --ai-dock-shadow: 0 -12px 32px rgba(55, 48, 39, 0.12);
+  --ai-composer-bg: rgba(255, 254, 250, 0.98);
+  --ai-composer-shadow: 0 0 0 1px rgba(45, 44, 40, 0.08), 0 -10px 24px rgba(55, 48, 39, 0.08);
   --text-primary: #24221f;
   --text-soft: rgba(36, 34, 31, 0.72);
   --text-dim: rgba(36, 34, 31, 0.52);
+  --muted-text: var(--text-dim);
   --shadow-strong: rgba(55, 48, 39, 0.16);
   --shadow-soft: rgba(55, 48, 39, 0.08);
   --inset-highlight: rgba(255, 255, 255, 0.72);

@@ -205,6 +205,23 @@ afterEach(() => {
   setDragHandler(null);
 });
 
+async function loadExpandedStyles() {
+  // @ts-expect-error Vitest runs these tests in Node, even though the app TS config omits Node types.
+  const { readFileSync } = await import("fs");
+  const stylesEntry = readFileSync("src/styles.css", "utf8");
+  return stylesEntry.replace(
+    /@import "\.\/styles\/([^"]+)";/g,
+    (_match: string, filename: string) => readFileSync(`src/styles/${filename}`, "utf8"),
+  );
+}
+
+function cssRule(styles: string, selector: string) {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = styles.match(new RegExp(`(?:^|})\\s*${escapedSelector}\\s*\\{([^}]*)\\}`, "s"));
+  expect(match, `Missing CSS rule for ${selector}`).not.toBeNull();
+  return match?.[1] ?? "";
+}
+
 describe("App reading workspace", () => {
   it("renders the compact resource tree", async () => {
     const { container } = render(<App api={fakeApi} />);
@@ -1572,13 +1589,7 @@ describe("App reading workspace", () => {
   });
 
   it("keeps markdown focus documents scrollable", async () => {
-    // @ts-expect-error Vitest runs this test in Node, even though the app TS config omits Node types.
-    const { readFileSync } = await import("fs");
-    const stylesEntry = readFileSync("src/styles.css", "utf8");
-    const styles = stylesEntry.replace(
-      /@import "\.\/styles\/([^"]+)";/g,
-      (_match: string, filename: string) => readFileSync(`src/styles/${filename}`, "utf8"),
-    );
+    const styles = await loadExpandedStyles();
 
     expect(styles).toMatch(/\.markdown-focus-editor-shell\s*\{[^}]*overflow-y:\s*auto;[^}]*overflow-x:\s*hidden;/s);
     expect(styles).toMatch(/\.markdown-mdx-editor\s*\{[^}]*overflow:\s*visible;/s);
@@ -1597,6 +1608,93 @@ describe("App reading workspace", () => {
     expect(styles).toMatch(/\.markdown-mdx-toolbar\s+:where\(\[role="separator"\], \[data-orientation="vertical"\]\)\s*\{[^}]*background:\s*var\(--focus-toolbar-border\);/s);
     expect(styles).not.toMatch(/\.markdown-mdx-toolbar\s*\{[^}]*rgba\(10,\s*11,\s*14,/s);
     expect(styles).not.toMatch(/\.markdown-mdx-content\s*\{[^}]*overflow-y:\s*auto;/s);
+  });
+
+  it("keeps theme-sensitive surfaces on shared tokens", async () => {
+    const styles = await loadExpandedStyles();
+
+    expect(cssRule(styles, ".app-shell-focus")).toMatch(/background:\s*var\(--focus-shell-bg\);/);
+    expect(cssRule(styles, ".reader-shell-focus")).toMatch(/background:\s*var\(--focus-reader-bg\);/);
+    expect(cssRule(styles, ".reader-tabs-focus")).toMatch(/background:\s*var\(--focus-tabs-bg\);[^]*border-bottom:\s*1px solid var\(--focus-tabs-border\);[^]*box-shadow:\s*var\(--focus-tabs-shadow\);/);
+    expect(cssRule(styles, ".reader-panel-focus .reader-toolbar")).toMatch(/background:\s*var\(--focus-toolbar-bg\);[^]*color:\s*var\(--focus-toolbar-text\);/);
+    expect(cssRule(styles, ".pdf-focus-highlight-bar")).toMatch(/background:\s*var\(--floating-bar-bg\);[^]*box-shadow:\s*var\(--floating-bar-shadow\);[^]*color:\s*var\(--popover-text\);/);
+    expect(cssRule(styles, ".pdf-highlight-action-bar")).toMatch(/background:\s*var\(--floating-bar-bg\);[^]*box-shadow:\s*var\(--floating-bar-shadow\);[^]*color:\s*var\(--popover-text\);/);
+
+    expect(cssRule(styles, ".reader-html")).toMatch(/color:\s*var\(--document-text\);/);
+    expect(cssRule(styles, ".reader-html .math-inline")).toMatch(/color:\s*var\(--document-math-text\);/);
+    expect(cssRule(styles, ".reader-html th")).toMatch(/color:\s*var\(--document-text-strong\);/);
+    expect(cssRule(styles, ".reader-html td")).toMatch(/color:\s*var\(--document-text-soft\);/);
+    expect(cssRule(styles, ".markdown-mdx-editor")).toMatch(/background:\s*var\(--subtle-bg\);[^]*color:\s*var\(--document-text-strong\);/);
+    expect(cssRule(styles, ".markdown-mdx-content")).toMatch(/color:\s*var\(--document-text-strong\);/);
+    expect(cssRule(styles, ".translation-popover")).toMatch(/background:\s*var\(--popover-bg\);[^]*box-shadow:\s*var\(--popover-shadow\);[^]*color:\s*var\(--popover-text\);/);
+    expect(cssRule(styles, ".find-hud")).toMatch(/background:\s*var\(--hud-bg\);/);
+
+    expect(cssRule(styles, ".icon-button")).toMatch(/background:\s*var\(--control-bg\);[^]*color:\s*var\(--text-soft\);/);
+    expect(cssRule(styles, ".icon-button:hover")).toMatch(/background:\s*var\(--control-bg-hover\);[^]*color:\s*var\(--text-primary\);/);
+    expect(cssRule(styles, ".ghost-button")).toMatch(/background:\s*var\(--control-bg\);[^]*color:\s*var\(--text-soft\);/);
+    expect(styles).toMatch(/\.icon-button:disabled,\s*\.icon-command-button:disabled\s*\{[^}]*color:\s*var\(--focus-toolbar-control-disabled\);/s);
+    expect(styles).toMatch(/\.reader-icon-tool\[aria-pressed="true"\]\s*\{[^}]*background:\s*var\(--focus-toolbar-control-active-bg\);[^}]*color:\s*var\(--focus-toolbar-control-active-text\);/s);
+
+    expect(cssRule(styles, ".ai-session-history-panel")).toMatch(/background:\s*var\(--ai-panel-bg\);[^]*box-shadow:\s*var\(--ai-panel-shadow\);/);
+    expect(cssRule(styles, ".ai-bottom-dock")).toMatch(/background:\s*var\(--ai-bottom-dock-bg\);/);
+    expect(cssRule(styles, ".ai-dock-panel-body")).toMatch(/background:\s*var\(--ai-dock-panel-bg\);[^]*box-shadow:\s*var\(--ai-dock-shadow\);/);
+    expect(cssRule(styles, ".ai-composer")).toMatch(/background:\s*var\(--ai-composer-bg\);[^]*box-shadow:\s*var\(--ai-composer-shadow\);/);
+    expect(cssRule(styles, ".ai-reference-popover")).toMatch(/background:\s*var\(--popover-bg\);[^]*color:\s*var\(--popover-text\);/);
+    expect(cssRule(styles, ".ai-mention-popover")).toMatch(/background:\s*var\(--popover-bg\);[^]*box-shadow:\s*var\(--popover-shadow\);[^]*color:\s*var\(--popover-text\);/);
+
+    expect(cssRule(styles, ".settings-dialog")).toMatch(/background:\s*var\(--dialog-bg\);[^]*box-shadow:\s*var\(--dialog-shadow\);/);
+    expect(cssRule(styles, ".confirm-dialog")).toMatch(/background:\s*var\(--dialog-bg\);[^]*box-shadow:\s*var\(--dialog-shadow\);/);
+    expect(cssRule(styles, ".settings-nav")).toMatch(/background:\s*var\(--settings-nav-bg\);/);
+    expect(cssRule(styles, ".settings-section-card")).toMatch(/background:\s*var\(--settings-card-bg\);[^]*box-shadow:\s*var\(--settings-card-shadow\);/);
+    expect(cssRule(styles, ".settings-input")).toMatch(/background:\s*var\(--settings-input-bg\);/);
+    expect(cssRule(styles, ".settings-input:hover")).toMatch(/background:\s*var\(--settings-input-hover-bg\);/);
+    expect(cssRule(styles, ".settings-input:focus")).toMatch(/background:\s*var\(--settings-input-focus-bg\);/);
+    expect(cssRule(styles, ".settings-provider-card")).toMatch(/background:\s*var\(--settings-provider-bg\);/);
+    expect(cssRule(styles, ".settings-provider-card:hover")).toMatch(/background:\s*var\(--settings-provider-hover-bg\);/);
+    expect(cssRule(styles, ".settings-provider-panel")).toMatch(/background:\s*var\(--settings-provider-panel-bg\);/);
+  });
+
+  it("keeps themed selectors free of dark-only literals", async () => {
+    const styles = await loadExpandedStyles();
+    const darkOnlyLiterals = /rgba\((?:7,\s*9,\s*12|10,\s*11,\s*14|14,\s*16,\s*20|18,\s*21,\s*29),|#151820|#11141b/;
+    const themedSelectors = [
+      ".app-shell-focus",
+      ".reader-shell-focus",
+      ".reader-tabs-focus",
+      ".reader-panel-focus .reader-toolbar",
+      ".pdf-focus-highlight-bar",
+      ".pdf-highlight-action-bar",
+      ".reader-html",
+      ".reader-html .math-inline",
+      ".reader-html th",
+      ".reader-html td",
+      ".markdown-mdx-editor",
+      ".markdown-mdx-content",
+      ".translation-popover",
+      ".find-hud",
+      ".icon-button",
+      ".ghost-button",
+      ".ai-session-history-panel",
+      ".ai-bottom-dock",
+      ".ai-dock-panel-body",
+      ".ai-composer",
+      ".ai-reference-popover",
+      ".ai-mention-popover",
+      ".settings-dialog",
+      ".confirm-dialog",
+      ".settings-nav",
+      ".settings-section-card",
+      ".settings-input",
+      ".settings-input:hover",
+      ".settings-input:focus",
+      ".settings-provider-card",
+      ".settings-provider-card:hover",
+      ".settings-provider-panel",
+    ];
+
+    for (const selector of themedSelectors) {
+      expect(cssRule(styles, selector), selector).not.toMatch(darkOnlyLiterals);
+    }
   });
 
   it("keeps selected references in a single chip row inside the composer", async () => {

@@ -13,9 +13,7 @@
 
 .app-shell-focus {
   grid-template-columns: minmax(0, 1fr);
-  background:
-    radial-gradient(circle at top center, rgba(201, 111, 52, 0.08), transparent 24%),
-    linear-gradient(180deg, rgba(7, 9, 12, 0.78), rgba(7, 9, 12, 0.92));
+  background: var(--focus-shell-bg);
 }
 
 .app-shell-focus .sidebar {
@@ -24,7 +22,7 @@
   width: var(--sidebar-width, 300px);
   max-width: min(var(--sidebar-width, 300px), calc(100vw - 56px));
   z-index: 75;
-  box-shadow: 18px 0 32px rgba(0, 0, 0, 0.36);
+  box-shadow: var(--focus-sidebar-shadow);
 }
 
 .app-shell.app-shell-ai-open.app-shell-focus .ai-shell {
@@ -43,14 +41,12 @@
 }
 
 .app-shell-focus .focus-sidebar-embedded-toggle {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.12);
+  background: var(--focus-sidebar-toggle-bg);
+  border-color: var(--focus-sidebar-toggle-border);
 }
 
 .reader-shell-focus {
-  background:
-    radial-gradient(circle at top, rgba(255, 255, 255, 0.02), transparent 30%),
-    linear-gradient(180deg, rgba(14, 16, 20, 0.96), rgba(10, 11, 14, 0.98));
+  background: var(--focus-reader-bg);
   --focus-tabs-sticky-top: 0px;
   min-height: 100vh;
   height: 100vh;
@@ -64,9 +60,7 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.02), transparent 14%, transparent 86%, rgba(255, 255, 255, 0.02)),
-    radial-gradient(circle at center, transparent 42%, rgba(0, 0, 0, 0.18));
+  background: var(--focus-reader-overlay);
   z-index: 0;
 }
 
@@ -86,14 +80,14 @@
   position: sticky;
   top: var(--focus-tabs-sticky-top);
   z-index: 60;
-  background: rgba(10, 11, 14, 0.92);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
+  background: var(--focus-tabs-bg);
+  border-bottom: 1px solid var(--focus-tabs-border);
+  box-shadow: var(--focus-tabs-shadow);
   backdrop-filter: blur(10px);
 }
 
 .reader-tabs-focus .reader-tab-shell {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--focus-tab-shell-bg);
 }
 
 .reader-back-button {
@@ -104,14 +98,14 @@
   align-items: center;
   justify-content: center;
   border-radius: 11px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--focus-tabs-border);
+  background: var(--focus-back-button-bg);
   color: inherit;
   cursor: pointer;
 }
 
 .reader-back-button:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--focus-back-button-hover-bg);
 }
 
 .reader-shell-focus .pdf-reader-focus {
@@ -149,20 +143,16 @@
   width: 100%;
   max-width: min(920px, calc(100% - 24px));
   margin: 0 12px 2px;
-  color: rgba(244, 239, 230, 0.7);
+  color: var(--loading-text);
 }
 
 .pdf-page-skeleton {
   display: block;
   border-radius: 16px;
-  background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04)),
-    rgba(255, 255, 255, 0.03);
+  background: var(--skeleton-bg);
   background-size: 220% 100%;
   animation: pdf-page-skeleton-shimmer 1.4s linear infinite;
-  box-shadow:
-    0 30px 90px rgba(0, 0, 0, 0.28),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  box-shadow: var(--skeleton-shadow);
 }
 
 @keyframes pdf-page-skeleton-shimmer {
@@ -181,9 +171,9 @@
   margin: 0 12px 6px;
   padding: 10px 12px;
   border-radius: 14px;
-  background: rgba(255, 193, 7, 0.1);
-  border: 1px solid rgba(255, 193, 7, 0.18);
-  color: rgba(255, 255, 255, 0.92);
+  background: var(--notice-bg);
+  border: 1px solid var(--notice-border);
+  color: var(--notice-text);
   font-size: 13px;
   line-height: 1.35;
 }
@@ -333,8 +323,8 @@
 
 .reader-icon-tool[aria-pressed="true"] {
   border-color: rgba(226, 139, 83, 0.52);
-  background: rgba(226, 139, 83, 0.18);
-  color: #fff7ea;
+  background: var(--focus-toolbar-control-active-bg);
+  color: var(--focus-toolbar-control-active-text);
 }
 
 .pdf-ink-tool-options {
@@ -348,7 +338,7 @@
   width: 30px;
   height: 30px;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--focus-toolbar-border);
   border-radius: 999px;
   background: transparent;
   cursor: pointer;
@@ -462,7 +452,7 @@
   position: absolute;
   width: 9px;
   height: 9px;
-  border: 1px solid rgba(7, 9, 12, 0.7);
+  border: 1px solid var(--text-primary);
   border-radius: 999px;
   background: #f7c08a;
   pointer-events: auto;
@@ -528,10 +518,9 @@
   gap: 10px;
   padding: 10px 12px;
   border-radius: 999px;
-  background: rgba(7, 9, 12, 0.92);
-  box-shadow:
-    0 18px 40px rgba(0, 0, 0, 0.55),
-    0 0 0 1px rgba(255, 255, 255, 0.08);
+  background: var(--floating-bar-bg);
+  box-shadow: var(--floating-bar-shadow);
+  color: var(--popover-text);
   backdrop-filter: blur(10px);
 }
 
@@ -542,10 +531,9 @@
   align-items: center;
   padding: 8px 10px;
   border-radius: 999px;
-  background: rgba(7, 9, 12, 0.92);
-  box-shadow:
-    0 18px 40px rgba(0, 0, 0, 0.55),
-    0 0 0 1px rgba(255, 255, 255, 0.08);
+  background: var(--floating-bar-bg);
+  box-shadow: var(--floating-bar-shadow);
+  color: var(--popover-text);
   backdrop-filter: blur(10px);
 }
 

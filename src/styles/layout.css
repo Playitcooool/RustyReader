@@ -96,7 +96,7 @@
   border-radius: 12px;
   border: 1px solid var(--panel-border);
   background: var(--control-bg);
-  color: inherit;
+  color: var(--text-soft);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -115,6 +115,7 @@
   transform: translateY(-1px);
   background: var(--control-bg-hover);
   border-color: var(--control-border-hover);
+  color: var(--text-primary);
 }
 
 .floating-menu {
@@ -227,7 +228,7 @@ p {
 .ghost-button {
   padding: 10px 14px;
   background: var(--control-bg);
-  color: inherit;
+  color: var(--text-soft);
 }
 
 .ghost-button-active {
@@ -361,7 +362,9 @@ p {
 .icon-button:disabled,
 .icon-command-button:disabled {
   cursor: not-allowed;
-  opacity: 0.45;
+  background: var(--control-bg);
+  color: var(--focus-toolbar-control-disabled);
+  opacity: 1;
   transform: none;
 }
 
