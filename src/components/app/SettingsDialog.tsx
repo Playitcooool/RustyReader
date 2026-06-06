@@ -35,18 +35,16 @@ const settingsSections: Array<{ id: SettingsSection; title: string; meta: string
   { id: "ai", title: "AI Providers", meta: "Model profiles" },
 ];
 
-const aiProviderCards: Array<{ id: AIProvider; title: string; meta: string; placeholder: string }> = [
+const aiProviderCards: Array<{ id: AIProvider; title: string; meta: string }> = [
   {
     id: "openai",
-    title: "OpenAI",
-    meta: "Chat, reading tasks, and OpenAI-compatible endpoints",
-    placeholder: "OPENAI_MODEL=gpt-4.1\nOPENAI_API_KEY=sk-...\nOPENAI_BASE_URL=https://api.openai.com/v1",
+    title: "OpenAI-compatible",
+    meta: "OpenAI, LM Studio, Ollama, and compatible chat endpoints",
   },
   {
     id: "anthropic",
-    title: "Anthropic",
-    meta: "Claude profile for active reading workflows",
-    placeholder: "ANTHROPIC_MODEL=claude-...\nANTHROPIC_API_KEY=sk-...\nANTHROPIC_AUTH_TOKEN=sk-...\nANTHROPIC_BASE_URL=https://api.anthropic.com/v1",
+    title: "Anthropic-compatible",
+    meta: "Claude and compatible messages endpoints",
   },
 ];
 
@@ -72,7 +70,16 @@ export function SettingsDialog({
   generalSettingsDraft,
   activeAiProvider,
   activeTranslationProvider,
-  aiEnvDrafts,
+  openaiModel,
+  openaiBaseUrl,
+  openaiApiKey,
+  hasOpenaiApiKey,
+  clearOpenaiApiKey,
+  anthropicModel,
+  anthropicBaseUrl,
+  anthropicApiKey,
+  hasAnthropicApiKey,
+  clearAnthropicApiKey,
   translationTargetLang,
   translationOpenaiModel,
   translationAnthropicModel,
@@ -85,7 +92,14 @@ export function SettingsDialog({
   onGeneralSettingsDraftChange,
   onActiveAiProviderChange,
   onActiveTranslationProviderChange,
-  onAiEnvDraftChange,
+  onOpenaiModelChange,
+  onOpenaiBaseUrlChange,
+  onOpenaiApiKeyChange,
+  onClearOpenaiApiKeyChange,
+  onAnthropicModelChange,
+  onAnthropicBaseUrlChange,
+  onAnthropicApiKeyChange,
+  onClearAnthropicApiKeyChange,
   onTranslationTargetLangChange,
   onTranslationOpenaiModelChange,
   onTranslationAnthropicModelChange,
@@ -100,7 +114,16 @@ export function SettingsDialog({
   generalSettingsDraft: GeneralSettingsDraft;
   activeAiProvider: AIProvider;
   activeTranslationProvider: TranslationProvider;
-  aiEnvDrafts: Record<AIProvider, string>;
+  openaiModel: string;
+  openaiBaseUrl: string;
+  openaiApiKey: string;
+  hasOpenaiApiKey: boolean;
+  clearOpenaiApiKey: boolean;
+  anthropicModel: string;
+  anthropicBaseUrl: string;
+  anthropicApiKey: string;
+  hasAnthropicApiKey: boolean;
+  clearAnthropicApiKey: boolean;
   translationTargetLang: string;
   translationOpenaiModel: string;
   translationAnthropicModel: string;
@@ -113,7 +136,14 @@ export function SettingsDialog({
   onGeneralSettingsDraftChange: Dispatch<SetStateAction<GeneralSettingsDraft>>;
   onActiveAiProviderChange: (provider: AIProvider) => void;
   onActiveTranslationProviderChange: (provider: TranslationProvider) => void;
-  onAiEnvDraftChange: (provider: AIProvider, value: string) => void;
+  onOpenaiModelChange: (value: string) => void;
+  onOpenaiBaseUrlChange: (value: string) => void;
+  onOpenaiApiKeyChange: (value: string) => void;
+  onClearOpenaiApiKeyChange: (value: boolean) => void;
+  onAnthropicModelChange: (value: string) => void;
+  onAnthropicBaseUrlChange: (value: string) => void;
+  onAnthropicApiKeyChange: (value: string) => void;
+  onClearAnthropicApiKeyChange: (value: boolean) => void;
   onTranslationTargetLangChange: (value: string) => void;
   onTranslationOpenaiModelChange: (value: string) => void;
   onTranslationAnthropicModelChange: (value: string) => void;
@@ -126,10 +156,45 @@ export function SettingsDialog({
   onSave: () => void;
 }) {
   const [activeSection, setActiveSection] = useState<SettingsSection>("general");
-  const activeAiProviderCard = aiProviderCards.find((provider) => provider.id === activeAiProvider) ?? aiProviderCards[0];
   const cancelSettings = () => {
     onCancel();
   };
+  const activeDirectFields =
+    activeAiProvider === "openai"
+      ? {
+          model: openaiModel,
+          baseUrl: openaiBaseUrl,
+          apiKey: openaiApiKey,
+          hasKey: hasOpenaiApiKey,
+          clearKey: clearOpenaiApiKey,
+          modelLabel: "OpenAI-compatible model",
+          baseUrlLabel: "OpenAI-compatible base URL",
+          apiKeyLabel: "OpenAI-compatible API key",
+          clearKeyLabel: "Clear saved OpenAI-compatible API key",
+          modelPlaceholder: "gpt-4.1 or leave blank for a local server default",
+          baseUrlPlaceholder: "https://api.openai.com/v1, http://localhost:1234/v1, or http://localhost:11434/v1",
+          onModelChange: onOpenaiModelChange,
+          onBaseUrlChange: onOpenaiBaseUrlChange,
+          onApiKeyChange: onOpenaiApiKeyChange,
+          onClearKeyChange: onClearOpenaiApiKeyChange,
+        }
+      : {
+          model: anthropicModel,
+          baseUrl: anthropicBaseUrl,
+          apiKey: anthropicApiKey,
+          hasKey: hasAnthropicApiKey,
+          clearKey: clearAnthropicApiKey,
+          modelLabel: "Anthropic-compatible model",
+          baseUrlLabel: "Anthropic-compatible base URL",
+          apiKeyLabel: "Anthropic-compatible API key",
+          clearKeyLabel: "Clear saved Anthropic-compatible API key",
+          modelPlaceholder: "claude-sonnet-4-5 or leave blank for a local server default",
+          baseUrlPlaceholder: "https://api.anthropic.com/v1 or a compatible local endpoint",
+          onModelChange: onAnthropicModelChange,
+          onBaseUrlChange: onAnthropicBaseUrlChange,
+          onApiKeyChange: onAnthropicApiKeyChange,
+          onClearKeyChange: onClearAnthropicApiKeyChange,
+        };
 
   return (
     <div className="modal-scrim" role="presentation">
@@ -382,18 +447,55 @@ export function SettingsDialog({
                 </button>
               ))}
             </div>
-            <label className="settings-field">
-              <span>Environment variables</span>
-              <textarea
-                aria-label="AI environment variables"
-                className="settings-input settings-textarea"
-                placeholder={activeAiProviderCard.placeholder}
-                value={aiEnvDrafts[activeAiProvider]}
-                onChange={(event) => onAiEnvDraftChange(activeAiProvider, event.target.value)}
-              />
-            </label>
+            <div className="settings-form-grid">
+              <label className="settings-field">
+                <span>Base URL</span>
+                <input
+                  aria-label={activeDirectFields.baseUrlLabel}
+                  className="settings-input"
+                  type="text"
+                  placeholder={activeDirectFields.baseUrlPlaceholder}
+                  value={activeDirectFields.baseUrl}
+                  onChange={(event) => activeDirectFields.onBaseUrlChange(event.target.value)}
+                />
+              </label>
+              <label className="settings-field">
+                <span>Model</span>
+                <input
+                  aria-label={activeDirectFields.modelLabel}
+                  className="settings-input"
+                  type="text"
+                  placeholder={activeDirectFields.modelPlaceholder}
+                  value={activeDirectFields.model}
+                  onChange={(event) => activeDirectFields.onModelChange(event.target.value)}
+                />
+              </label>
+              <label className="settings-field">
+                <span>API key</span>
+                <input
+                  aria-label={activeDirectFields.apiKeyLabel}
+                  className="settings-input"
+                  type="password"
+                  placeholder={activeDirectFields.hasKey ? "API key is saved" : "Optional for local endpoints"}
+                  value={activeDirectFields.apiKey}
+                  onChange={(event) => activeDirectFields.onApiKeyChange(event.target.value)}
+                  disabled={activeDirectFields.clearKey}
+                />
+              </label>
+              {activeDirectFields.hasKey ? (
+                <label className="settings-field settings-field-checkbox">
+                  <input
+                    aria-label={activeDirectFields.clearKeyLabel}
+                    type="checkbox"
+                    checked={activeDirectFields.clearKey}
+                    onChange={(event) => activeDirectFields.onClearKeyChange(event.target.checked)}
+                  />
+                  <span>Clear saved API key</span>
+                </label>
+              ) : null}
+            </div>
             <div className="settings-provider-actions settings-provider-actions-inline">
-              <span className="settings-inline-note">Only variables for the selected AI provider are shown here.</span>
+              <span className="settings-inline-note">Blank API keys and models are allowed for local endpoints.</span>
               <button aria-label="Read system AI env variables" className="icon-button" title="Read system AI env variables" type="button" onClick={onReadSystemAiEnv}>
                 <RefreshIcon />
               </button>

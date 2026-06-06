@@ -2079,11 +2079,12 @@ fn translate_selection_uses_translation_model_with_provider_fallbacks() {
 }
 
 #[test]
-fn missing_active_provider_configuration_fails_without_persisting_tasks() {
+fn local_openai_compatible_endpoint_allows_blank_key_and_model() {
     let root = tempdir().unwrap();
-    let service = LibraryService::new(root.path()).unwrap();
+    let transport = Arc::new(StubTransport::default());
+    let service = service_with_transport(root.path(), transport.clone());
     let collection = service.create_collection("Inbox", None).unwrap();
-    let pdf = fixture_path(root.path(), "missing-config.pdf");
+    let pdf = fixture_path(root.path(), "local-openai.pdf");
     write_pdf_fixture(&pdf);
 
     let result = service
@@ -2091,16 +2092,80 @@ fn missing_active_provider_configuration_fails_without_persisting_tasks() {
         .unwrap();
     let item_id = result.imported[0].id;
 
-    let error = service
+    service
+        .update_ai_settings(UpdateAISettingsInput {
+            active_provider: AIProvider::OpenAI,
+            openai_model: "".into(),
+            openai_base_url: "http://localhost:1234/v1".into(),
+            openai_api_key: None,
+            clear_openai_api_key: Some(true),
+            anthropic_model: "".into(),
+            anthropic_base_url: "".into(),
+            anthropic_api_key: None,
+            clear_anthropic_api_key: None,
+            translation_provider: TranslationProvider::OpenAI,
+            translation_openai_model: "".into(),
+            translation_anthropic_model: "".into(),
+            translation_target_lang: "ZH-HANS".into(),
+            deepl_base_url: "https://api-free.deepl.com".into(),
+            deepl_api_key: None,
+            clear_deepl_api_key: None,
+        })
+        .unwrap();
+
+    service
         .run_item_task(item_id, "item.summarize", None)
-        .unwrap_err();
-    assert!(error.to_string().contains("OpenAI is missing"));
+        .unwrap();
+
+    let requests = transport.requests.lock().unwrap();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].provider, AIProvider::OpenAI);
+    assert_eq!(requests[0].base_url, "http://localhost:1234/v1");
+    assert_eq!(requests[0].api_key, "");
+    assert_eq!(requests[0].model, "");
+}
+
+#[test]
+fn local_anthropic_compatible_endpoint_allows_blank_key_and_model() {
+    let root = tempdir().unwrap();
+    let transport = Arc::new(StubTransport::default());
+    let service = service_with_transport(root.path(), transport.clone());
+
+    service
+        .update_ai_settings(UpdateAISettingsInput {
+            active_provider: AIProvider::Anthropic,
+            openai_model: "".into(),
+            openai_base_url: "".into(),
+            openai_api_key: None,
+            clear_openai_api_key: None,
+            anthropic_model: "".into(),
+            anthropic_base_url: "http://localhost:5678/v1".into(),
+            anthropic_api_key: None,
+            clear_anthropic_api_key: Some(true),
+            translation_provider: TranslationProvider::Anthropic,
+            translation_openai_model: "".into(),
+            translation_anthropic_model: "".into(),
+            translation_target_lang: "ZH-HANS".into(),
+            deepl_base_url: "https://api-free.deepl.com".into(),
+            deepl_api_key: None,
+            clear_deepl_api_key: None,
+        })
+        .unwrap();
+
+    service.translate_selection("hello", None).unwrap();
+
+    let requests = transport.requests.lock().unwrap();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].provider, AIProvider::Anthropic);
+    assert_eq!(requests[0].base_url, "http://localhost:5678/v1");
+    assert_eq!(requests[0].api_key, "");
+    assert_eq!(requests[0].model, "");
     assert!(service
-        .list_task_runs(Some(item_id), None)
+        .list_task_runs(None, None)
         .unwrap()
         .is_empty());
     assert!(service
-        .get_latest_artifact(Some(item_id), None)
+        .get_latest_artifact(None, None)
         .unwrap()
         .is_none());
 }

@@ -646,18 +646,19 @@ impl HttpAiTransport {
         on_delta: &mut dyn FnMut(&str) -> Result<()>,
     ) -> Result<String> {
         let url = format!("{}/chat/completions", normalize_base_url(&request.base_url));
-        let response = self
-            .client
-            .post(url)
-            .bearer_auth(request.api_key)
-            .json(&serde_json::json!({
-                "model": request.model,
-                "messages": [{ "role": "user", "content": request.prompt }],
-                "temperature": 0.2,
-                "stream": true,
-            }))
-            .send()?
-            .error_for_status()?;
+        let mut body = serde_json::json!({
+            "messages": [{ "role": "user", "content": request.prompt }],
+            "temperature": 0.2,
+            "stream": true,
+        });
+        if !request.model.trim().is_empty() {
+            body["model"] = serde_json::Value::String(request.model);
+        }
+        let mut builder = self.client.post(url);
+        if !request.api_key.trim().is_empty() {
+            builder = builder.bearer_auth(request.api_key.trim());
+        }
+        let response = builder.json(&body).send()?.error_for_status()?;
         let mut full_text = String::new();
         self.stream_sse(response, |_, data| {
             if data == "[DONE]" {
@@ -700,19 +701,19 @@ impl HttpAiTransport {
         on_delta: &mut dyn FnMut(&str) -> Result<()>,
     ) -> Result<String> {
         let url = format!("{}/messages", normalize_base_url(&request.base_url));
-        let response = self
-            .client
-            .post(url)
-            .header("x-api-key", request.api_key)
-            .header("anthropic-version", "2023-06-01")
-            .json(&serde_json::json!({
-                "model": request.model,
-                "max_tokens": 2048,
-                "messages": [{ "role": "user", "content": request.prompt }],
-                "stream": true,
-            }))
-            .send()?
-            .error_for_status()?;
+        let mut body = serde_json::json!({
+            "max_tokens": 2048,
+            "messages": [{ "role": "user", "content": request.prompt }],
+            "stream": true,
+        });
+        if !request.model.trim().is_empty() {
+            body["model"] = serde_json::Value::String(request.model);
+        }
+        let mut builder = self.client.post(url).header("anthropic-version", "2023-06-01");
+        if !request.api_key.trim().is_empty() {
+            builder = builder.header("x-api-key", request.api_key.trim());
+        }
+        let response = builder.json(&body).send()?.error_for_status()?;
         let mut full_text = String::new();
         self.stream_sse(response, |event_name, data| {
             let payload: serde_json::Value = serde_json::from_str(data)?;
@@ -2370,11 +2371,6 @@ impl LibraryService {
             AIProvider::OpenAI => {
                 let model = purpose.openai_model(settings);
                 let api_key = settings.openai_api_key.trim();
-                if model.is_empty() || api_key.is_empty() {
-                    return Err(anyhow!(
-                        "OpenAI is missing a saved API key or model. Open Settings and complete the active provider configuration."
-                    ));
-                }
                 Ok(AiCompletionRequest {
                     provider: AIProvider::OpenAI,
                     model: model.to_string(),
@@ -2386,11 +2382,6 @@ impl LibraryService {
             AIProvider::Anthropic => {
                 let model = purpose.anthropic_model(settings);
                 let api_key = settings.anthropic_api_key.trim();
-                if model.is_empty() || api_key.is_empty() {
-                    return Err(anyhow!(
-                        "Anthropic is missing a saved API key or model. Open Settings and complete the active provider configuration."
-                    ));
-                }
                 Ok(AiCompletionRequest {
                     provider: AIProvider::Anthropic,
                     model: model.to_string(),

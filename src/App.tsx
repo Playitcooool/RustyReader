@@ -13,7 +13,6 @@ import {
   applyAiEnvSettings,
   draftFromAiSettings,
   emptyAiSettingsDraft,
-  emptyProviderEnvDrafts,
   filterEnvText,
   parseAiEnvSettings,
   providerEnvKeys,
@@ -73,7 +72,8 @@ export default function App({ api }: { api: AppApi }) {
     defaultReaderFitMode: DEFAULT_READER_FIT_MODE,
     defaultReaderZoom: DEFAULT_READER_ZOOM,
   });
-  const [aiEnvDrafts, setAiEnvDrafts] = useState<Record<AIProvider, string>>(emptyProviderEnvDrafts);
+  const [openaiApiKeyInput, setOpenaiApiKeyInput] = useState("");
+  const [anthropicApiKeyInput, setAnthropicApiKeyInput] = useState("");
   const [deeplApiKeyInput, setDeeplApiKeyInput] = useState("");
   const appShellRef = useRef<HTMLDivElement | null>(null);
   const aiComposerInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -289,10 +289,8 @@ export default function App({ api }: { api: AppApi }) {
     const settings = await runtimeApi.getAiSettings();
     setAiSettings(settings);
     setAiSettingsDraft(draftFromAiSettings(settings));
-    setAiEnvDrafts({
-      openai: settings.provider_env_openai,
-      anthropic: settings.provider_env_anthropic,
-    });
+    setOpenaiApiKeyInput("");
+    setAnthropicApiKeyInput("");
     setDeeplApiKeyInput("");
     setGeneralSettingsDraft({
       resourcesSidebarOpen: readStoredBoolean(SIDEBAR_OPEN_KEY, true),
@@ -306,24 +304,16 @@ export default function App({ api }: { api: AppApi }) {
 
   const closeSettingsDialog = useCallback(() => {
     setIsSettingsOpen(false);
-    setAiEnvDrafts(emptyProviderEnvDrafts());
+    setOpenaiApiKeyInput("");
+    setAnthropicApiKeyInput("");
     setDeeplApiKeyInput("");
   }, []);
 
   const handleSaveAiSettings = useCallback(async () => {
-    const aiEnvDraft = Object.values(aiEnvDrafts).filter((value) => value.trim()).join("\n");
-    const envSettings = parseAiEnvSettings(aiEnvDraft);
-    const mergedAiSettingsDraft = {
-      ...applyAiEnvSettings(aiSettingsDraft, aiEnvDraft),
-      active_provider: aiSettingsDraft.active_provider,
-      translation_provider: aiSettingsDraft.translation_provider,
-    };
     const next = await (await getApi()).updateAiSettings({
-      ...mergedAiSettingsDraft,
-      openai_api_key: envSettings.OPENAI_API_KEY,
-      provider_env_openai: aiEnvDrafts.openai,
-      anthropic_api_key: envSettings.ANTHROPIC_API_KEY,
-      provider_env_anthropic: aiEnvDrafts.anthropic,
+      ...aiSettingsDraft,
+      openai_api_key: openaiApiKeyInput || undefined,
+      anthropic_api_key: anthropicApiKeyInput || undefined,
       deepl_api_key: deeplApiKeyInput || undefined,
     });
     setIsSidebarVisible(generalSettingsDraft.resourcesSidebarOpen);
@@ -333,11 +323,12 @@ export default function App({ api }: { api: AppApi }) {
     readerState.setReaderZoom(clamp(generalSettingsDraft.defaultReaderZoom, 70, 180));
     setAiSettings(next);
     setAiSettingsDraft(draftFromAiSettings(next));
-    setAiEnvDrafts(emptyProviderEnvDrafts());
+    setOpenaiApiKeyInput("");
+    setAnthropicApiKeyInput("");
     setDeeplApiKeyInput("");
     setIsSettingsOpen(false);
     setStatusMessage("Saved settings.");
-  }, [aiEnvDrafts, aiSettingsDraft, deeplApiKeyInput, generalSettingsDraft, getApi, library, readerState]);
+  }, [aiSettingsDraft, anthropicApiKeyInput, deeplApiKeyInput, generalSettingsDraft, getApi, library, openaiApiKeyInput, readerState]);
 
   const handleReadSystemAiEnv = useCallback(async () => {
     const next = await (await getApi()).getSystemAiEnv();
@@ -346,8 +337,16 @@ export default function App({ api }: { api: AppApi }) {
       anthropic: filterEnvText(next.text, providerEnvKeysByProvider.anthropic),
     };
     const providerText = filterEnvText(next.text, providerEnvKeys);
-    setAiEnvDrafts(drafts);
-    setAiSettingsDraft((current) => applyAiEnvSettings(current, providerText));
+    const envSettings = parseAiEnvSettings(providerText);
+    setOpenaiApiKeyInput(envSettings.OPENAI_API_KEY ?? "");
+    setAnthropicApiKeyInput(envSettings.ANTHROPIC_API_KEY ?? "");
+    setAiSettingsDraft((current) => ({
+      ...applyAiEnvSettings(current, providerText),
+      provider_env_openai: drafts.openai,
+      provider_env_anthropic: drafts.anthropic,
+      clear_openai_api_key: false,
+      clear_anthropic_api_key: false,
+    }));
     setStatusMessage(providerText.trim() ? "Loaded provider env variables." : "No provider env variables found.");
   }, [getApi]);
 
@@ -793,7 +792,16 @@ export default function App({ api }: { api: AppApi }) {
           generalSettingsDraft={generalSettingsDraft}
           activeAiProvider={aiSettingsDraft.active_provider}
           activeTranslationProvider={aiSettingsDraft.translation_provider}
-          aiEnvDrafts={aiEnvDrafts}
+          openaiModel={aiSettingsDraft.openai_model}
+          openaiBaseUrl={aiSettingsDraft.openai_base_url}
+          openaiApiKey={openaiApiKeyInput}
+          hasOpenaiApiKey={aiSettings?.has_openai_api_key ?? false}
+          clearOpenaiApiKey={aiSettingsDraft.clear_openai_api_key ?? false}
+          anthropicModel={aiSettingsDraft.anthropic_model}
+          anthropicBaseUrl={aiSettingsDraft.anthropic_base_url}
+          anthropicApiKey={anthropicApiKeyInput}
+          hasAnthropicApiKey={aiSettings?.has_anthropic_api_key ?? false}
+          clearAnthropicApiKey={aiSettingsDraft.clear_anthropic_api_key ?? false}
           translationTargetLang={aiSettingsDraft.translation_target_lang}
           translationOpenaiModel={aiSettingsDraft.translation_openai_model}
           translationAnthropicModel={aiSettingsDraft.translation_anthropic_model}
@@ -806,7 +814,14 @@ export default function App({ api }: { api: AppApi }) {
           onGeneralSettingsDraftChange={setGeneralSettingsDraft}
           onActiveAiProviderChange={(provider) => setAiSettingsDraft((current) => ({ ...current, active_provider: provider }))}
           onActiveTranslationProviderChange={(provider) => setAiSettingsDraft((current) => ({ ...current, translation_provider: provider }))}
-          onAiEnvDraftChange={(provider, value) => setAiEnvDrafts((current) => ({ ...current, [provider]: value }))}
+          onOpenaiModelChange={(value) => setAiSettingsDraft((current) => ({ ...current, openai_model: value }))}
+          onOpenaiBaseUrlChange={(value) => setAiSettingsDraft((current) => ({ ...current, openai_base_url: value }))}
+          onOpenaiApiKeyChange={(value) => setOpenaiApiKeyInput(value)}
+          onClearOpenaiApiKeyChange={(value) => setAiSettingsDraft((current) => ({ ...current, clear_openai_api_key: value }))}
+          onAnthropicModelChange={(value) => setAiSettingsDraft((current) => ({ ...current, anthropic_model: value }))}
+          onAnthropicBaseUrlChange={(value) => setAiSettingsDraft((current) => ({ ...current, anthropic_base_url: value }))}
+          onAnthropicApiKeyChange={(value) => setAnthropicApiKeyInput(value)}
+          onClearAnthropicApiKeyChange={(value) => setAiSettingsDraft((current) => ({ ...current, clear_anthropic_api_key: value }))}
           onTranslationTargetLangChange={(value) => setAiSettingsDraft((current) => ({ ...current, translation_target_lang: value }))}
           onTranslationOpenaiModelChange={(value) => setAiSettingsDraft((current) => ({ ...current, translation_openai_model: value }))}
           onTranslationAnthropicModelChange={(value) => setAiSettingsDraft((current) => ({ ...current, translation_anthropic_model: value }))}
