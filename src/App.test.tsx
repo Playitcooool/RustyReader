@@ -1571,6 +1571,21 @@ describe("App reading workspace", () => {
     expect(styles).not.toMatch(/\.ai-session-history-panel\s*\{[^}]*right:\s*-[0-9]/s);
   });
 
+  it("keeps markdown focus documents scrollable", async () => {
+    // @ts-expect-error Vitest runs this test in Node, even though the app TS config omits Node types.
+    const { readFileSync } = await import("fs");
+    const stylesEntry = readFileSync("src/styles.css", "utf8");
+    const styles = stylesEntry.replace(
+      /@import "\.\/styles\/([^"]+)";/g,
+      (_match: string, filename: string) => readFileSync(`src/styles/${filename}`, "utf8"),
+    );
+
+    expect(styles).toMatch(/\.markdown-focus-editor-shell\s*\{[^}]*overflow-y:\s*auto;[^}]*overflow-x:\s*hidden;/s);
+    expect(styles).toMatch(/\.markdown-mdx-editor\s*\{[^}]*overflow:\s*visible;/s);
+    expect(styles).toMatch(/\.markdown-mdx-toolbar\s*\{[^}]*position:\s*sticky;[^}]*top:\s*0;/s);
+    expect(styles).not.toMatch(/\.markdown-mdx-content\s*\{[^}]*overflow-y:\s*auto;/s);
+  });
+
   it("keeps selected references in a single chip row inside the composer", async () => {
     const user = userEvent.setup();
     const { container } = render(<App api={fakeApi} />);

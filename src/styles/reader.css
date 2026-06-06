@@ -474,15 +474,15 @@
 .markdown-focus-editor-shell {
   flex: 1;
   min-height: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
 }
 
 .markdown-mdx-editor {
   width: 100%;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
   background: var(--subtle-bg);
   color: rgba(244, 239, 230, 0.9);
 }
@@ -490,18 +490,19 @@
 .markdown-mdx-editor,
 .markdown-mdx-editor [class*="_rootContentEditable"],
 .markdown-mdx-editor [class*="_contentEditable"] {
-  height: 100%;
+  min-height: 100%;
 }
 
 .markdown-mdx-content {
-  min-height: 100%;
   padding: 24px clamp(18px, 4vw, 56px);
-  overflow-y: auto;
   color: rgba(244, 239, 230, 0.9);
   line-height: 1.7;
 }
 
 .markdown-mdx-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
   min-height: 56px;
   padding: 8px 10px;
   border: 1px solid var(--control-border);
