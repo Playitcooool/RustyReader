@@ -468,12 +468,12 @@ function scanPageCandidates() {
       if (tag === "img") {
         const alt = node.getAttribute("alt")?.replace(/\s+/g, " ").trim() || "";
         const src = node.getAttribute("src") || "";
-        if (!src && !alt) return "";
+        if (!src) return alt;
         try {
-          const url = src ? new URL(src, window.location.href).toString() : "";
-          return `![${alt}](${url})`;
+          const url = new URL(src, window.location.href).toString();
+          return alt ? `[${alt}](${url})` : url;
         } catch {
-          return alt ? `![${alt}](${src})` : "";
+          return alt || src;
         }
       }
       if (tag === "strong" || tag === "b") return `**${inline()}**`;
