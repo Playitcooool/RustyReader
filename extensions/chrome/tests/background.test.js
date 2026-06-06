@@ -166,14 +166,14 @@ test("injected page scanner is self-contained", () => {
   assert.equal((source.match(/function tableToMarkdown\(/g) || []).length, 1);
 });
 
-test("readable page scanner avoids markdown image nodes", () => {
+test("readable page scanner emits markdown image nodes", () => {
   const testDir = dirname(fileURLToPath(import.meta.url));
   const source = readFileSync(join(testDir, "../extension/background.js"), "utf8");
   const scanner = extractFunctionSource(source, "scanPageCandidates");
 
   assert.match(scanner, /if \(!src\) return alt/);
-  assert.match(scanner, /return alt \? `\[\$\{alt\}\]\(\$\{url\}\)` : url/);
-  assert.doesNotMatch(scanner, /`!\[\$\{alt\}\]\(\$\{url\}\)`/);
+  assert.match(scanner, /return `!\[\$\{alt\}\]\(\$\{url\}\)`/);
+  assert.doesNotMatch(scanner, /return alt \? `\[\$\{alt\}\]\(\$\{url\}\)` : url/);
 });
 
 test("background falls back to upload mode when downloads API is unavailable", () => {

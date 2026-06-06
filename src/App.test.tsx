@@ -320,6 +320,44 @@ describe("App reading workspace", () => {
     expect(screen.queryByRole("button", { name: "Find in document" })).not.toBeInTheDocument();
   });
 
+  it("opens markdown images in rich text focus mode without parse errors", async () => {
+    replaceFakeApiState({
+      collections: [{ id: 1, name: "Web Imports", parent_id: null }],
+      items: [
+        {
+          id: 10,
+          title: "Readable Page Snapshot",
+          collection_id: 1,
+          primary_attachment_id: 110,
+          attachment_format: "md",
+          attachmentFormat: "md",
+          attachment_status: "ready",
+          authors: "Imported Author",
+          publication_year: 2026,
+          source: "RustyReader Library",
+          doi: null,
+          tags: [],
+          plainText: "Readable page with an image.",
+          normalizedHtml: "<article><h1>Readable Page Snapshot</h1><p>Readable page with an image.</p></article>",
+          markdownSource: "# Readable Page Snapshot\n\n![N/A](https://example.com/image.png)\n",
+          primaryAttachmentPath: "/mock/readable-page.md",
+        },
+      ] as never,
+    });
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const readPrimaryAttachmentBytesSpy = vi.spyOn(fakeApi, "readPrimaryAttachmentBytes");
+    const user = userEvent.setup();
+    render(<App api={fakeApi} />);
+
+    await user.dblClick(await screen.findByRole("listitem", { name: /Readable Page Snapshot/i }));
+
+    expect(await screen.findByRole("toolbar", { name: /Markdown edit toolbar/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(readPrimaryAttachmentBytesSpy).toHaveBeenCalledWith(110);
+    });
+    expect(consoleErrorSpy.mock.calls.filter(([message]) => message === "Markdown editor parse error")).toHaveLength(0);
+  });
+
   it("renders focus mode immediately while the reader context is still loading", async () => {
     let resolve!: (value: unknown) => void;
     const promise = new Promise((res) => {

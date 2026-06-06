@@ -20,6 +20,7 @@ import {
   diffSourcePlugin,
   frontmatterPlugin,
   headingsPlugin,
+  imagePlugin,
   linkDialogPlugin,
   linkPlugin,
   listsPlugin,
@@ -53,7 +54,6 @@ import { PdfFocusHighlightBar } from "./PdfHighlightBars";
 import { NormalizedReader } from "../readers/NormalizedReader";
 import { PdfContinuousReader } from "../readers/PdfContinuousReader";
 import { attachmentFormatLabel, type ReaderFitMode } from "../../lib/appView";
-import { markdownImagesToLinks } from "../../lib/markdownImages";
 import type { Collection, LibraryItem, ReaderView, Annotation } from "../../lib/contracts";
 import { clamp } from "../../lib/viewMath";
 import type { ActivePdfHighlight, PdfTextBoxAnnotationDraft, ReaderTextSelection, TranslationPopover, WorkspaceMode } from "../../hooks/useReaderState";
@@ -314,9 +314,9 @@ export function ReaderWorkspace(props: Props) {
       let nextDraft = fallback;
       try {
         const bytes = await readPrimaryAttachmentBytes(readerView.primary_attachment_id!);
-        nextDraft = markdownImagesToLinks(new TextDecoder().decode(bytes));
+        nextDraft = new TextDecoder().decode(bytes);
       } catch {
-        nextDraft = markdownImagesToLinks(fallback);
+        nextDraft = fallback;
       }
       if (cancelled) return;
       setMarkdownDraft(nextDraft);
@@ -693,6 +693,7 @@ export function ReaderWorkspace(props: Props) {
                   thematicBreakPlugin(),
                   linkPlugin(),
                   linkDialogPlugin(),
+                  imagePlugin(),
                   tablePlugin(),
                   frontmatterPlugin(),
                   codeBlockPlugin({ defaultCodeBlockLanguage: "text" }),

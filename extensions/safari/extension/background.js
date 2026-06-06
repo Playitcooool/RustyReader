@@ -471,7 +471,7 @@ function scanPageCandidates() {
         if (!src) return alt;
         try {
           const url = new URL(src, window.location.href).toString();
-          return alt ? `[${alt}](${url})` : url;
+          return `![${alt}](${url})`;
         } catch {
           return alt || src;
         }
