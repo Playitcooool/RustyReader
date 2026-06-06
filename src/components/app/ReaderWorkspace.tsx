@@ -31,7 +31,6 @@ import {
   toolbarPlugin,
   type MDXEditorMethods,
 } from "@mdxeditor/editor";
-import "@mdxeditor/editor/style.css";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,

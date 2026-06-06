@@ -515,41 +515,80 @@
 
 .markdown-mdx-toolbar.mdxeditor-toolbar {
   background: var(--focus-toolbar-bg);
+  background-color: var(--focus-toolbar-bg);
   color: var(--focus-toolbar-text);
 }
 
-.markdown-mdx-toolbar :where(button, [role="button"], select, [data-toolbar-item]) {
+.markdown-mdx-toolbar button,
+.markdown-mdx-toolbar [role="button"],
+.markdown-mdx-toolbar select,
+.markdown-mdx-toolbar [data-toolbar-item],
+.markdown-mdx-toolbar [class*="_selectTrigger"] {
   min-height: 34px;
   border-radius: 9px;
-  color: inherit;
+  color: var(--focus-toolbar-text);
 }
 
-.markdown-mdx-toolbar :where(button, [role="button"], [data-toolbar-item]) {
+.markdown-mdx-toolbar button,
+.markdown-mdx-toolbar [role="button"],
+.markdown-mdx-toolbar [data-toolbar-item],
+.markdown-mdx-toolbar [class*="_selectTrigger"] {
   background: var(--focus-toolbar-control-bg);
+  background-color: var(--focus-toolbar-control-bg);
 }
 
-.markdown-mdx-toolbar :where(button, [role="button"], [data-toolbar-item]):hover {
+.markdown-mdx-toolbar button:hover,
+.markdown-mdx-toolbar [role="button"]:hover,
+.markdown-mdx-toolbar [data-toolbar-item]:hover,
+.markdown-mdx-toolbar [class*="_selectTrigger"]:hover {
   background: var(--focus-toolbar-control-hover-bg);
+  background-color: var(--focus-toolbar-control-hover-bg);
+  color: var(--focus-toolbar-text);
 }
 
-.markdown-mdx-toolbar :where(button, [role="button"], [data-toolbar-item])[data-state="on"],
-.markdown-mdx-toolbar :where(button, [role="button"], [data-toolbar-item])[data-state="open"] {
+.markdown-mdx-toolbar button[data-state="on"],
+.markdown-mdx-toolbar [role="button"][data-state="on"],
+.markdown-mdx-toolbar [data-toolbar-item][data-state="on"],
+.markdown-mdx-toolbar button[data-state="open"],
+.markdown-mdx-toolbar [role="button"][data-state="open"],
+.markdown-mdx-toolbar [data-toolbar-item][data-state="open"],
+.markdown-mdx-toolbar [class*="_selectTrigger"][data-state="open"] {
   background: var(--focus-toolbar-control-active-bg);
+  background-color: var(--focus-toolbar-control-active-bg);
   color: var(--focus-toolbar-control-active-text);
 }
 
-.markdown-mdx-toolbar :where(button, [role="button"], [data-toolbar-item])[data-disabled],
-.markdown-mdx-toolbar :where(button, [role="button"], [data-toolbar-item]):disabled {
+.markdown-mdx-toolbar button[data-disabled],
+.markdown-mdx-toolbar [role="button"][data-disabled],
+.markdown-mdx-toolbar [data-toolbar-item][data-disabled],
+.markdown-mdx-toolbar button:disabled,
+.markdown-mdx-toolbar [role="button"]:disabled,
+.markdown-mdx-toolbar [data-toolbar-item]:disabled {
   color: var(--focus-toolbar-control-disabled);
 }
 
-.markdown-mdx-toolbar :where(select) {
+.markdown-mdx-toolbar select,
+.markdown-mdx-toolbar [class*="_selectTrigger"] {
   border: 1px solid var(--focus-toolbar-border);
   background: var(--focus-toolbar-control-bg);
+  background-color: var(--focus-toolbar-control-bg);
 }
 
-.markdown-mdx-toolbar :where(svg) {
+.markdown-mdx-toolbar svg,
+.markdown-mdx-toolbar button svg,
+.markdown-mdx-toolbar [role="button"] svg,
+.markdown-mdx-toolbar [data-toolbar-item] svg {
   color: currentColor;
+  stroke: currentColor;
+}
+
+.markdown-mdx-toolbar button[data-disabled] svg,
+.markdown-mdx-toolbar [role="button"][data-disabled] svg,
+.markdown-mdx-toolbar [data-toolbar-item][data-disabled] svg,
+.markdown-mdx-toolbar button:disabled svg,
+.markdown-mdx-toolbar [role="button"]:disabled svg,
+.markdown-mdx-toolbar [data-toolbar-item]:disabled svg {
+  color: var(--focus-toolbar-control-disabled);
   stroke: currentColor;
 }
 
@@ -574,8 +613,10 @@
   color: var(--focus-toolbar-control-active-text);
 }
 
-.markdown-mdx-toolbar :where([role="separator"], [data-orientation="vertical"]) {
+.markdown-mdx-toolbar [role="separator"],
+.markdown-mdx-toolbar [data-orientation="vertical"] {
   background: var(--focus-toolbar-border);
+  border-color: var(--focus-toolbar-border);
 }
 
 .markdown-mdx-editor button,

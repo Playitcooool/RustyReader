@@ -1599,15 +1599,27 @@ describe("App reading workspace", () => {
     expect(styles).toMatch(/\.reader-panel-focus\s+\.reader-toolbar\s*\{[^}]*background:\s*var\(--focus-toolbar-bg\);[^}]*color:\s*var\(--focus-toolbar-text\);/s);
     expect(styles).toMatch(/\.markdown-mdx-toolbar\s*\{[^}]*background:\s*var\(--focus-toolbar-bg\);[^}]*color:\s*var\(--focus-toolbar-text\);/s);
     expect(styles).toMatch(/\.markdown-mdx-toolbar\.mdxeditor-toolbar\s*\{[^}]*background:\s*var\(--focus-toolbar-bg\);[^}]*color:\s*var\(--focus-toolbar-text\);/s);
-    expect(styles).toMatch(/\.markdown-mdx-toolbar\s+:where\(button, \[role="button"\], select, \[data-toolbar-item\]\)\s*\{[^}]*color:\s*inherit;/s);
-    expect(styles).toMatch(/\[data-state="on"\][^{]*,\s*\.markdown-mdx-toolbar\s+:where\(button, \[role="button"\], \[data-toolbar-item\]\)\[data-state="open"\]\s*\{[^}]*background:\s*var\(--focus-toolbar-control-active-bg\);/s);
-    expect(styles).toMatch(/\[data-disabled\][^{]*,\s*\.markdown-mdx-toolbar\s+:where\(button, \[role="button"\], \[data-toolbar-item\]\):disabled\s*\{[^}]*color:\s*var\(--focus-toolbar-control-disabled\);/s);
+    expect(styles).toMatch(/\.markdown-mdx-toolbar button,[^{]*\.markdown-mdx-toolbar \[class\*="_selectTrigger"\]\s*\{[^}]*color:\s*var\(--focus-toolbar-text\);/s);
+    expect(styles).toMatch(/\.markdown-mdx-toolbar button,[^{]*\.markdown-mdx-toolbar \[class\*="_selectTrigger"\]\s*\{[^}]*background-color:\s*var\(--focus-toolbar-control-bg\);/s);
+    expect(styles).toMatch(/\.markdown-mdx-toolbar button\[data-state="on"\],[^{]*\.markdown-mdx-toolbar \[class\*="_selectTrigger"\]\[data-state="open"\]\s*\{[^}]*background-color:\s*var\(--focus-toolbar-control-active-bg\);[^}]*color:\s*var\(--focus-toolbar-control-active-text\);/s);
+    expect(styles).toMatch(/\.markdown-mdx-toolbar button\[data-disabled\],[^{]*\.markdown-mdx-toolbar \[data-toolbar-item\]:disabled\s*\{[^}]*color:\s*var\(--focus-toolbar-control-disabled\);/s);
     expect(styles).toMatch(/\.mdxeditor-select-content\s*\{[^}]*background:\s*var\(--focus-toolbar-menu-bg\);[^}]*color:\s*var\(--focus-toolbar-text\);/s);
     expect(styles).toMatch(/\.mdxeditor-select-content\s+:where\(\[role="option"\], \[role="menuitem"\], \[data-radix-collection-item\]\)\[data-highlighted\]\s*\{[^}]*background:\s*var\(--focus-toolbar-control-hover-bg\);/s);
-    expect(styles).toMatch(/\.markdown-mdx-toolbar\s+:where\(svg\)\s*\{[^}]*stroke:\s*currentColor;/s);
-    expect(styles).toMatch(/\.markdown-mdx-toolbar\s+:where\(\[role="separator"\], \[data-orientation="vertical"\]\)\s*\{[^}]*background:\s*var\(--focus-toolbar-border\);/s);
+    expect(styles).toMatch(/\.markdown-mdx-toolbar svg,[^{]*\.markdown-mdx-toolbar \[data-toolbar-item\] svg\s*\{[^}]*stroke:\s*currentColor;/s);
+    expect(styles).toMatch(/\.markdown-mdx-toolbar \[role="separator"\],[^{]*\.markdown-mdx-toolbar \[data-orientation="vertical"\]\s*\{[^}]*background:\s*var\(--focus-toolbar-border\);/s);
     expect(styles).not.toMatch(/\.markdown-mdx-toolbar\s*\{[^}]*rgba\(10,\s*11,\s*14,/s);
     expect(styles).not.toMatch(/\.markdown-mdx-content\s*\{[^}]*overflow-y:\s*auto;/s);
+  });
+
+  it("loads MDXEditor package styles before app theme overrides", async () => {
+    // @ts-expect-error Vitest runs these tests in Node, even though the app TS config omits Node types.
+    const { readFileSync } = await import("fs");
+    const mainSource = readFileSync("src/main.tsx", "utf8");
+    const readerWorkspaceSource = readFileSync("src/components/app/ReaderWorkspace.tsx", "utf8");
+
+    expect(mainSource.indexOf('import "@mdxeditor/editor/style.css";')).toBeGreaterThanOrEqual(0);
+    expect(mainSource.indexOf('import "./styles.css";')).toBeGreaterThan(mainSource.indexOf('import "@mdxeditor/editor/style.css";'));
+    expect(readerWorkspaceSource).not.toContain('import "@mdxeditor/editor/style.css";');
   });
 
   it("keeps theme-sensitive surfaces on shared tokens", async () => {
